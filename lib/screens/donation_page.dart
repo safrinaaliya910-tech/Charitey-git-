@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/firestore_service.dart';
 import '../models/ngo_listing_model.dart';
 import '../models/donation_model.dart';
-import '../models/notification_model.dart'; // <--- NEW IMPORT ADDED HERE
+import '../models/notification_model.dart'; 
 import '../providers/auth_provider.dart';
 
 class DonationPage extends StatefulWidget {
@@ -23,13 +23,11 @@ class _DonationPageState extends State<DonationPage> {
   final TextEditingController _phoneController = TextEditingController();
   bool _isLoading = false;
 
-  // The Dusty Rose Theme Color
-  final Color themeColor = const Color(0xFFB56F76);
+  final Color themeColor = const Color(0xFF7D444C); // Matched to new darker theme
 
   @override
   void initState() {
     super.initState();
-    // Pre-fill user data if available
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
       if (user != null) {
@@ -48,7 +46,6 @@ class _DonationPageState extends State<DonationPage> {
     super.dispose();
   }
 
-  // --- DONATION LOGIC WITH NEW "BOOM" UI AND NOTIFICATIONS ---
   void _donate() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUserModel;
@@ -86,35 +83,29 @@ class _DonationPageState extends State<DonationPage> {
         createdAt: DateTime.now(),
       );
 
-      // 1. Process the donation in the database
       await _firestoreService.processDonation(donation);
 
-      // --- 2. NEW: SEND NOTIFICATION TO NGO ---
-      // First, let's grab the name of the item they donated for the message
       String itemName = widget.listing.type == 'food' 
           ? (widget.listing.foodType ?? "Food") 
           : (widget.listing.productName ?? "Items");
 
-      // Then, build the Notification object
       NotificationModel alert = NotificationModel(
         id: FirebaseFirestore.instance.collection('notifications').doc().id,
-        receiverId: widget.listing.ngoId, // Send TO the NGO
-        senderId: user.uid,               // From the Donor
+        receiverId: widget.listing.ngoId, 
+        senderId: user.uid,               
         senderName: name,
         type: 'donation_offer',
         title: 'New Donation Offer! 🎉',
         message: '$name wants to donate $itemName to you. Tap to view details and start chatting.',
-        relatedItemId: newDonationId,     // Link it to this specific donation
+        relatedItemId: newDonationId,     
         createdAt: DateTime.now(),
       );
 
-      // Finally, send it to the database using the service we created
       await _firestoreService.sendNotification(alert);
-      // ----------------------------------------
 
       if (!mounted) return;
 
-      // --- THE "BOOM" SUCCESS ANIMATION DIALOG ---
+      // --- "BOOM" SUCCESS ANIMATION DIALOG ---
       showGeneralDialog(
         context: context,
         barrierDismissible: false, 
@@ -196,10 +187,10 @@ class _DonationPageState extends State<DonationPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA), // Clean, slightly bright off-white
-      extendBodyBehindAppBar: true, // Let the background flow behind the AppBar
+      backgroundColor: const Color(0xFFF8F9FA), 
+      extendBodyBehindAppBar: true, 
       appBar: AppBar(
-        backgroundColor: Colors.transparent, // Transparent to show the custom background
+        backgroundColor: Colors.transparent, 
         elevation: 0,
         centerTitle: true,
         title: const Text(
@@ -213,7 +204,7 @@ class _DonationPageState extends State<DonationPage> {
       ),
       body: Stack(
         children: [
-          // --- 1. THEMATIC MAGIC BACKGROUND: Soft Gradient ONLY ---
+          // BACKGROUND GRADIENT
           Positioned(
             top: 0,
             left: 0,
@@ -233,7 +224,7 @@ class _DonationPageState extends State<DonationPage> {
             ),
           ),
 
-          // --- 2. FOREGROUND CONTENT ---
+          // FOREGROUND CONTENT
           SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -249,7 +240,7 @@ class _DonationPageState extends State<DonationPage> {
                         children: [
                           const SizedBox(height: 10),
                           
-                          // --- THE "RECEIPT" SUMMARY CARD ---
+                          // --- "RECEIPT" SUMMARY CARD ---
                           Container(
                             decoration: BoxDecoration(
                               color: Colors.white,
@@ -265,7 +256,6 @@ class _DonationPageState extends State<DonationPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Top Accent Header
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                                   decoration: BoxDecoration(
@@ -317,7 +307,6 @@ class _DonationPageState extends State<DonationPage> {
                                         child: Divider(height: 1, thickness: 1.5), 
                                       ),
                                       
-                                      // Item Details Row
                                       Row(
                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
@@ -361,7 +350,7 @@ class _DonationPageState extends State<DonationPage> {
                             ),
                           ),
                           
-                          const SizedBox(height: 40),
+                          const SizedBox(height: 30),
                           
                           // --- FORM HEADER ---
                           const Text(
@@ -374,8 +363,50 @@ class _DonationPageState extends State<DonationPage> {
                             style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
                           ),
                           const SizedBox(height: 16),
+
+                          // --- NEW: VOLUNTEER ALERT BANNER ---
+                          if (widget.listing.isVolunteerAvailable == true) ...[
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.green.shade200),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.green,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.directions_run_rounded, color: Colors.white, size: 20),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          "Good News! Volunteer Available",
+                                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.green),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          "This NGO has a volunteer ready to pick up your donation. Just confirm your address below.",
+                                          style: TextStyle(fontSize: 12, color: Colors.green.shade800),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
                           
-                          // --- THEMED INPUT FIELDS ---
+                          // --- INPUT FIELDS ---
                           _buildInputField(
                             hint: 'Your Full Name', 
                             icon: Icons.person_outline_rounded, 
@@ -432,11 +463,10 @@ class _DonationPageState extends State<DonationPage> {
                             ),
                           ),
 
-                          // --- SPACER TO PUSH BUTTON TO BOTTOM ---
                           const Spacer(),
                           const SizedBox(height: 20),
                           
-                          // --- THEMED SUBMIT BUTTON ---
+                          // --- SUBMIT BUTTON ---
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
@@ -459,7 +489,7 @@ class _DonationPageState extends State<DonationPage> {
                             ),
                           ),
                           
-                          // Small security text under button
+                          // Small security text
                           Padding(
                             padding: const EdgeInsets.only(top: 12.0, bottom: 20.0),
                             child: Center(
@@ -489,7 +519,6 @@ class _DonationPageState extends State<DonationPage> {
     );
   }
 
-  // --- FLOATING TEXT FIELD UI ---
   Widget _buildInputField({required String hint, required IconData icon, required TextEditingController controller, TextInputType keyboardType = TextInputType.text}) {
     return Container(
       decoration: BoxDecoration(

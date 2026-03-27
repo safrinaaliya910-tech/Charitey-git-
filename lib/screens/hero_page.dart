@@ -29,7 +29,7 @@ class _HeroPageState extends State<HeroPage> {
     "https://img.freepik.com/free-photo/close-up-people-collecting-food_23-2149182014.jpg?semt=ais_hybrid&w=740&q=80",
   ];
 
-  // --- Logic Variables (Your Smart Search) ---
+  // --- Logic Variables ---
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -152,7 +152,7 @@ class _HeroPageState extends State<HeroPage> {
                   ),
                   borderRadius: BorderRadius.circular(18),
                   boxShadow: [
-                    BoxShadow(color: primary.withOpacity(0.4), blurRadius: 15, offset: const Offset(0, 8))
+                    BoxShadow(color: primary.withValues(alpha: 0.4), blurRadius: 15, offset: const Offset(0, 8))
                   ],
                 ),
                 child: const Center(
@@ -167,16 +167,16 @@ class _HeroPageState extends State<HeroPage> {
 
           const SizedBox(height: 20),
 
-          // ================= SEARCH (Now with smart logic) =================
+          // ================= SEARCH (Original simple search bar) =================
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.4),
+                color: Colors.white.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withOpacity(0.3)),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
                 boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)
                 ],
               ),
               child: TextField(
@@ -256,7 +256,7 @@ class _HeroPageState extends State<HeroPage> {
       decoration: BoxDecoration(
         gradient: const LinearGradient(colors: [Color(0xFFFFFFFF), Color(0xFFFDEDEE)]),
         borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(color: primary.withOpacity(0.15), blurRadius: 12, offset: const Offset(0, 6))],
+        boxShadow: [BoxShadow(color: primary.withValues(alpha: 0.15), blurRadius: 12, offset: const Offset(0, 6))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -283,7 +283,7 @@ class _HeroPageState extends State<HeroPage> {
         decoration: BoxDecoration(
           gradient: const LinearGradient(colors: [Color(0xFFFFFFFF), Color(0xFFF9E4E6)]),
           borderRadius: BorderRadius.circular(18),
-          boxShadow: [BoxShadow(color: primary.withOpacity(0.1), blurRadius: 12, offset: const Offset(0, 6))],
+          boxShadow: [BoxShadow(color: primary.withValues(alpha: 0.1), blurRadius: 12, offset: const Offset(0, 6))],
         ),
         child: Row(
           children: [

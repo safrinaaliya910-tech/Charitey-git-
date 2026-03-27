@@ -1,4 +1,3 @@
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class NgoListingModel {
@@ -21,6 +20,9 @@ class NgoListingModel {
   final DateTime liveUntil;
   final DateTime createdAt;
   final String status;
+  
+  // --- NEW: Volunteer Availability Field ---
+  final bool? isVolunteerAvailable; 
 
   NgoListingModel({
     required this.listingId,
@@ -38,6 +40,7 @@ class NgoListingModel {
     required this.liveUntil,
     required this.createdAt,
     required this.status,
+    this.isVolunteerAvailable, // <-- Added to constructor
   });
 
   Map<String, dynamic> toMap() {
@@ -57,11 +60,11 @@ class NgoListingModel {
       'liveUntil': Timestamp.fromDate(liveUntil),
       'createdAt': Timestamp.fromDate(createdAt),
       'status': status,
+      'isVolunteerAvailable': isVolunteerAvailable, // <-- Added to Map for Firebase
     };
   }
 
-  factory NgoListingModel.fromMap(
-      Map<String, dynamic> map, String documentId) {
+  factory NgoListingModel.fromMap(Map<String, dynamic> map, String documentId) {
     return NgoListingModel(
       listingId: documentId,
       ngoId: map['ngoId'] ?? '',
@@ -83,6 +86,9 @@ class NgoListingModel {
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
 
       status: map['status'] ?? 'open',
+      
+      // <-- Read from Firebase, defaulting to null if it doesn't exist yet
+      isVolunteerAvailable: map['isVolunteerAvailable'] as bool?, 
     );
   }
 }

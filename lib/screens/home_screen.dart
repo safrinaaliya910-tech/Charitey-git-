@@ -108,14 +108,22 @@ class _HomeScreenState extends State<HomeScreen> {
         centerTitle: false,
         title: Row(
           children: [
-            Container(
-              height: 36,
-              width: 36,
-              decoration: BoxDecoration(
-                color: const Color(0xFF7D444C).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+            // --- YOUR CUSTOM BIRD LOGO ---
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                'assets/app_logo.png', // Correctly pointing to your new file
+                height: 36,
+                width: 36,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  // Fallback just in case the image fails to load
+                  return Container(
+                    height: 36, width: 36, color: Colors.grey.shade200,
+                    child: const Icon(Icons.broken_image, size: 20),
+                  );
+                },
               ),
-              child: const Icon(Icons.volunteer_activism, color: Color(0xFF7D444C)),
             ),
             const SizedBox(width: 10),
             const Text(
@@ -354,8 +362,8 @@ class ChatListScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                 trailing: SizedBox(
-                    width: 65, // <--- THIS SIZED BOX FIXES THE BLANK SCREEN FOREVER
+                  trailing: SizedBox(
+                    width: 65, 
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.end,
