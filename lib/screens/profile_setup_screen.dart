@@ -1,47 +1,46 @@
-//profile_setup_screen.dart
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart'; // <-- NEW: Required for input formatters
 import '../providers/auth_provider.dart';
-import '../main.dart'; 
+import '../main.dart';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../services/storage_service.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
-  final String role; 
-
+  final String role;
   const ProfileSetupScreen({super.key, required this.role});
 
   @override
   State<ProfileSetupScreen> createState() => _ProfileSetupScreenState();
 }
 
-class _ProfileSetupScreenState extends State<ProfileSetupScreen>
-    with SingleTickerProviderStateMixin {
+class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTickerProviderStateMixin {
   final PageController _pageController = PageController();
   int _currentPage = 0;
-
+  
   final TextEditingController nameController = TextEditingController();
-  final TextEditingController usernameController = TextEditingController(); 
+  final TextEditingController usernameController = TextEditingController();
   final TextEditingController phoneController = TextEditingController();
   final TextEditingController addressController = TextEditingController();
   final TextEditingController licenseController = TextEditingController();
-
-  File? _selectedImage;
-  Uint8List? _selectedImageBytes; // ADD THIS
-  bool _isCheckingUsername = false; 
   
+  File? _selectedImage;
+  Uint8List? _selectedImageBytes;
+  bool _isCheckingUsername = false;
+  
+  bool _agreedToTerms = false; 
+
   final Color themeColor = const Color(0xFFB56F76);
 
   @override
   void dispose() {
     _pageController.dispose();
     nameController.dispose();
-    usernameController.dispose(); 
+    usernameController.dispose();
     phoneController.dispose();
     addressController.dispose();
     licenseController.dispose();
@@ -55,41 +54,42 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   }
 
   bool get _isCurrentPageValid {
-    if (_currentPage == 0) return true; 
-    if (_currentPage == 1) {
-      return nameController.text.trim().isNotEmpty && usernameController.text.trim().isNotEmpty;
-    }
-    if (_currentPage == 2) return phoneController.text.trim().isNotEmpty;
-
-    if (widget.role == "ngo" || widget.role == "travel_agency") { 
-      if (_currentPage == 3) return addressController.text.trim().isNotEmpty;
-      if (_currentPage == 4) return licenseController.text.trim().isNotEmpty;
+    bool isValid = true;
+    
+    if (_currentPage == 0) {
+      isValid = true;
+    } else if (_currentPage == 1) {
+      isValid = nameController.text.trim().isNotEmpty && usernameController.text.trim().isNotEmpty;
+    } else if (_currentPage == 2) {
+      // 👇 NEW: Phone number MUST be exactly 10 digits
+      isValid = phoneController.text.trim().length == 10;
+    } else if (widget.role == "ngo" || widget.role == "travel_agency") {
+      if (_currentPage == 3) isValid = addressController.text.trim().isNotEmpty;
+      if (_currentPage == 4) isValid = licenseController.text.trim().isNotEmpty;
     } else if (widget.role == "volunteer") {
-      if (_currentPage == 3) return licenseController.text.trim().isNotEmpty;
+      if (_currentPage == 3) isValid = licenseController.text.trim().isNotEmpty;
     }
 
-    return true;
+    if (_currentPage == _totalPages - 1) {
+      return isValid && _agreedToTerms;
+    }
+
+    return isValid;
   }
 
   void _onFieldChanged(String value) {
-    setState(() {}); 
+    setState(() {});
   }
 
   Future<void> _nextPage() async {
     if (_currentPage == 1) {
       String desiredUsername = usernameController.text.trim().toLowerCase();
       
-      // --- NEW STRICT VALIDATION RULES ---
-      // 1. Must contain at least one lowercase letter
-      // 2. Must contain at least one number
-      // 3. Must contain at least one underscore
-      // 4. Must only contain a-z, 0-9, and _ (no spaces or other special chars)
-      
       bool hasLetter = RegExp(r'[a-z]').hasMatch(desiredUsername);
       bool hasNumber = RegExp(r'[0-9]').hasMatch(desiredUsername);
       bool hasUnderscore = desiredUsername.contains('_');
       bool hasInvalidChars = RegExp(r'[^a-z0-9_]').hasMatch(desiredUsername);
-
+      
       if (!hasLetter || !hasNumber || !hasUnderscore || hasInvalidChars) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -97,17 +97,17 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
             duration: Duration(seconds: 4),
           ),
         );
-        return; // Stop here and prevent navigation
+        return; 
       }
 
       setState(() => _isCheckingUsername = true);
-
+      
       try {
         final querySnapshot = await FirebaseFirestore.instance
             .collection('users')
             .where('username', isEqualTo: desiredUsername)
             .get();
-
+            
         if (querySnapshot.docs.isNotEmpty) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -115,7 +115,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
             );
           }
           setState(() => _isCheckingUsername = false);
-          return; 
+          return;
         }
       } catch (e) {
         if (mounted) {
@@ -124,7 +124,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
         setState(() => _isCheckingUsername = false);
         return;
       }
-
       setState(() => _isCheckingUsername = false);
     }
 
@@ -147,6 +146,125 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
         curve: Curves.easeInOutQuart,
       );
     }
+  }
+
+  String _getTermsText() {
+    if (widget.role == 'ngo') {
+      return "NGO Terms & Conditions:\n\n1. Accuracy: You agree to provide accurate and truthful information regarding your organization and its operations.\n\n2. Usage of Donations: You agree to use donated food and products strictly for charitable purposes and not for resale or profit.\n\n3. Volunteer Arrangement: You are fully responsible for arranging your own volunteers for the pickup of donations from the donor's location.\n\n4. Platform Misuse: Any misuse of the platform, fraudulent requests, or harassment of donors will result in an immediate ban.\n\n5. Liability: Charitey is a facilitating platform and is not liable for the quality of food or products provided by donors.";
+    } else if (widget.role == 'donor') {
+      return "Donor Terms & Conditions:\n\n1. Quality of Goods: You agree that all food and products donated are safe, hygienic, and in good condition.\n\n2. Accurate Information: You agree to provide an accurate pickup location and reliable contact information.\n\n3. Commitment: You understand that once a donation is accepted by an NGO, you should not cancel the request without a valid and urgent reason.\n\n4. Respect & Privacy: You agree to treat NGOs and their volunteers with respect and maintain their privacy.\n\n5. Liability: You donate at your own free will. Charitey is not responsible for any incidents occurring during the handover process.";
+    } else if (widget.role == 'travel_agency') {
+      return "Travel Agency Terms & Conditions:\n\n1. Timeliness: You agree to transport donations safely and timely to the designated NGO locations.\n\n2. Vehicle Information: You must provide accurate vehicle, driver, and tracking details to ensure transparency.\n\n3. No Hidden Fees: You agree to not charge extra fees outside the initial platform agreement.\n\n4. Goods Handling: You are responsible for handling all donated items with extreme care to prevent damage or spoilage during transit.";
+    } else if (widget.role == 'volunteer') {
+      return "Volunteer Terms & Conditions:\n\n1. Reliability: You agree to strictly adhere to the schedule provided for donation pickups.\n\n2. Verification: You must present a valid ID to donors upon request for security purposes.\n\n3. Care: You agree to handle all donated items with care and ensure they reach the NGO exactly as they were provided.\n\n4. Conduct: Professional and polite conduct is expected at all times when interacting with Donors and NGOs.";
+    }
+    return "General Terms & Conditions:\n\n1. You agree to use the platform responsibly.\n2. Be respectful to other users.";
+  }
+
+  // 👇 NEW: Premium Professional Terms & Conditions UI 👇
+  void _showTermsPopup() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Force them to click a button
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          elevation: 10,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Row(
+                  children: [
+                    Icon(Icons.gavel_rounded, color: themeColor, size: 28),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        "Terms & Conditions",
+                        style: TextStyle(
+                          color: themeColor,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 20,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Divider(height: 1, thickness: 1, color: Color(0xFFF0F0F0)),
+                const SizedBox(height: 16),
+                
+                // Scrollable Content
+                Flexible(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Text(
+                      _getTermsText(),
+                      style: const TextStyle(
+                        height: 1.6,
+                        color: Color(0xFF4A4A4A),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 20),
+                const Divider(height: 1, thickness: 1, color: Color(0xFFF0F0F0)),
+                const SizedBox(height: 16),
+                
+                // Actions
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                      child: Text(
+                        "Close",
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        setState(() => _agreedToTerms = true);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: themeColor,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        "I Agree",
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    );
   }
 
   @override
@@ -190,12 +308,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
             bottom: 50, left: -100,
             child: Container(width: 250, height: 250, decoration: BoxDecoration(color: themeColor.withValues(alpha: 0.05), shape: BoxShape.circle)),
           ),
-          
           SafeArea(
             child: Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 10.0), 
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 10.0),
                   child: Row(
                     children: List.generate(
                       _totalPages,
@@ -203,7 +320,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 300),
                           margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                          height: 6, 
+                          height: 6,
                           decoration: BoxDecoration(
                             color: index <= _currentPage ? themeColor : Colors.grey.shade300,
                             borderRadius: BorderRadius.circular(10),
@@ -213,7 +330,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                     ),
                   ),
                 ),
-
                 Expanded(
                   child: PageView(
                     controller: _pageController,
@@ -222,33 +338,84 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                     children: pages,
                   ),
                 ),
-
+                
+                // BOTTOM CONTAINER
                 Container(
-                  padding: const EdgeInsets.all(20), 
+                  padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 20, offset: const Offset(0, -10))],
                   ),
                   child: SafeArea(
                     top: false,
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 50, 
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: themeColor,
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor: Colors.grey.shade300,
-                          disabledForegroundColor: Colors.grey.shade500,
-                          elevation: _isCurrentPageValid ? 4 : 0,
-                          shadowColor: themeColor.withValues(alpha: 0.4),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_currentPage == _totalPages - 1)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16.0, left: 4.0, right: 4.0),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  height: 24,
+                                  width: 24,
+                                  child: Checkbox(
+                                    value: _agreedToTerms,
+                                    activeColor: themeColor,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                    onChanged: (val) {
+                                      setState(() {
+                                        _agreedToTerms = val ?? false;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: _showTermsPopup,
+                                    child: RichText(
+                                      text: TextSpan(
+                                        text: "I have read and agree to the ",
+                                        style: TextStyle(color: Colors.grey.shade700, fontSize: 13, height: 1.4),
+                                        children: [
+                                          TextSpan(
+                                            text: "Terms & Conditions",
+                                            style: TextStyle(
+                                              color: themeColor, 
+                                              fontWeight: FontWeight.bold, 
+                                              decoration: TextDecoration.underline,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: themeColor,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: Colors.grey.shade300,
+                              disabledForegroundColor: Colors.grey.shade500,
+                              elevation: _isCurrentPageValid ? 4 : 0,
+                              shadowColor: themeColor.withValues(alpha: 0.4),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                            ),
+                            onPressed: (_isCurrentPageValid && !_isCheckingUsername) ? _nextPage : null,
+                            child: _isCheckingUsername
+                                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                : Text(_getButtonText(), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                          ),
                         ),
-                        onPressed: (_isCurrentPageValid && !_isCheckingUsername) ? _nextPage : null,
-                        child: _isCheckingUsername 
-                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : Text(_getButtonText(), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                      ),
+                      ],
                     ),
                   ),
                 ),
@@ -268,7 +435,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
 
   List<Widget> _buildPages() {
     List<Widget> pages = [_buildImageStep(), _buildNameStep(), _buildPhoneStep()];
-    if (widget.role == "ngo" || widget.role == "travel_agency") { 
+    if (widget.role == "ngo" || widget.role == "travel_agency") {
       pages.add(_buildAddressStep());
       pages.add(_buildLicenseStep());
     } else if (widget.role == "volunteer") {
@@ -288,29 +455,29 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
             if (icon != null) ...[
               Center(
                 child: Container(
-                  padding: const EdgeInsets.all(16), 
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     shape: BoxShape.circle,
                     boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 15, offset: const Offset(0, 5))]
                   ),
-                  child: Icon(icon, size: 40, color: themeColor), 
+                  child: Icon(icon, size: 40, color: themeColor),
                 ),
               ),
-              const SizedBox(height: 20), 
+              const SizedBox(height: 20),
             ],
             Text(
               title,
-              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: Color(0xFF2D3142), height: 1.2), 
+              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: Color(0xFF2D3142), height: 1.2),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               subtitle,
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade600, height: 1.4), 
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600, height: 1.4),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 24), 
+            const SizedBox(height: 24),
             child,
           ],
         ),
@@ -321,6 +488,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   Future<void> _pickProfileImage() async {
     final ImagePicker picker = ImagePicker();
     final XFile? picked = await picker.pickImage(source: ImageSource.gallery);
+    
     if (picked != null) {
       if (kIsWeb) {
         final bytes = await picked.readAsBytes();
@@ -390,25 +558,31 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     );
   }
 
+  // 👇 NEW: Upgraded TextField to handle strict formatting limits 👇
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
     required String hint,
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
+    int? maxLength,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16), 
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: TextField(
         controller: controller,
         onChanged: _onFieldChanged,
         keyboardType: keyboardType,
-        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.black87), 
+        maxLength: maxLength,
+        inputFormatters: inputFormatters,
+        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.black87),
         decoration: InputDecoration(
+          counterText: '', // Hides the "0/10" text below the input field for a cleaner UI
           labelText: label,
           hintText: hint,
           labelStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
@@ -417,7 +591,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
           filled: true,
           fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), 
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
       ),
     );
@@ -432,7 +606,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       child: Column(
         children: [
           _buildTextField(controller: nameController, label: label, hint: "Enter $label", icon: Icons.person_outline_rounded),
-          const SizedBox(height: 12), 
+          const SizedBox(height: 12),
           _buildTextField(controller: usernameController, label: "Unique Username", hint: "e.g. safrin_99", icon: Icons.alternate_email_rounded),
           const SizedBox(height: 6),
           Text("Must include 1 letter, 1 number, and 1 underscore.", style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
@@ -441,12 +615,23 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     );
   }
 
+  // 👇 NEW: Enforced 10 digit exact entry limit 👇
   Widget _buildPhoneStep() {
     return _buildStepContainer(
       title: "Phone Number",
       subtitle: "We'll use this to keep your account secure and for contact",
       icon: Icons.phone_android_rounded,
-      child: _buildTextField(controller: phoneController, label: "Phone Number", hint: "Enter Mobile Number", icon: Icons.phone_outlined, keyboardType: TextInputType.phone),
+      child: _buildTextField(
+        controller: phoneController, 
+        label: "Phone Number", 
+        hint: "Enter 10-digit Mobile Number", 
+        icon: Icons.phone_outlined, 
+        keyboardType: TextInputType.phone,
+        maxLength: 10,
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly // Prevents letters, spaces, or special characters
+        ],
+      ),
     );
   }
 
@@ -472,22 +657,21 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   void saveProfile() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     String finalUsername = usernameController.text.trim().toLowerCase();
-
-    // Upload profile image to Cloudinary if one was selected
+    
     String? profileImageUrl;
     if (_selectedImage != null || _selectedImageBytes != null) {
       profileImageUrl = await StorageService().uploadImage(_selectedImage, _selectedImageBytes);
     }
-
+    
     await authProvider.updateProfile(
-  name: nameController.text.trim().isNotEmpty ? nameController.text.trim() : null,
-  username: finalUsername.isNotEmpty ? finalUsername : null, 
-  phone: phoneController.text.trim().isNotEmpty ? phoneController.text.trim() : null,
-  location: (widget.role == "ngo" || widget.role == "travel_agency") && addressController.text.trim().isNotEmpty ? addressController.text.trim() : null,
-  license: licenseController.text.trim().isNotEmpty ? licenseController.text.trim() : null,
-  profileImage: profileImageUrl,  // ADD THIS LINE
-);
-
+      name: nameController.text.trim().isNotEmpty ? nameController.text.trim() : null,
+      username: finalUsername.isNotEmpty ? finalUsername : null,
+      phone: phoneController.text.trim().isNotEmpty ? phoneController.text.trim() : null,
+      location: (widget.role == "ngo" || widget.role == "travel_agency") && addressController.text.trim().isNotEmpty ? addressController.text.trim() : null,
+      license: licenseController.text.trim().isNotEmpty ? licenseController.text.trim() : null,
+      profileImage: profileImageUrl,
+    );
+    
     if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const AuthWrapper()),
