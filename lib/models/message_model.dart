@@ -1,3 +1,4 @@
+//message_model.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class MessageModel {
@@ -8,6 +9,20 @@ class MessageModel {
   final DateTime timestamp;
   final bool delivered;
   final bool read;
+  final String type;
+  final String? mediaUrl;
+  final String? fileName;
+  final int? fileSize;
+
+  // --- NEW: delete tracking ---
+  final List<String> deletedFor;       // uids who "deleted for me"
+  final bool isDeletedForEveryone;
+
+  // --- NEW: reply tracking ---
+  final String? replyToId;
+  final String? replyToMessage;        // denormalized preview text
+  final String? replyToSenderName;
+  final String? replyToType;           // 'text' | 'image' | 'document'
 
   MessageModel({
     required this.messageId,
@@ -17,6 +32,16 @@ class MessageModel {
     required this.timestamp,
     this.delivered = false,
     this.read = false,
+    this.type = 'text',
+    this.mediaUrl,
+    this.fileName,
+    this.fileSize,
+    this.deletedFor = const [],
+    this.isDeletedForEveryone = false,
+    this.replyToId,
+    this.replyToMessage,
+    this.replyToSenderName,
+    this.replyToType,
   });
 
   Map<String, dynamic> toMap() {
@@ -28,6 +53,16 @@ class MessageModel {
       'timestamp': Timestamp.fromDate(timestamp),
       'delivered': delivered,
       'read': read,
+      'type': type,
+      'mediaUrl': mediaUrl,
+      'fileName': fileName,
+      'fileSize': fileSize,
+      'deletedFor': deletedFor,
+      'isDeletedForEveryone': isDeletedForEveryone,
+      'replyToId': replyToId,
+      'replyToMessage': replyToMessage,
+      'replyToSenderName': replyToSenderName,
+      'replyToType': replyToType,
     };
   }
 
@@ -40,6 +75,16 @@ class MessageModel {
       timestamp: (map['timestamp'] as Timestamp).toDate(),
       delivered: map['delivered'] ?? false,
       read: map['read'] ?? false,
+      type: map['type'] ?? 'text',
+      mediaUrl: map['mediaUrl'],
+      fileName: map['fileName'],
+      fileSize: map['fileSize'],
+      deletedFor: List<String>.from(map['deletedFor'] ?? []),
+      isDeletedForEveryone: map['isDeletedForEveryone'] ?? false,
+      replyToId: map['replyToId'],
+      replyToMessage: map['replyToMessage'],
+      replyToSenderName: map['replyToSenderName'],
+      replyToType: map['replyToType'],
     );
   }
 }

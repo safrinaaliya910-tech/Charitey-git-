@@ -1,9 +1,9 @@
+ios/ Runner/ Info.plist:
+
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>This app needs access to the microphone to send voice messages.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -28,6 +28,17 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+
+	<!-- Permission usage descriptions — all top-level, each key followed by exactly one value -->
+	<key>NSCameraUsageDescription</key>
+	<string>Charitey needs camera access to take photos and videos in chat.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Charitey needs microphone access to record videos and voice messages in chat.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Charitey needs permission to save photos and videos you download.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Charitey needs access to your photo library to select and share images.</string>
+
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -49,6 +60,7 @@
 			</array>
 		</dict>
 	</dict>
+
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

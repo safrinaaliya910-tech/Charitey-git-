@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
 import '../models/ngo_listing_model.dart';
 import '../services/firestore_service.dart';
 import '../providers/auth_provider.dart';
@@ -19,37 +18,36 @@ class CreateListingScreen extends StatefulWidget {
 
 class CreateListingScreenState extends State<CreateListingScreen> {
   final FirestoreService firestoreService = FirestoreService();
-  
   String _listingType = 'food';
-  bool _isStep1 = true; // Controls Progressive Disclosure (The "Next" logic)
+  bool isStep1 = true; // Controls Progressive Disclosure (The "Next" Logic)
   
   // Volunteer Availability State
-  bool? _isVolunteerAvailable;
-
+  bool? isVolunteerAvailable;
+  
   final TextEditingController _foodTypeController = TextEditingController();
   final TextEditingController _quantityController = TextEditingController();
   
   // Dedicated units for separate listing branches
   String _foodUnit = 'kg';
   String _productUnit = 'items';
-
-  final TextEditingController _categoryController = TextEditingController();
-  final TextEditingController _productNameController = TextEditingController();
-  final TextEditingController _availabilityController = TextEditingController();
-  final TextEditingController _descriptionController = TextEditingController();  // <-- ADD THIS LINE
   
-  bool _isLoading = false;
+  final TextEditingController _categoryController = TextEditingController();
+  final TextEditingController productNameController = TextEditingController();
+  final TextEditingController availabilityController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController(); 
+  
+  bool isLoading = false;
   final Color themeColor = const Color(0xFF7D444C); // App Theme Color
-
+  
   // Suggestion Lists for Autocomplete
-  static const List<String> _foodSuggestions = [
+  static const List<String> foodSuggestions = [
     'Biriyani', 'Chappathi', 'Curry', 'Dal', 'Dosa', 'Idli', 'Meals',
     'Parotta', 'Pongal', 'Puri', 'Rice', 'Roll', 'Sambar', 'Sandwich'
   ];
-
   static const List<String> _productSuggestions = [
     'Blankets', 'Books', 'Clothes', 'Footwear', 'Furniture',
-    'Medicines', 'School Supplies', 'Stationery', 'Toys', 'Utensils', 'Winter Wear'
+    'Medicines', 'School Supplies', 'Stationery', 'Toys', 'Utensils',
+    'Winter Wear'
   ];
 
   @override
@@ -57,14 +55,14 @@ class CreateListingScreenState extends State<CreateListingScreen> {
     _foodTypeController.dispose();
     _quantityController.dispose();
     _categoryController.dispose();
-    _productNameController.dispose();
-    _availabilityController.dispose();
-    _descriptionController.dispose(); // <-- ADD THIS LINE
+    productNameController.dispose();
+    availabilityController.dispose();
+    _descriptionController.dispose(); 
     super.dispose();
   }
 
   //--- Interactive Date and Time Picker
-  Future<void> _selectDateTime(BuildContext context) async {
+  Future<void> selectDateTime(BuildContext context) async {
     final DateTime? pickedDate = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
@@ -115,13 +113,13 @@ class CreateListingScreenState extends State<CreateListingScreen> {
           String month = pickedDate.month.toString().padLeft(2, '0');
           String year = pickedDate.year.toString();
           String time = pickedTime.format(context);
-          _availabilityController.text = "$day-$month-$year $time";
+          availabilityController.text = "$day-$month-$year $time";
         });
       }
     }
   }
 
-  void _goToNextStep() {
+  void goToNextStep() {
     if (_listingType == 'food' && _foodTypeController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a Food Type')),
@@ -129,14 +127,14 @@ class CreateListingScreenState extends State<CreateListingScreen> {
       return;
     }
     if (_listingType == 'product' &&
-        (_categoryController.text.trim().isEmpty || _productNameController.text.trim().isEmpty)) {
+        (_categoryController.text.trim().isEmpty || productNameController.text.trim().isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter Category and Product Name')),
       );
       return;
     }
     setState(() {
-      _isStep1 = false;
+      isStep1 = false;
     });
   }
 
@@ -155,88 +153,78 @@ class CreateListingScreenState extends State<CreateListingScreen> {
       );
       return;
     }
-    if (_availabilityController.text.trim().isEmpty) {
+    if (availabilityController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select Date & Time')),
       );
       return;
     }
-   if (_isVolunteerAvailable != true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('You must confirm volunteer availability to publish this request.')),
-        );
-        return;
-      }
+    if (isVolunteerAvailable == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select your volunteer availability.')),
+      );
+      return;
+    }
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUserModel;
     if (user == null) return;
 
-    setState(() => _isLoading = true);
+    setState(() => isLoading = true);
 
     try {
       String listingId = FirebaseFirestore.instance.collection('ngo_listings').doc().id;
-      final selectedText = _availabilityController.text.trim();
+      final selectedText = availabilityController.text.trim();
+      final parts = selectedText.split(' ');
+      final datePart = parts[0]; 
+      final timePart = "${parts[1]} ${parts[2]}"; 
 
-final parts = selectedText.split(' ');
-final datePart = parts[0]; // dd-MM-yyyy
-final timePart = "${parts[1]} ${parts[2]}"; // hh:mm AM/PM
+      final datePieces = datePart.split('-');
+      final day = int.parse(datePieces[0]);
+      final month = int.parse(datePieces[1]);
+      final year = int.parse(datePieces[2]);
 
-final datePieces = datePart.split('-');
+      final parsedTime = TimeOfDay(
+        hour: int.parse(timePart.split(':')[0]),
+        minute: int.parse(timePart.split(':')[1].split(' ')[0]),
+      );
 
-final day = int.parse(datePieces[0]);
-final month = int.parse(datePieces[1]);
-final year = int.parse(datePieces[2]);
-
-final parsedTime = TimeOfDay(
-  hour: TimeOfDay(
-    hour: int.parse(timePart.split(':')[0]),
-    minute: int.parse(
-      timePart.split(':')[1].split(' ')[0],
-    ),
-  ).hour,
-  minute: int.parse(
-    timePart.split(':')[1].split(' ')[0],
-  ),
-);
-
-DateTime selectedDateTime = DateTime(
-  year,
-  month,
-  day,
-  parsedTime.hour,
-  parsedTime.minute,
-);
+      DateTime selectedDateTime = DateTime(
+        year,
+        month,
+        day,
+        parsedTime.hour,
+        parsedTime.minute,
+      );
 
       NgoListingModel newListing = NgoListingModel(
         listingId: listingId,
         ngoId: user.uid,
         ngoName: user.name,
         ngoLocation: user.location,
-        ngoProfileImage: user.profileImage, // Image
+        ngoProfileImage: user.profileImage, 
         type: _listingType,
-        imageUrl: null, // Image feature removed completely
+        imageUrl: null, 
         foodType: _listingType == 'food' ? _foodTypeController.text.trim() : null,
         quantity: int.parse(_quantityController.text.trim()),
         unit: _listingType == 'food' ? _foodUnit : _productUnit,
         category: _listingType == 'product' ? _categoryController.text.trim() : null,
-        productName: _listingType == 'product' ? _productNameController.text.trim() : null,
-        availability: _availabilityController.text.trim(),
+        productName: _listingType == 'product' ? productNameController.text.trim() : null,
+        availability: availabilityController.text.trim(),
         liveUntil: selectedDateTime,
         createdAt: DateTime.now(),
         status: 'open',
-        isVolunteerAvailable: _isVolunteerAvailable,
-        description: _descriptionController.text.trim().isNotEmpty ? _descriptionController.text.trim() : null, // <-- ADD THIS LINE
+        isVolunteerAvailable: isVolunteerAvailable,
+        description: _descriptionController.text.trim().isNotEmpty ? _descriptionController.text.trim() : null, 
       );
 
       await firestoreService.createNgoListing(newListing);
 
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Request created successfully! 🎉',
+            'Request created successfully!',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
           backgroundColor: Colors.green,
@@ -244,7 +232,6 @@ DateTime selectedDateTime = DateTime(
           duration: Duration(seconds: 2),
         ),
       );
-
       navigateSafelyHome();
     } catch (e) {
       if (!mounted) return;
@@ -253,12 +240,12 @@ DateTime selectedDateTime = DateTime(
       );
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() => isLoading = false);
       }
     }
   }
 
-  Widget _buildAutocompleteField({
+  Widget buildAutocompleteField({
     required TextEditingController controller,
     required String hintText,
     required List<String> suggestions,
@@ -271,31 +258,21 @@ DateTime selectedDateTime = DateTime(
           return const Iterable<String>.empty();
         }
         String query = textEditingValue.text.toLowerCase();
-        var startsWithMatches = suggestions
-            .where((option) => option.toLowerCase().startsWith(query))
-            .toList();
-        var containsMatches = suggestions
-            .where((option) =>
-                option.toLowerCase().contains(query) &&
-                !option.toLowerCase().startsWith(query))
-            .toList();
+        var startsWithMatches = suggestions.where((option) => option.toLowerCase().startsWith(query)).toList();
+        var containsMatches = suggestions.where((option) => option.toLowerCase().contains(query) && !option.toLowerCase().startsWith(query)).toList();
         return [...startsWithMatches, ...containsMatches];
       },
       onSelected: (String selection) {
         controller.text = selection;
       },
-      fieldViewBuilder: (BuildContext context,
-          TextEditingController fieldTextEditingController,
-          FocusNode fieldFocusNode,
-          VoidCallback onFieldSubmitted) {
-        
+      fieldViewBuilder: (BuildContext context, TextEditingController fieldTextEditingController, FocusNode fieldFocusNode, VoidCallback onFieldSubmitted) {
         return TextFormField(
           controller: fieldTextEditingController,
           focusNode: fieldFocusNode,
           enabled: isEnabled,
           style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87),
           onChanged: (value) {
-            controller.text = value; 
+            controller.text = value;
           },
           decoration: InputDecoration(
             hintText: hintText,
@@ -303,27 +280,14 @@ DateTime selectedDateTime = DateTime(
             filled: true,
             fillColor: isEnabled ? Colors.white.withOpacity(0.9) : Colors.white.withOpacity(0.5),
             contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide.none,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(color: themeColor.withOpacity(0.5), width: 1.5),
-            ),
-            disabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide.none,
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: themeColor.withOpacity(0.5), width: 1.5)),
+            disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
           ),
         );
       },
-      optionsViewBuilder: (BuildContext context,
-          AutocompleteOnSelected<String> onSelected, Iterable<String> options) {
+      optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<String> onSelected, Iterable<String> options) {
         return Align(
           alignment: Alignment.topLeft,
           child: Material(
@@ -331,7 +295,7 @@ DateTime selectedDateTime = DateTime(
             shadowColor: themeColor.withOpacity(0.2),
             borderRadius: BorderRadius.circular(16),
             child: Container(
-              width: MediaQuery.of(context).size.width - 64, 
+              width: MediaQuery.of(context).size.width - 64,
               constraints: const BoxConstraints(maxHeight: 220),
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -347,10 +311,7 @@ DateTime selectedDateTime = DateTime(
                     onTap: () => onSelected(option),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                      child: Text(
-                        option,
-                        style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87),
-                      ),
+                      child: Text(option, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
                     ),
                   );
                 },
@@ -362,15 +323,42 @@ DateTime selectedDateTime = DateTime(
     );
   }
 
+  // 👇 CUSTOM BUTTON FOR THE TOGGLE 👇
+  Widget _buildVolunteerToggle(String text, bool isSelected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? themeColor.withOpacity(0.1) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? themeColor : Colors.grey.shade300,
+            width: 1.5,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            text,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: isSelected ? themeColor : Colors.grey.shade600,
+              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            Color(0xFFFDF7F8),
-            Color(0xFFEEDAE0),
-          ],
+          colors: [Color(0xFFFDF7F8), Color(0xFFEEDAE0)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           stops: [0.1, 1.0],
@@ -403,10 +391,7 @@ DateTime selectedDateTime = DateTime(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
-                    colors: [
-                      themeColor.withOpacity(0.12),
-                      Colors.transparent,
-                    ],
+                    colors: [themeColor.withOpacity(0.12), Colors.transparent],
                     stops: const [0.0, 1.0],
                   ),
                 ),
@@ -446,28 +431,24 @@ DateTime selectedDateTime = DateTime(
                               children: [
                                 Expanded(
                                   child: GestureDetector(
-                                    onTap: _isStep1
-                                        ? () {
-                                            setState(() {
-                                              _listingType = 'food';
-                                            });
-                                          }
-                                        : null,
+                                    onTap: isStep1 ? () {
+                                      setState(() {
+                                        _listingType = 'food';
+                                      });
+                                    } : null,
                                     child: AnimatedContainer(
                                       duration: const Duration(milliseconds: 250),
                                       padding: const EdgeInsets.symmetric(vertical: 14),
                                       decoration: BoxDecoration(
                                         color: _listingType == 'food' ? themeColor : Colors.transparent,
                                         borderRadius: BorderRadius.circular(30),
-                                        boxShadow: _listingType == 'food'
-                                            ? [
-                                                BoxShadow(
-                                                  color: themeColor.withOpacity(0.3),
-                                                  blurRadius: 8,
-                                                  offset: const Offset(0, 4),
-                                                )
-                                              ]
-                                            : [],
+                                        boxShadow: _listingType == 'food' ? [
+                                          BoxShadow(
+                                            color: themeColor.withOpacity(0.3),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 4),
+                                          )
+                                        ] : [],
                                       ),
                                       child: Center(
                                         child: Text(
@@ -483,28 +464,24 @@ DateTime selectedDateTime = DateTime(
                                 ),
                                 Expanded(
                                   child: GestureDetector(
-                                    onTap: _isStep1
-                                        ? () {
-                                            setState(() {
-                                              _listingType = 'product';
-                                            });
-                                          }
-                                        : null,
+                                    onTap: isStep1 ? () {
+                                      setState(() {
+                                        _listingType = 'product';
+                                      });
+                                    } : null,
                                     child: AnimatedContainer(
                                       duration: const Duration(milliseconds: 250),
                                       padding: const EdgeInsets.symmetric(vertical: 14),
                                       decoration: BoxDecoration(
                                         color: _listingType == 'product' ? themeColor : Colors.transparent,
                                         borderRadius: BorderRadius.circular(30),
-                                        boxShadow: _listingType == 'product'
-                                            ? [
-                                                BoxShadow(
-                                                  color: themeColor.withOpacity(0.3),
-                                                  blurRadius: 8,
-                                                  offset: const Offset(0, 4),
-                                                )
-                                              ]
-                                            : [],
+                                        boxShadow: _listingType == 'product' ? [
+                                          BoxShadow(
+                                            color: themeColor.withOpacity(0.3),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 4),
+                                          )
+                                        ] : [],
                                       ),
                                       child: Center(
                                         child: Text(
@@ -521,21 +498,19 @@ DateTime selectedDateTime = DateTime(
                               ],
                             ),
                           ),
-                          
                           const SizedBox(height: 30),
-                          
                           if (_listingType == 'food') ...[
-                            _buildAutocompleteField(
+                            buildAutocompleteField(
                               controller: _foodTypeController,
                               hintText: "Food Type (e.g., Rice, Meals)",
-                              suggestions: _foodSuggestions,
-                              isEnabled: _isStep1,
+                              suggestions: foodSuggestions,
+                              isEnabled: isStep1,
                             ),
                           ] else ...[
                             Opacity(
-                              opacity: _isStep1 ? 1.0 : 0.5,
+                              opacity: isStep1 ? 1.0 : 0.5,
                               child: IgnorePointer(
-                                ignoring: !_isStep1,
+                                ignoring: !isStep1,
                                 child: Container(
                                   decoration: BoxDecoration(
                                     color: Colors.white,
@@ -549,21 +524,19 @@ DateTime selectedDateTime = DateTime(
                               ),
                             ),
                             const SizedBox(height: 16),
-                            _buildAutocompleteField(
-                              controller: _productNameController,
+                            buildAutocompleteField(
+                              controller: productNameController,
                               hintText: "Product Name",
                               suggestions: _productSuggestions,
-                              isEnabled: _isStep1,
+                              isEnabled: isStep1,
                             ),
                           ],
-                          
                           const SizedBox(height: 25),
-                          
-                          if (_isStep1)
+                          if (isStep1)
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(
-                                onPressed: _goToNextStep,
+                                onPressed: goToNextStep,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: themeColor,
                                   padding: const EdgeInsets.symmetric(vertical: 18),
@@ -577,11 +550,10 @@ DateTime selectedDateTime = DateTime(
                                 ),
                               ),
                             ),
-                          
                           AnimatedSize(
                             duration: const Duration(milliseconds: 400),
                             curve: Curves.fastOutSlowIn,
-                            child: _isStep1
+                            child: isStep1
                                 ? const SizedBox.shrink()
                                 : Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -591,19 +563,14 @@ DateTime selectedDateTime = DateTime(
                                         child: TextButton.icon(
                                           onPressed: () {
                                             setState(() {
-                                              _isStep1 = true; 
+                                              isStep1 = true;
                                             });
                                           },
                                           icon: Icon(Icons.edit_rounded, size: 16, color: themeColor),
-                                          label: Text(
-                                            "Edit Selection",
-                                            style: TextStyle(color: themeColor, fontWeight: FontWeight.w800),
-                                          ),
+                                          label: Text("Edit Selection", style: TextStyle(color: themeColor, fontWeight: FontWeight.w800)),
                                         ),
                                       ),
                                       const SizedBox(height: 5),
-                                      
-                                      // Numeric text field and context-adaptive dropdown row
                                       Row(
                                         children: [
                                           Expanded(
@@ -635,9 +602,7 @@ DateTime selectedDateTime = DateTime(
                                                   isExpanded: true,
                                                   icon: Icon(Icons.keyboard_arrow_down_rounded, color: themeColor),
                                                   style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87, fontSize: 15),
-                                                  items: (_listingType == 'food'
-                                                          ? ['kg', 'packs', 'members']
-                                                          : ['items', 'sets/pairs', 'kg', 'boxes/cartons'])
+                                                  items: (_listingType == 'food' ? ['kg', 'packs', 'members'] : ['items', 'sets/pairs', 'boxes/cartons'])
                                                       .map((value) {
                                                     return DropdownMenuItem(
                                                       value: value,
@@ -660,11 +625,10 @@ DateTime selectedDateTime = DateTime(
                                         ],
                                       ),
                                       const SizedBox(height: 16),
-                                      
                                       TextFormField(
-                                        controller: _availabilityController,
+                                        controller: availabilityController,
                                         readOnly: true,
-                                        onTap: () => _selectDateTime(context),
+                                        onTap: () => selectDateTime(context),
                                         style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87),
                                         decoration: InputDecoration(
                                           hintText: "Select Date & Time",
@@ -673,148 +637,67 @@ DateTime selectedDateTime = DateTime(
                                           fillColor: Colors.grey.shade50,
                                           suffixIcon: Icon(Icons.calendar_month_rounded, color: themeColor, size: 22),
                                           contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                            borderSide: BorderSide.none,
-                                          ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                            borderSide: BorderSide.none,
-                                          ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                            borderSide: BorderSide(color: themeColor.withOpacity(0.5), width: 1.5),
-                                          ),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: themeColor.withOpacity(0.5), width: 1.5)),
                                         ),
                                       ),
-                                      
                                       const SizedBox(height: 24),
-                                      // 👇 ADD THIS NEW DESCRIPTION FIELD 👇
-TextFormField(
-  controller: _descriptionController,
-  maxLines: 3,
-  style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87),
-  decoration: InputDecoration(
-    hintText: "Add details or description (Optional)",
-    hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.w500),
-    filled: true,
-    fillColor: Colors.grey.shade50,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(16), 
-      borderSide: BorderSide(color: themeColor.withOpacity(0.5), width: 1.5)
-    ),
-  ),
-),
-const SizedBox(height: 24),
-// 👆 END NEW DESCRIPTION FIELD 👆
-                                      
-                                      // 1. Enhanced Header
+                                      TextFormField(
+                                        controller: _descriptionController,
+                                        maxLines: 3,
+                                        style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87),
+                                        decoration: InputDecoration(
+                                          hintText: "Add details or description (Optional)",
+                                          hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.w500),
+                                          filled: true,
+                                          fillColor: Colors.grey.shade50,
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: themeColor.withOpacity(0.5), width: 1.5)),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 24),
+
+                                      // 👇 THE NEW CLEAN TOGGLE SECTION 👇
                                       Row(
                                         children: [
-                                          Icon(Icons.info_outline_rounded, size: 18, color: themeColor),
-                                          const SizedBox(width: 8),
-                                          const Text(
-                                            "Volunteer Requirement",
-                                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black87),
+                                          Expanded(
+                                            child: _buildVolunteerToggle(
+                                              "I have volunteer\nfor pickup",
+                                              isVolunteerAvailable == true, 
+                                              () => setState(() => isVolunteerAvailable = true),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: _buildVolunteerToggle(
+                                              "I don't have\nvolunteer",
+                                              isVolunteerAvailable == false, 
+                                              () => setState(() => isVolunteerAvailable = false),
+                                            ),
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        "To ensure a smooth experience, NGOs must arrange their own volunteers to collect donations directly from the donor's location.",
-                                        style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.5),
-                                      ),
-                                      const SizedBox(height: 16),
-                                      
-                                      
-                                      // 2. Premium Toggle Card
-                                      GestureDetector(
-                                        // FIX: Properly toggles between true and false!
-                                        onTap: () => setState(() => _isVolunteerAvailable = !(_isVolunteerAvailable ?? false)),
-                                        child: AnimatedContainer(
-                                          duration: const Duration(milliseconds: 250),
-                                          curve: Curves.easeInOut,
-                                          width: double.infinity,
-                                          padding: const EdgeInsets.all(16),
-                                          decoration: BoxDecoration(
-                                            color: _isVolunteerAvailable == true ? themeColor.withValues(alpha: 0.05) : Colors.white,
-                                            borderRadius: BorderRadius.circular(16),
-                                            border: Border.all(
-                                              color: _isVolunteerAvailable == true ? themeColor : Colors.grey.shade300,
-                                              width: 1.5,
-                                            ),
-                                            boxShadow: _isVolunteerAvailable == true
-                                                ? [BoxShadow(color: themeColor.withValues(alpha: 0.1), blurRadius: 8, offset: const Offset(0, 4))]
-                                                : [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 4, offset: const Offset(0, 2))],
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              // Custom Animated Checkbox
-                                              AnimatedContainer(
-                                                duration: const Duration(milliseconds: 250),
-                                                height: 26,
-                                                width: 26,
-                                                decoration: BoxDecoration(
-                                                  color: _isVolunteerAvailable == true ? themeColor : Colors.transparent,
-                                                  shape: BoxShape.circle,
-                                                  border: Border.all(
-                                                    color: _isVolunteerAvailable == true ? themeColor : Colors.grey.shade400,
-                                                    width: 2,
-                                                  ),
-                                                ),
-                                                child: _isVolunteerAvailable == true
-                                                    ? const Icon(Icons.check_rounded, color: Colors.white, size: 16)
-                                                    : null,
-                                              ),
-                                              const SizedBox(width: 16),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      "I confirm & agree",
-                                                      style: TextStyle(
-                                                        fontSize: 15,
-                                                        fontWeight: FontWeight.w800,
-                                                        color: _isVolunteerAvailable == true ? themeColor : Colors.black87,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 2),
-                                                    Text(
-                                                      "We have a volunteer ready for pickup",
-                                                      style: TextStyle(
-                                                        fontSize: 12,
-                                                        fontWeight: FontWeight.w500,
-                                                        color: _isVolunteerAvailable == true ? themeColor.withValues(alpha: 0.8) : Colors.grey.shade500,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
+                                      // 👆 END TOGGLE SECTION 👆
+
                                       const SizedBox(height: 45),
-                                      
                                       SizedBox(
                                         width: double.infinity,
                                         child: CustomButton(
                                           text: "Publish Request",
-                                          isLoading: _isLoading,
+                                          isLoading: isLoading,
                                           onPressed: _createListing,
                                         ),
                                       ),
-                                      const SizedBox(height: 10),
                                     ],
                                   ),
                           ),
                         ],
                       ),
                     ),
+                    const SizedBox(height: 10),
                   ],
                 ),
               ),

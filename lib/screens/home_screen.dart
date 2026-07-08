@@ -1,44 +1,44 @@
+//home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart'; 
+import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'dart:ui'; // <-- IMPORTED FOR GLASS BLUR EFFECT
+
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
-import '../services/chat_service.dart'; 
+import '../services/chat_service.dart';
 import '../models/notification_model.dart';
-import '../models/chat_preview_model.dart'; 
+import '../models/chat_preview_model.dart';
 import 'donor_listing_screen.dart';
 import 'ngo_dashboard.dart';
 import 'profile_screen.dart';
 import 'create_listing_screen.dart';
 import 'role_selection_screen.dart';
-import 'hero_page.dart'; 
-import 'notifications_screen.dart'; 
-import 'chat_screen.dart'; 
-import 'travel_agency_dashboard.dart'; 
+import 'hero_page.dart';
+import 'notifications_screen.dart';
+import 'chat_screen.dart';
+import 'travel_agency_dashboard.dart';
+import 'volunteer_dashboard.dart'; // <-- Make sure this is imported!
 
-// =========================================================================
-// 1. HOME SCREEN (Contains the Three Dots Menu)
-// =========================================================================
-
+// ==========================================
+// 1. HOME SCREEN
+// ==========================================
 class HomeScreen extends StatefulWidget {
-  final int initialIndex; 
-  final String? targetPostId; 
-
+  final int initialIndex;
+  final String? targetPostId;
   const HomeScreen({
-    Key? key, 
-    this.initialIndex = 0, 
+    Key? key,
+    this.initialIndex = 0,
     this.targetPostId
   }) : super(key: key);
 
   @override
-  State<HomeScreen> createState() => HomeScreenState(); 
+  State<HomeScreen> createState() => HomeScreenState();
 }
 
 class HomeScreenState extends State<HomeScreen> {
   late int _currentIndex;
-  String? targetPostId; 
+  String? targetPostId;
 
   @override
   void initState() {
@@ -46,13 +46,12 @@ class HomeScreenState extends State<HomeScreen> {
     _currentIndex = widget.initialIndex;
     targetPostId = widget.targetPostId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-    final user = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
-    if (user != null && user.role == 'ngo') {
-      FirestoreService().cleanUpExpiredRequests(user.uid);
-    }
-  });
-}
-  
+      final user = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
+      if (user != null && user.role == 'ngo') {
+        FirestoreService().cleanUpExpiredRequests(user.uid);
+      }
+    });
+  }
 
   void switchTab(int index, {String? postId}) {
     setState(() {
@@ -80,10 +79,10 @@ class HomeScreenState extends State<HomeScreen> {
     // --- 1. NGO ROLE ---
     if (user.role == 'ngo') {
       screens = [
-        const HeroPage(), 
-        NgoDashboard(targetPostId: targetPostId), 
-        const CreateListingScreen(), 
-        const ChatListScreen(), 
+        const HeroPage(),
+        NgoDashboard(targetPostId: targetPostId),
+        const CreateListingScreen(),
+        const ChatListScreen(),
         const ProfileScreen(),
       ];
       navItems = const [
@@ -93,31 +92,48 @@ class HomeScreenState extends State<HomeScreen> {
         BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_rounded), label: 'Chat'),
         BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
       ];
-    } 
+    }
     // --- 2. TRAVEL AGENCY ROLE ---
     else if (user.role == 'travel_agency') {
       screens = [
-        const HeroPage(), 
-        NgoDashboard(targetPostId: targetPostId), 
-        const TravelAgencyDashboard(), 
-        const ChatListScreen(), 
+        const HeroPage(),
+        NgoDashboard(targetPostId: targetPostId),
+        const TravelAgencyDashboard(),
+        const ChatListScreen(),
         const ProfileScreen(),
       ];
       navItems = const [
         BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
         BottomNavigationBarItem(icon: Icon(Icons.bar_chart_rounded), label: 'Activity'),
-        BottomNavigationBarItem(icon: Icon(Icons.local_shipping_rounded), label: 'Deliveries'), 
+        BottomNavigationBarItem(icon: Icon(Icons.local_shipping_rounded), label: 'Deliveries'),
         BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_rounded), label: 'Chat'),
         BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
       ];
     }
-    // --- 3. DONOR / VOLUNTEER ROLE (Default) ---
+    // 👇 3. NEW: VOLUNTEER ROLE 👇
+    else if (user.role == 'volunteer') {
+      screens = [
+        const HeroPage(),
+        NgoDashboard(targetPostId: targetPostId),
+        const VolunteerDashboard(),
+        const ChatListScreen(),
+        const ProfileScreen(),
+      ];
+      navItems = const [
+        BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
+        BottomNavigationBarItem(icon: Icon(Icons.bar_chart_rounded), label: 'Activity'),
+        BottomNavigationBarItem(icon: Icon(Icons.directions_car_rounded), label: 'Tasks'),
+        BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_rounded), label: 'Chat'),
+        BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
+      ];
+    }
+    // --- 4. DONOR ROLE (Default) ---
     else {
       screens = [
-        const HeroPage(), 
-        NgoDashboard(targetPostId: targetPostId), 
+        const HeroPage(),
+        NgoDashboard(targetPostId: targetPostId),
         const DonorListingScreen(),
-        const ChatListScreen(), 
+        const ChatListScreen(),
         const ProfileScreen(),
       ];
       navItems = const [
@@ -135,14 +151,13 @@ class HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFFAFAFA),
-      extendBody: true, // <-- CRITICAL: Lets the background flow under the floating bar
+      extendBody: true, 
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: false,
         title: Row(
           children: [
-            // Updated Logo Housing container for your circular Bird Logo setup
             Container(
               height: 40,
               width: 40,
@@ -150,23 +165,23 @@ class HomeScreenState extends State<HomeScreen> {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 6,
                     offset: const Offset(0, 2),
                   ),
                 ],
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(20), // Keeps asset cleanly framed as a circular ring
+                borderRadius: BorderRadius.circular(20), 
                 child: Image.asset(
-                  'assets/dove_icon.png', 
+                  'assets/dove_icon.png',
                   height: 40,
                   width: 40,
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) {
                     return Container(
-                      height: 40, 
-                      width: 40, 
+                      height: 40,
+                      width: 40,
                       color: Colors.grey.shade200,
                       child: const Icon(Icons.broken_image, size: 20),
                     );
@@ -177,7 +192,12 @@ class HomeScreenState extends State<HomeScreen> {
             const SizedBox(width: 12),
             const Text(
               "CHARITEY",
-              style: TextStyle(color: Color(0xFF7D444C), fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+              style: TextStyle(
+                color: Color(0xFF7D444C), 
+                fontSize: 18, 
+                fontWeight: FontWeight.bold, 
+                letterSpacing: 1.2
+              ),
             ),
           ],
         ),
@@ -189,7 +209,6 @@ class HomeScreenState extends State<HomeScreen> {
               if (snapshot.hasData) {
                 hasUnread = snapshot.data!.any((notification) => !notification.isRead);
               }
-
               return IconButton(
                 icon: Stack(
                   children: [
@@ -202,23 +221,22 @@ class HomeScreenState extends State<HomeScreen> {
                           height: 10,
                           width: 10,
                           decoration: const BoxDecoration(
-                            color: Colors.red, 
+                            color: Colors.red,
                             shape: BoxShape.circle,
                             boxShadow: [
-                               BoxShadow(color: Colors.white, spreadRadius: 1, blurRadius: 1)
-                            ]
+                              BoxShadow(color: Colors.white, spreadRadius: 1, blurRadius: 1)
+                            ],
                           ),
                         ),
                       ),
                   ],
                 ),
                 onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+                 Navigator.push(context, MaterialPageRoute (builder: (context) => const NotificationsScreen()));
                 },
               );
             }
           ),
-          
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert_rounded, color: Colors.black87, size: 26),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -236,41 +254,40 @@ class HomeScreenState extends State<HomeScreen> {
               } else if (result == 'logout') {
                 await authProvider.signOut();
                 if (!context.mounted) return;
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const RoleSelectionScreen()));
+               Navigator.pushReplacement (context, MaterialPageRoute (builder: (context) => const RoleSelectionScreen()));
               }
             },
             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
               PopupMenuItem<String>(
                 value: 'contact',
                 child: Row(
-                  children: [
+                  children: const [
                     Icon(Icons.contact_mail_rounded, color: Color(0xFF7D444C), size: 20),
-                    const SizedBox(width: 12),
-                    const Text('Contact Support', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
+                    SizedBox(width: 12),
+                    Text('Contact Support', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
                   ],
                 ),
               ),
               PopupMenuItem<String>(
                 value: 'about',
                 child: Row(
-                  children: [
+                  children: const [
                     Icon(Icons.info_outline_rounded, color: Color(0xFF7D444C), size: 20),
-                    const SizedBox(width: 12),
-                    const Text('About Charitey', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
+                    SizedBox(width: 12),
+                    Text('About Charitey', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
                   ],
                 ),
               ),
               PopupMenuItem<String>(
                 value: 'feedback',
                 child: Row(
-                  children: [
+                  children: const [
                     Icon(Icons.feedback_rounded, color: Color(0xFF7D444C), size: 20),
-                    const SizedBox(width: 12),
-                    const Text('Share Feedback', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
+                    SizedBox(width: 12),
+                    Text('Share Feedback', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
                   ],
                 ),
               ),
-              
               const PopupMenuDivider(),
               PopupMenuItem<String>(
                 value: 'logout',
@@ -284,20 +301,20 @@ class HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-          const SizedBox(width: 8), 
+          const SizedBox(width: 8),
         ],
       ),
-      body: screens[_currentIndex],      
-      
-      // ================= CUSTOM ARCHED OVERFLOW FLOATING NAV BAR =================
+      body: screens[_currentIndex],
+      // ==========================================
+      // CUSTOM ARCHED OVERFLOW FLOATING NAV BAR
+      // ==========================================
       bottomNavigationBar: SafeArea(
         child: Container(
           margin: const EdgeInsets.only(left: 16, right: 16, bottom: 12),
-          height: 85, // Height increased slightly to safely frame and accommodate the middle elevated bubble setup
+          height: 85, 
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              // 1. MAIN BACKGROUND CONTAINER LAYER
               Positioned(
                 left: 0,
                 right: 0,
@@ -309,7 +326,7 @@ class HomeScreenState extends State<HomeScreen> {
                     borderRadius: BorderRadius.circular(32),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF7D444C).withOpacity(0.08),
+                        color: const Color(0xFF7D444C).withValues(alpha: 0.08),
                         blurRadius: 16,
                         offset: const Offset(0, 4),
                       )
@@ -318,24 +335,21 @@ class HomeScreenState extends State<HomeScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: List.generate(navItems.length, (index) {
-                      // Skip the rendering process for the middle item (index 2) to maintain its blank container footprint
                       if (index == 2) {
                         return const Expanded(child: SizedBox.shrink());
                       }
-
                       final item = navItems[index];
                       final icon = (item.icon as Icon).icon!;
                       final label = item.label ?? '';
                       final isActive = _currentIndex == index;
                       final themeColor = const Color(0xFF7D444C);
-
                       return Expanded(
                         child: GestureDetector(
                           onTap: () {
                             setState(() {
                               _currentIndex = index;
-                              if (index != 1) targetPostId = null;
                             });
+                            if (index != 1) targetPostId = null;
                           },
                           behavior: HitTestBehavior.opaque,
                           child: Column(
@@ -363,8 +377,6 @@ class HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-
-              // 2. HERO OVERSIZED MIDDLE OVERFLOW BUTTON (Index 2 - Action Tab)
               Positioned(
                 top: 0,
                 left: 0,
@@ -373,7 +385,7 @@ class HomeScreenState extends State<HomeScreen> {
                   child: GestureDetector(
                     onTap: () {
                       setState(() {
-                        _currentIndex = 2; // Targets the Center Core Screen Layout Action
+                        _currentIndex = 2; 
                         targetPostId = null;
                       });
                     },
@@ -385,7 +397,7 @@ class HomeScreenState extends State<HomeScreen> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF7D444C).withOpacity(0.35),
+                            color: const Color(0xFF7D444C).withValues(alpha: 0.35),
                             blurRadius: 12,
                             offset: const Offset(0, 6),
                           )
@@ -421,6 +433,8 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+
+// ... The rest of your ChatListScreen, AboutUs, and Feedback screens stay EXACTLY as they are ...
 
 // =========================================================================
 // 2. CHAT LIST SCREEN
@@ -611,14 +625,17 @@ class AboutUsScreen extends StatelessWidget {
 
 class FeedbackScreen extends StatefulWidget {
   const FeedbackScreen({super.key});
+
   @override
   State<FeedbackScreen> createState() => _FeedbackScreenState();
 }
 
 class _FeedbackScreenState extends State<FeedbackScreen> {
-  Map<int, int> answers = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0};
+  // Empty strings mean unanswered
+  Map<int, String> answers = {1: '', 2: '', 3: '', 4: '', 5: ''};
   final Color themeColor = const Color(0xFF7D444C);
   final Color cardColor = const Color(0xFFFFF0F1);
+  bool _isSubmitting = false;
 
   @override
   Widget build(BuildContext context) {
@@ -627,57 +644,179 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.black87), onPressed: () => Navigator.pop(context)),
-        title: Text("Share Feedback", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black87),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          "Share Feedback", 
+          style: TextStyle(color: themeColor, fontWeight: FontWeight.bold)
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
+        physics: const BouncingScrollPhysics(),
         children: [
-          _buildQuestion(1, "Q1. Are notifications relevant and timely?"),
-          _buildQuestion(2, "Q2. Are settings easy to find?"),
-          _buildQuestion(3, "Q3. Would you recommend Charitey to others?"),
-          _buildQuestion(4, "Q4. Did you find the NGO information useful?"),
-          _buildQuestion(5, "Q5. Was it easy to contact support?"),
+          _buildQuestionWithOptions(
+            1, 
+            "Q1. How would you rate your overall experience with Charitey?",
+            [
+              '⭐☆☆☆☆ 1 Star',
+              '⭐⭐☆☆☆ 2 Stars',
+              '⭐⭐⭐☆☆ 3 Stars',
+              '⭐⭐⭐⭐☆ 4 Stars',
+              '⭐⭐⭐⭐⭐ 5 Stars'
+            ]
+          ),
+          _buildQuestionWithOptions(
+            2, 
+            "Q2. How easy was it to use the Charitey app?",
+            ['Very Easy', 'Easy', 'Somewhat Difficult', 'Difficult']
+          ),
+          _buildQuestionWithOptions(
+            3, 
+            "Q3. How satisfied are you with the services provided by Charitey?",
+            ['Very Satisfied', 'Satisfied', 'Somewhat Satisfied', 'Not Satisfied']
+          ),
+          _buildQuestionWithOptions(
+            4, 
+            "Q4. How helpful was Charitey in meeting your needs?",
+            ['Very Helpful', 'Helpful', 'Slightly Helpful', 'Not Helpful']
+          ),
+          _buildQuestionWithOptions(
+            5, 
+            "Q5. How likely are you to recommend Charitey to your friends or family?",
+            ['Definitely', 'Probably', 'Maybe', 'No']
+          ),
           const SizedBox(height: 20),
           ElevatedButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Feedback Submitted!'), backgroundColor: themeColor));
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: themeColor, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-            child: const Text("Submit", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            onPressed: _isSubmitting ? null : _submitFeedback,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: themeColor, 
+              padding: const EdgeInsets.symmetric(vertical: 16), 
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+            ),
+            child: _isSubmitting 
+                ? const SizedBox(
+                    height: 20, 
+                    width: 20, 
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                  )
+                : const Text(
+                    "Submit", 
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
+                  ),
           )
         ],
       ),
     );
   }
 
-  Widget _buildQuestion(int qIndex, String question) {
+  Future<void> _submitFeedback() async {
+    // 1. Validate that all questions have been answered
+    if (answers.values.contains('')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please answer all 5 questions before submitting.'), 
+          backgroundColor: Colors.redAccent,
+        )
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      // 2. Safely grab the current user's data
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final user = authProvider.currentUserModel;
+
+      if (user == null) {
+        throw Exception("User not found. Please log in again.");
+      }
+
+      // 3. Package the data for the Admin Panel
+      Map<String, dynamic> feedbackData = {
+        'userId': user.uid,
+        'userName': user.name,
+        'userEmail': user.email,
+        'userRole': user.role,
+        'q1_overall_experience': answers[1],
+        'q2_ease_of_use': answers[2],
+        'q3_satisfaction': answers[3],
+        'q4_helpfulness': answers[4],
+        'q5_recommendation': answers[5],
+        'submittedAt': FieldValue.serverTimestamp(),
+      };
+
+      // 4. Send to Firebase
+      await FirestoreService().submitFeedback(feedbackData);
+
+      if (!mounted) return;
+
+      // 5. Success UI
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Feedback Submitted! Thank you.'), 
+          backgroundColor: Colors.green,
+        )
+      );
+      Navigator.pop(context);
+
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to submit: $e'), 
+          backgroundColor: Colors.redAccent,
+        )
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  Widget _buildQuestionWithOptions(int qIndex, String question, List<String> options) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: cardColor, 
+        borderRadius: BorderRadius.circular(12)
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(question, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Text(
+            question, 
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)
+          ),
           const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: List.generate(5, (index) {
-              int rating = index + 1;
-              return GestureDetector(
-                onTap: () => setState(() => answers[qIndex] = rating),
+          ...options.map((option) {
+            bool isSelected = answers[qIndex] == option;
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setState(() => answers[qIndex] = option),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
                 child: Row(
                   children: [
-                    Icon(answers[qIndex] == rating ? Icons.radio_button_checked : Icons.radio_button_unchecked, color: answers[qIndex] == rating ? themeColor : Colors.black54, size: 20),
-                    const SizedBox(width: 4),
-                    Text(rating.toString(), style: const TextStyle(fontSize: 14)),
+                    Icon(
+                      isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked, 
+                      color: isSelected ? themeColor : Colors.black54, 
+                      size: 20
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(option, style: const TextStyle(fontSize: 14)),
+                    ),
                   ],
                 ),
-              );
-            }),
-          )
+              ),
+            );
+          }).toList(),
         ],
       ),
     );

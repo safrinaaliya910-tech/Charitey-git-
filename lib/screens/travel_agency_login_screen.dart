@@ -2,22 +2,27 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
-import 'travel_agency_register_screen.dart'; 
+import 'travel_agency_register_screen.dart';
 import 'home_screen.dart';
+
 
 class TravelAgencyLoginScreen extends StatefulWidget {
   const TravelAgencyLoginScreen({super.key});
+
 
   @override
   State<TravelAgencyLoginScreen> createState() => _TravelAgencyLoginScreenState();
 }
 
+
 class _TravelAgencyLoginScreenState extends State<TravelAgencyLoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
+
   // The Dusty Rose Theme Color
   final Color themeColor = const Color(0xFFB56F76);
+
 
   @override
   void dispose() {
@@ -26,12 +31,15 @@ class _TravelAgencyLoginScreenState extends State<TravelAgencyLoginScreen> {
     super.dispose();
   }
 
+
   // --- LOGIC REMAINS EXACTLY THE SAME ---
   void _login() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
+
     String email = _emailController.text.trim();
     String password = _passwordController.text.trim();
+
 
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -40,9 +48,12 @@ class _TravelAgencyLoginScreenState extends State<TravelAgencyLoginScreen> {
       return;
     }
 
+
     bool success = await authProvider.signInWithRole(email, password, 'travel_agency');
 
+
     if (!context.mounted) return;
+
 
     if (success) {
       // Returning users go straight to the Home Screen
@@ -58,19 +69,21 @@ class _TravelAgencyLoginScreenState extends State<TravelAgencyLoginScreen> {
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
 
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA), // Soft off-white background
-      extendBodyBehindAppBar: true, 
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
-          onPressed: () => Navigator.pop(context), 
+          onPressed: () => Navigator.pop(context),
         ),
       ),
       body: Stack(
@@ -113,6 +126,7 @@ class _TravelAgencyLoginScreenState extends State<TravelAgencyLoginScreen> {
             ),
           ),
 
+
           // --- Main Content (Locked to Single View) ---
           SafeArea(
             child: LayoutBuilder(
@@ -121,15 +135,15 @@ class _TravelAgencyLoginScreenState extends State<TravelAgencyLoginScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 30.0),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      minHeight: constraints.maxHeight, 
+                      minHeight: constraints.maxHeight,
                     ),
                     child: IntrinsicHeight(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
-                        mainAxisAlignment: MainAxisAlignment.center, 
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Spacer(flex: 2), 
-                          
+                          const Spacer(flex: 2),
+                         
                           // Title Area
                           const Text(
                             'Agency Login',
@@ -141,11 +155,12 @@ class _TravelAgencyLoginScreenState extends State<TravelAgencyLoginScreen> {
                             style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
                           ),
                           const SizedBox(height: 40),
-                          
+                         
                           _buildInputField(hint: 'Agency E-mail ID', icon: Icons.email_outlined, controller: _emailController, keyboardType: TextInputType.emailAddress),
                           const SizedBox(height: 16),
                           _buildInputField(hint: 'Password', icon: Icons.lock_outline_rounded, controller: _passwordController, isPassword: true),
                           const SizedBox(height: 12),
+
 
                           Align(
                             alignment: Alignment.centerRight,
@@ -161,6 +176,7 @@ class _TravelAgencyLoginScreenState extends State<TravelAgencyLoginScreen> {
                           ),
                           const SizedBox(height: 16),
 
+
                           // MAIN LOGIN BUTTON
                           ElevatedButton(
                             onPressed: authProvider.isLoading ? null : _login,
@@ -173,7 +189,7 @@ class _TravelAgencyLoginScreenState extends State<TravelAgencyLoginScreen> {
                                 borderRadius: BorderRadius.circular(30),
                               ),
                             ),
-                            child: authProvider.isLoading 
+                            child: authProvider.isLoading
                                 ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
                                 : const Text(
                                     'LOG IN',
@@ -181,6 +197,7 @@ class _TravelAgencyLoginScreenState extends State<TravelAgencyLoginScreen> {
                                   ),
                           ),
                           const SizedBox(height: 24),
+
 
                           Row(
                             children: [
@@ -193,6 +210,7 @@ class _TravelAgencyLoginScreenState extends State<TravelAgencyLoginScreen> {
                             ],
                           ),
                           const SizedBox(height: 24),
+
 
                           // REAL UI GOOGLE BUTTON
                           ElevatedButton(
@@ -209,6 +227,7 @@ class _TravelAgencyLoginScreenState extends State<TravelAgencyLoginScreen> {
                             onPressed: () async {
                               bool success = await authProvider.signInWithGoogle(expectedRole: 'travel_agency');
                               if (!context.mounted) return;
+
 
                               if (success) {
                                 Navigator.pushAndRemoveUntil(
@@ -238,8 +257,9 @@ class _TravelAgencyLoginScreenState extends State<TravelAgencyLoginScreen> {
                               ],
                             ),
                           ),
-                          
-                          const Spacer(flex: 3), 
+                         
+                          const Spacer(flex: 3),
+
 
                           // BOTTOM REGISTER LINK
                           Row(
@@ -276,6 +296,7 @@ class _TravelAgencyLoginScreenState extends State<TravelAgencyLoginScreen> {
       ),
     );
   }
+
 
   // --- FLOATING TEXT FIELD UI ---
   Widget _buildInputField({required String hint, required IconData icon, required TextEditingController controller, bool isPassword = false, TextInputType keyboardType = TextInputType.text}) {

@@ -1,9 +1,10 @@
-// lib/screens/role_selection_screen.dart
+//role_selection_screen
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'donor_login_screen.dart';
 import 'ngo_login_screen.dart';
+import 'volunteer_login_screen.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
   const RoleSelectionScreen({super.key});
@@ -12,8 +13,7 @@ class RoleSelectionScreen extends StatefulWidget {
   State<RoleSelectionScreen> createState() => _RoleSelectionScreenState();
 }
 
-class _RoleSelectionScreenState extends State<RoleSelectionScreen>
-    with TickerProviderStateMixin {
+class _RoleSelectionScreenState extends State<RoleSelectionScreen> with TickerProviderStateMixin {
   late AnimationController _fadeController;
   late AnimationController _bgController;
   late Animation<double> _fadeAnimation;
@@ -28,6 +28,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
+
     _bgController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 12),
@@ -37,10 +38,12 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
       parent: _fadeController,
       curve: Curves.easeOut,
     );
+
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.12),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
+
     _fadeController.forward();
   }
 
@@ -88,9 +91,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
             opacity: _fadeAnimation,
             child: SlideTransition(
               position: _slideAnimation,
-              child: isWide
-                  ? _buildWideLayout(context, size)
-                  : _buildNarrowLayout(context, size),
+              child: isWide ? _buildWideLayout(context) : _buildNarrowLayout(context),
             ),
           ),
         ),
@@ -98,46 +99,52 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
     );
   }
 
-  // ── MOBILE LAYOUT ─────────────────────────────────────────────────────
-  Widget _buildNarrowLayout(BuildContext context, Size size) {
+  // --- MOBILE LAYOUT (Fixed Overflow, No Scroll) ---
+  Widget _buildNarrowLayout(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 28),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 90),
-            _buildCenteredTitle(),
-            const SizedBox(height: 24),
-            _buildDecorativeLine(),
-            const SizedBox(height: 80),
-
-            _roleCard(
-              title: "Donor",
-              icon: Icons.volunteer_activism,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const DonorLoginScreen()),
-              ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Spacer(flex: 3), // Flexible top spacing
+          _buildCenteredTitle(),
+          const SizedBox(height: 16),
+          _buildDecorativeLine(),
+          const Spacer(flex: 2), // Flexible middle spacing
+          _roleCard(
+            title: "Donor",
+            icon: Icons.volunteer_activism,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const DonorLoginScreen()),
             ),
-            const SizedBox(height: 24),
-            _roleCard(
-              title: "NGO",
-              icon: Icons.home_work_rounded,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const NgoLoginScreen()),
-              ),
+          ),
+          const SizedBox(height: 14),
+          _roleCard(
+            title: "NGO",
+            icon: Icons.holiday_village_rounded,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const NgoLoginScreen()),
             ),
-            const SizedBox(height: 40),
-          ],
-        ),
+          ),
+          const SizedBox(height: 14),
+          _roleCard(
+            title: "Volunteer",
+            icon: Icons.directions_car_rounded,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const VolunteerLoginScreen()),
+            ),
+          ),
+          const Spacer(flex: 3), // Flexible bottom spacing to prevent overflow
+        ],
       ),
     );
   }
 
-  // ── WIDE LAYOUT ───────────────────────────────────────────────────────
-  Widget _buildWideLayout(BuildContext context, Size size) {
+  // --- WIDE LAYOUT ---
+  Widget _buildWideLayout(BuildContext context) {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 460),
@@ -145,12 +152,11 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
           padding: const EdgeInsets.symmetric(horizontal: 32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               _buildCenteredTitle(),
               const SizedBox(height: 24),
               _buildDecorativeLine(),
-              const SizedBox(height: 56),
+              const SizedBox(height: 40),
               _roleCard(
                 title: "Donor",
                 icon: Icons.volunteer_activism,
@@ -159,13 +165,22 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
                   MaterialPageRoute(builder: (_) => const DonorLoginScreen()),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               _roleCard(
                 title: "NGO",
-                icon: Icons.home_work_rounded,
+                icon: Icons.holiday_village_rounded,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const NgoLoginScreen()),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _roleCard(
+                title: "Volunteer",
+                icon: Icons.directions_car_rounded,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const VolunteerLoginScreen()),
                 ),
               ),
             ],
@@ -192,7 +207,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
     return Column(
       children: [
         Text(
-          'WE\nDONATE,',
+          'WE DONATE,',
           textAlign: TextAlign.center,
           style: GoogleFonts.playfairDisplay(
             color: Colors.white,
@@ -249,7 +264,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Row(
             children: [
-              // Main Icon Container
               Container(
                 width: 52,
                 height: 52,
@@ -260,20 +274,17 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
                 child: Icon(icon, color: Colors.white, size: 26),
               ),
               const SizedBox(width: 18),
-              // Text - More Bold as requested
               Expanded(
                 child: Text(
                   title,
                   style: GoogleFonts.playfairDisplay(
                     fontSize: 23,
-                    fontWeight:
-                        FontWeight.w900, // Increased to maximum boldness
+                    fontWeight: FontWeight.w900,
                     color: primary,
                     letterSpacing: 0.8,
                   ),
                 ),
               ),
-              // Trailing Arrow Container
               Container(
                 width: 36,
                 height: 36,

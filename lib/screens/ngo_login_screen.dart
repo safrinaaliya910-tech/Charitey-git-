@@ -6,6 +6,8 @@ import '../providers/auth_provider.dart';
 import 'base_register_screen.dart';
 import 'home_screen.dart';
 import 'forgot_password_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider; // <-- FIX 1
 
 class NgoLoginScreen extends StatefulWidget {
   const NgoLoginScreen({super.key});
@@ -43,9 +45,9 @@ class _NgoLoginScreenState extends State<NgoLoginScreen>
     super.dispose();
   }
 
+  // 👇 FIX 2: Added underscore to match your UI button
   void _login() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
     final String email = _emailController.text.trim();
     final String password = _passwordController.text.trim();
 
@@ -57,20 +59,41 @@ class _NgoLoginScreenState extends State<NgoLoginScreen>
     }
 
     final bool success = await authProvider.signInWithRole(email, password, 'ngo');
-
     if (!context.mounted) return;
 
     if (success) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        if (userDoc.exists) {
+          // 👇 FIX 3: Removed the unnecessary cast warning
+          final data = userDoc.data();
+          final status = (data != null && data is Map) ? data['status'] ?? 'active' : 'active';
+
+          if (status == 'blocked' || status == 'rejected') {
+            await FirebaseAuth.instance.signOut(); 
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Access Denied: Your account has been blocked or rejected by an admin.'),
+                backgroundColor: Colors.redAccent,
+                duration: Duration(seconds: 4),
+              ),
+            );
+            return; 
+          }
+        }
+      }
+
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (route) => const HomeScreen()),
         (route) => false,
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-              'Invalid credentials or this account is not registered as an NGO'),
+          content: Text('Invalid credentials or this account is not registered as an NGO.'),
         ),
       );
     }

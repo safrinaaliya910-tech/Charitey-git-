@@ -1,31 +1,26 @@
-// lib/screens/donor_login_screen.dart
+//volunteer_login_screen.dart(new file)
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import '../providers/auth_provider.dart';
 import 'base_register_screen.dart';
 import 'home_screen.dart';
 import 'forgot_password_screen.dart';
-//import 'role_selection_screen.dart';
-import 'package:charity_app/screens/role_selection_screen.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider; // <-- FIX 1
 
-class DonorLoginScreen extends StatefulWidget {
-  const DonorLoginScreen({super.key});
+class VolunteerLoginScreen extends StatefulWidget {
+  const VolunteerLoginScreen({super.key});
 
   @override
-  State<DonorLoginScreen> createState() => _DonorLoginScreenState();
+  State<VolunteerLoginScreen> createState() => _VolunteerLoginScreenState();
 }
 
-class _DonorLoginScreenState extends State<DonorLoginScreen>
-    with SingleTickerProviderStateMixin {
-  final TextEditingController _emailController    = TextEditingController();
+class _VolunteerLoginScreenState extends State<VolunteerLoginScreen> with SingleTickerProviderStateMixin {
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-
   bool _obscurePassword = true;
-  bool _rememberMe      = false;
-
+  bool _rememberMe = false;
   late AnimationController _rotationController;
 
   static const Color themeColor = Color(0xFF8C4149);
@@ -47,11 +42,10 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
     super.dispose();
   }
 
-  // 👇 FIX 2: Added underscore
   void _login() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
+    final String email = _emailController.text.trim();
+    final String password = _passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -60,20 +54,20 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
       return;
     }
 
-    final bool success = await authProvider.signInWithRole(email, password, 'donor');
+    final bool success = await authProvider.signInWithRole(email, password, 'volunteer');
     if (!context.mounted) return;
 
     if (success) {
+      // 👇 SECURITY CHECK: Verify if Volunteer is blocked 👇
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
         if (userDoc.exists) {
-          // 👇 FIX 3: Removed the unnecessary cast warning
           final data = userDoc.data();
           final status = (data != null && data is Map) ? data['status'] ?? 'active' : 'active';
 
           if (status == 'blocked' || status == 'rejected') {
-            await FirebaseAuth.instance.signOut(); 
+            await FirebaseAuth.instance.signOut();
             if (!context.mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -82,10 +76,11 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
                 duration: Duration(seconds: 4),
               ),
             );
-            return; 
+            return;
           }
         }
       }
+      // 👆 END SECURITY CHECK 👆
 
       Navigator.pushAndRemoveUntil(
         context,
@@ -95,22 +90,18 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Invalid credentials or this account is not registered as a Donor.'),
+          content: Text('Invalid credentials or this account is not registered as a Volunteer.'),
         ),
       );
     }
   }
-  // ── Google sign-in ─────────────────────────────────────────────────────
-  // Single unified path — works on both mobile and web.
+
   Future<void> _googleSignIn(AuthProvider authProvider) async {
     try {
-      final result = await authProvider.authService
-          .signInWithGoogle(assignRole: null); // login — keep existing role
-
+      final result = await authProvider.authService.signInWithGoogle(assignRole: null); 
       if (!context.mounted) return;
 
       if (result == null) {
-        // User cancelled or Google returned null
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Google sign-in was cancelled.')),
         );
@@ -118,23 +109,19 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
       }
 
       final String userRole = result.role.trim().toLowerCase();
-
-      if (userRole == 'donor' || userRole == 'user' || userRole.isEmpty) {
-        // Valid donor login
+      if (userRole == 'volunteer') {
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          MaterialPageRoute(builder: (route) => const HomeScreen()),
           (route) => false,
         );
       } else {
-        // Wrong portal
         await authProvider.authService.signOut();
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'This account is registered as ${userRole.toUpperCase()}. '
-              'Please use the correct portal.',
+              'This account is registered as ${userRole.toUpperCase()}. Please use the correct portal.',
             ),
             backgroundColor: Colors.amber,
           ),
@@ -151,7 +138,6 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
     }
   }
 
-  // ── BUILD ──────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
@@ -162,7 +148,6 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
       backgroundColor: themeColor,
       body: Column(
         children: [
-          // ── TOP HEADER (rotating gradient) ──
           SizedBox(
             height: size.height * 0.18,
             child: AnimatedBuilder(
@@ -176,12 +161,8 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
                         math.sin(_rotationController.value * 2 * math.pi),
                       ),
                       end: Alignment(
-                        math.cos(
-                          (_rotationController.value + 0.5) * 2 * math.pi,
-                        ),
-                        math.sin(
-                          (_rotationController.value + 0.5) * 2 * math.pi,
-                        ),
+                        math.cos((_rotationController.value + 0.5) * 2 * math.pi),
+                        math.sin((_rotationController.value + 0.5) * 2 * math.pi),
                       ),
                       colors: const [
                         Color(0xFF8C4149),
@@ -220,8 +201,6 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
               ),
             ),
           ),
-
-          // ── WHITE CARD ──
           Expanded(
             child: Container(
               width: double.infinity,
@@ -237,9 +216,8 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Title
                     const Text(
-                      'Welcome Back',
+                      'Volunteer Login',
                       style: TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.bold,
@@ -248,7 +226,7 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Ready to continue your donation journey?\nYour path is right here.',
+                      "Welcome back! Ready to deliver hope today?",
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.grey.shade500,
@@ -256,21 +234,15 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
                       ),
                     ),
                     const SizedBox(height: 22),
-
-                    // Email Field
                     _buildInputField(
                       hint: 'Email address',
-                      icon: Icons.person_outline_rounded,
+                      icon: Icons.email_outlined,
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
                     ),
                     const SizedBox(height: 12),
-
-                    // Password Field
                     _buildPasswordField(),
                     const SizedBox(height: 4),
-
-                    // Remember me & Forgot password
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -281,8 +253,7 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
                               height: 20,
                               child: Checkbox(
                                 value: _rememberMe,
-                                onChanged: (val) =>
-                                    setState(() => _rememberMe = val ?? false),
+                                onChanged: (val) => setState(() => _rememberMe = val ?? false),
                                 activeColor: themeColor,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(4),
@@ -305,10 +276,10 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => ForgotPasswordScreen(
-                                  prefillEmail: _emailController.text.trim(),
-                                ),
-                              ),
+  builder: (context) => ForgotPasswordScreen( // <-- Added 'context' here
+    prefillEmail: _emailController.text.trim(),
+  ),
+),
                             );
                           },
                           style: TextButton.styleFrom(
@@ -328,8 +299,6 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
                       ],
                     ),
                     const SizedBox(height: 20),
-
-                    // ── LOG IN BUTTON ──
                     SizedBox(
                       width: double.infinity,
                       height: 52,
@@ -375,8 +344,6 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
                       ),
                     ),
                     const SizedBox(height: 14),
-
-                    // ── SIGN UP BUTTON ──
                     SizedBox(
                       width: double.infinity,
                       height: 52,
@@ -385,8 +352,7 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
                           Navigator.pushReplacement(
                             context,
                             MaterialPageRoute(
-                              builder: (context) =>
-                                  const BaseRegisterScreen(role: 'donor'),
+                              builder: (context) => const BaseRegisterScreen(role: 'volunteer'),
                             ),
                           );
                         },
@@ -407,15 +373,11 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
                       ),
                     ),
                     const SizedBox(height: 12),
-
-                    // ── CONTINUE WITH GOOGLE BUTTON ──
                     SizedBox(
                       width: double.infinity,
                       height: 52,
                       child: OutlinedButton(
-                        onPressed: authProvider.isLoading
-                            ? null
-                            : () => _googleSignIn(authProvider),
+                        onPressed: authProvider.isLoading ? null : () => _googleSignIn(authProvider),
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(
                             color: Colors.grey.shade300,
@@ -516,14 +478,11 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
           ),
           suffixIcon: IconButton(
             icon: Icon(
-              _obscurePassword
-                  ? Icons.visibility_outlined
-                  : Icons.visibility_off_outlined,
+              _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
               color: Colors.grey.shade400,
               size: 22,
             ),
-            onPressed: () =>
-                setState(() => _obscurePassword = !_obscurePassword),
+            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
           ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(

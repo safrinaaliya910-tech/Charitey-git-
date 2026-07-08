@@ -295,4 +295,18 @@ class FirestoreService {
       print("Error running lazy cleanup: $e");
     }
   }
+  // ==========================================
+  // --- FEEDBACK LOGIC ---
+  // ==========================================
+  
+  // Save user feedback to the database for the Admin Panel
+  Future<void> submitFeedback(Map<String, dynamic> feedbackData) async {
+    try {
+      // Creates a new collection called 'feedbacks'
+      await _firestore.collection('feedbacks').add(feedbackData);
+    } catch (e) {
+      print("Error submitting feedback: $e");
+      rethrow;
+    }
+  }
 }
