@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/services.dart'; // <-- NEW: Required for input formatters
+import 'package:flutter/services.dart';
 import '../providers/auth_provider.dart';
 import '../main.dart';
 import 'dart:typed_data';
@@ -21,19 +21,17 @@ class ProfileSetupScreen extends StatefulWidget {
 class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTickerProviderStateMixin {
   final PageController _pageController = PageController();
   int _currentPage = 0;
-  
+
   final TextEditingController nameController = TextEditingController();
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController phoneController = TextEditingController();
   final TextEditingController addressController = TextEditingController();
   final TextEditingController licenseController = TextEditingController();
-  
+
   File? _selectedImage;
   Uint8List? _selectedImageBytes;
   bool _isCheckingUsername = false;
-  
-  bool _agreedToTerms = false; 
-
+  bool agreedToTerms = false;
   final Color themeColor = const Color(0xFFB56F76);
 
   @override
@@ -47,33 +45,34 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
     super.dispose();
   }
 
+  // 👇 UPDATED: Calculated total pages accurately for the new Location requirement 👇
   int get _totalPages {
-    if (widget.role == "ngo" || widget.role == "travel_agency") return 5;
-    if (widget.role == "volunteer") return 4;
-    return 3;
+    if (widget.role == "ngo" || widget.role == "travel_agency" || widget.role == "volunteer") {
+      return 5; // Image, Name, Phone, Location, License
+    }
+    return 4; // Donors: Image, Name, Phone, Location
   }
 
+  // 👇 UPDATED: Validation logic for the newly ordered pages 👇
   bool get _isCurrentPageValid {
     bool isValid = true;
-    
     if (_currentPage == 0) {
       isValid = true;
     } else if (_currentPage == 1) {
       isValid = nameController.text.trim().isNotEmpty && usernameController.text.trim().isNotEmpty;
     } else if (_currentPage == 2) {
-      // 👇 NEW: Phone number MUST be exactly 10 digits
       isValid = phoneController.text.trim().length == 10;
-    } else if (widget.role == "ngo" || widget.role == "travel_agency") {
-      if (_currentPage == 3) isValid = addressController.text.trim().isNotEmpty;
-      if (_currentPage == 4) isValid = licenseController.text.trim().isNotEmpty;
-    } else if (widget.role == "volunteer") {
-      if (_currentPage == 3) isValid = licenseController.text.trim().isNotEmpty;
+    } else if (_currentPage == 3) {
+      // Address validation now applies to ALL roles at Step 3
+      isValid = addressController.text.trim().isNotEmpty;
+    } else if (_currentPage == 4) {
+      // License validation only applies to roles with 5 pages
+      isValid = licenseController.text.trim().isNotEmpty;
     }
-
+    
     if (_currentPage == _totalPages - 1) {
-      return isValid && _agreedToTerms;
+      return isValid && agreedToTerms;
     }
-
     return isValid;
   }
 
@@ -84,7 +83,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
   Future<void> _nextPage() async {
     if (_currentPage == 1) {
       String desiredUsername = usernameController.text.trim().toLowerCase();
-      
       bool hasLetter = RegExp(r'[a-z]').hasMatch(desiredUsername);
       bool hasNumber = RegExp(r'[0-9]').hasMatch(desiredUsername);
       bool hasUnderscore = desiredUsername.contains('_');
@@ -95,19 +93,17 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
           const SnackBar(
             content: Text("Username must include at least 1 letter, 1 number, and 1 underscore (_). No spaces allowed."),
             duration: Duration(seconds: 4),
-          ),
+          )
         );
-        return; 
+        return;
       }
 
       setState(() => _isCheckingUsername = true);
-      
       try {
         final querySnapshot = await FirebaseFirestore.instance
             .collection('users')
             .where('username', isEqualTo: desiredUsername)
             .get();
-            
         if (querySnapshot.docs.isNotEmpty) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -134,7 +130,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
         curve: Curves.easeInOutQuart,
       );
     } else {
-      saveProfile();
+      _saveProfile();
     }
   }
 
@@ -161,11 +157,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
     return "General Terms & Conditions:\n\n1. You agree to use the platform responsibly.\n2. Be respectful to other users.";
   }
 
-  // 👇 NEW: Premium Professional Terms & Conditions UI 👇
   void _showTermsPopup() {
     showDialog(
       context: context,
-      barrierDismissible: false, // Force them to click a button
+      barrierDismissible: false,
       builder: (context) {
         return Dialog(
           backgroundColor: Colors.white,
@@ -177,7 +172,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Header
                 Row(
                   children: [
                     Icon(Icons.gavel_rounded, color: themeColor, size: 28),
@@ -198,8 +192,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                 const SizedBox(height: 16),
                 const Divider(height: 1, thickness: 1, color: Color(0xFFF0F0F0)),
                 const SizedBox(height: 16),
-                
-                // Scrollable Content
                 Flexible(
                   child: SingleChildScrollView(
                     physics: const BouncingScrollPhysics(),
@@ -214,12 +206,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                     ),
                   ),
                 ),
-                
                 const SizedBox(height: 20),
                 const Divider(height: 1, thickness: 1, color: Color(0xFFF0F0F0)),
                 const SizedBox(height: 16),
-                
-                // Actions
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
@@ -241,7 +230,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                     ElevatedButton(
                       onPressed: () {
                         Navigator.pop(context);
-                        setState(() => _agreedToTerms = true);
+                        setState(() => agreedToTerms = true);
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: themeColor,
@@ -263,14 +252,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
             ),
           ),
         );
-      }
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
     List<Widget> pages = _buildPages();
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       extendBodyBehindAppBar: true,
@@ -290,22 +278,24 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
           TextButton(
             onPressed: () {
               Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const AuthWrapper()),
+                MaterialPageRoute(builder: (context) => const AuthWrapper()),
                 (Route<dynamic> route) => false,
               );
             },
             child: Text("Skip", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade500)),
-          )
+          ),
         ],
       ),
       body: Stack(
         children: [
           Positioned(
-            top: -100, right: -80,
+            top: -100,
+            right: -80,
             child: Container(width: 300, height: 300, decoration: BoxDecoration(color: themeColor.withValues(alpha: 0.1), shape: BoxShape.circle)),
           ),
           Positioned(
-            bottom: 50, left: -100,
+            bottom: 50,
+            left: -100,
             child: Container(width: 250, height: 250, decoration: BoxDecoration(color: themeColor.withValues(alpha: 0.05), shape: BoxShape.circle)),
           ),
           SafeArea(
@@ -338,7 +328,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                     children: pages,
                   ),
                 ),
-                
                 // BOTTOM CONTAINER
                 Container(
                   padding: const EdgeInsets.all(20),
@@ -360,12 +349,12 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                                   height: 24,
                                   width: 24,
                                   child: Checkbox(
-                                    value: _agreedToTerms,
+                                    value: agreedToTerms,
                                     activeColor: themeColor,
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                                     onChanged: (val) {
                                       setState(() {
-                                        _agreedToTerms = val ?? false;
+                                        agreedToTerms = val ?? false;
                                       });
                                     },
                                   ),
@@ -382,8 +371,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                                           TextSpan(
                                             text: "Terms & Conditions",
                                             style: TextStyle(
-                                              color: themeColor, 
-                                              fontWeight: FontWeight.bold, 
+                                              color: themeColor,
+                                              fontWeight: FontWeight.bold,
                                               decoration: TextDecoration.underline,
                                             ),
                                           ),
@@ -395,7 +384,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                               ],
                             ),
                           ),
-
                         SizedBox(
                           width: double.infinity,
                           height: 50,
@@ -418,7 +406,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                       ],
                     ),
                   ),
-                ),
+                )
               ],
             ),
           ),
@@ -433,12 +421,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
     return "CONTINUE";
   }
 
+  // 👇 UPDATED: Every role now gets the address step dynamically added 👇
   List<Widget> _buildPages() {
-    List<Widget> pages = [_buildImageStep(), _buildNameStep(), _buildPhoneStep()];
-    if (widget.role == "ngo" || widget.role == "travel_agency") {
-      pages.add(_buildAddressStep());
-      pages.add(_buildLicenseStep());
-    } else if (widget.role == "volunteer") {
+    List<Widget> pages = [
+      _buildImageStep(),
+      _buildNameStep(),
+      _buildPhoneStep(),
+      _buildAddressStep() // ALL ROLES NOW GET LOCATION
+    ];
+    if (widget.role == "ngo" || widget.role == "travel_agency" || widget.role == "volunteer") {
       pages.add(_buildLicenseStep());
     }
     return pages;
@@ -488,7 +479,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
   Future<void> _pickProfileImage() async {
     final ImagePicker picker = ImagePicker();
     final XFile? picked = await picker.pickImage(source: ImageSource.gallery);
-    
     if (picked != null) {
       if (kIsWeb) {
         final bytes = await picked.readAsBytes();
@@ -528,18 +518,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                   child: (_selectedImage == null && _selectedImageBytes == null)
                       ? Icon(Icons.person_rounded, size: 70, color: Colors.grey.shade300)
                       : kIsWeb
-                          ? Image.memory(
-                              _selectedImageBytes!,
-                              width: 140,
-                              height: 140,
-                              fit: BoxFit.cover,
-                            )
-                          : Image.file(
-                              _selectedImage!,
-                              width: 140,
-                              height: 140,
-                              fit: BoxFit.cover,
-                            ),
+                          ? Image.memory(_selectedImageBytes!, width: 140, height: 140, fit: BoxFit.cover)
+                          : Image.file(_selectedImage!, width: 140, height: 140, fit: BoxFit.cover),
                 ),
               ),
               Container(
@@ -558,7 +538,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
     );
   }
 
-  // 👇 NEW: Upgraded TextField to handle strict formatting limits 👇
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -582,7 +561,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
         inputFormatters: inputFormatters,
         style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.black87),
         decoration: InputDecoration(
-          counterText: '', // Hides the "0/10" text below the input field for a cleaner UI
+          counterText: '',
           labelText: label,
           hintText: hint,
           labelStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
@@ -615,22 +594,19 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
     );
   }
 
-  // 👇 NEW: Enforced 10 digit exact entry limit 👇
   Widget _buildPhoneStep() {
     return _buildStepContainer(
       title: "Phone Number",
       subtitle: "We'll use this to keep your account secure and for contact",
       icon: Icons.phone_android_rounded,
       child: _buildTextField(
-        controller: phoneController, 
-        label: "Phone Number", 
-        hint: "Enter 10-digit Mobile Number", 
-        icon: Icons.phone_outlined, 
+        controller: phoneController,
+        label: "Phone Number",
+        hint: "Enter 10-digit Mobile Number",
+        icon: Icons.phone_outlined,
         keyboardType: TextInputType.phone,
         maxLength: 10,
-        inputFormatters: [
-          FilteringTextInputFormatter.digitsOnly // Prevents letters, spaces, or special characters
-        ],
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       ),
     );
   }
@@ -638,7 +614,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
   Widget _buildAddressStep() {
     return _buildStepContainer(
       title: "Location",
-      subtitle: "Where is your base of operations located?",
+      subtitle: "What is your city or base of operations?",
       icon: Icons.location_on_rounded,
       child: _buildTextField(controller: addressController, label: "City / Area", hint: "Enter city name", icon: Icons.home_outlined),
     );
@@ -654,27 +630,28 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
     );
   }
 
-  void saveProfile() async {
+  // 👇 UPDATED: Location saves to database securely regardless of the user's role 👇
+  void _saveProfile() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     String finalUsername = usernameController.text.trim().toLowerCase();
-    
     String? profileImageUrl;
+
     if (_selectedImage != null || _selectedImageBytes != null) {
       profileImageUrl = await StorageService().uploadImage(_selectedImage, _selectedImageBytes);
     }
-    
+
     await authProvider.updateProfile(
       name: nameController.text.trim().isNotEmpty ? nameController.text.trim() : null,
       username: finalUsername.isNotEmpty ? finalUsername : null,
       phone: phoneController.text.trim().isNotEmpty ? phoneController.text.trim() : null,
-      location: (widget.role == "ngo" || widget.role == "travel_agency") && addressController.text.trim().isNotEmpty ? addressController.text.trim() : null,
+      location: addressController.text.trim().isNotEmpty ? addressController.text.trim() : null,
       license: licenseController.text.trim().isNotEmpty ? licenseController.text.trim() : null,
       profileImage: profileImageUrl,
     );
-    
+
     if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const AuthWrapper()),
+        MaterialPageRoute(builder: (context) => const AuthWrapper()),
         (Route<dynamic> route) => false,
       );
     }

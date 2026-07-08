@@ -16,44 +16,44 @@ class ChatService {
     return ids.join('_');
   }
 
-  Future<void> sendMessage(
-  String senderId,
-  String senderName,
-  String receiverId,
-  String receiverName,
-  String message, {
-  String? senderPhone,
-  String? senderLocation,
-  String? senderRole,
-  String type = 'text',        // NEW
-  String? mediaUrl,            // NEW
-  String? fileName,            // NEW
-  int? fileSize,               // NEW
-  String? replyToId,           // NEW
-  String? replyToMessage,      // NEW
-  String? replyToSenderName,   // NEW
-  String? replyToType,         // NEW
-}) async {
-  try {
-    String chatRoomId = getChatRoomId(senderId, receiverId);
+ Future<void> sendMessage(
+    String senderId,
+    String senderName,
+    String receiverId,
+    String receiverName,
+    String message, {
+    String? senderPhone,
+    String? senderLocation,
+    String? senderRole,
+    String type = 'text',
+    String? mediaUrl,
+    String? fileName,
+    int? fileSize,
+    String? replyToId,
+    String? replyToMessage,
+    String? replyToSenderName,
+    String? replyToType,
+  }) async {
+    try {
+      String chatRoomId = getChatRoomId(senderId, receiverId);
 
-    MessageModel newMessage = MessageModel(
-      messageId: '',
-      senderId: senderId,
-      receiverId: receiverId,
-      message: message,
-      timestamp: DateTime.now(),
-      delivered: false,
-      read: false,
-      type: type,               // NEW
-      mediaUrl: mediaUrl,       // NEW
-      fileName: fileName,       // NEW
-      fileSize: fileSize,       // NEW
-      replyToId: replyToId,                 // NEW
-      replyToMessage: replyToMessage,       // NEW
-      replyToSenderName: replyToSenderName, // NEW
-      replyToType: replyToType,             // NEW
-    );
+      MessageModel newMessage = MessageModel(
+        messageId: '',
+        senderId: senderId,
+        receiverId: receiverId,
+        message: message,
+        timestamp: DateTime.now(),
+        delivered: false,
+        read: false,
+        type: type,
+        mediaUrl: mediaUrl,
+        fileName: fileName,
+        fileSize: fileSize,
+        replyToId: replyToId,
+        replyToMessage: replyToMessage,
+        replyToSenderName: replyToSenderName,
+        replyToType: replyToType,
+      );
 
       // 1. Add the actual message to the chat room
       await _firestore.collection('chats').doc(chatRoomId).collection('messages').add(newMessage.toMap());
@@ -82,43 +82,62 @@ class ChatService {
         'participantName': senderName,
         'lastMessage': previewText,
         'lastMessageTime': FieldValue.serverTimestamp(),
-        'hasUnread': true, 
+        'hasUnread': true,
       }, SetOptions(merge: true));
 
-      // --- 4. THE CUSTOMIZED NOTIFICATION ALERT ---
+      //--- 4. THE CUSTOMIZED NOTIFICATION ALERT ---
       String notifTitle;
       String notifMessage;
-      
+
+      // 👇 Find out who is receiving the message to customize the text 👇
+      String receiverRole = 'donor'; // Default
+      try {
+        DocumentSnapshot receiverSnap = await _firestore.collection('users').doc(receiverId).get();
+        if (receiverSnap.exists) {
+          final data = receiverSnap.data() as Map<String, dynamic>?;
+          receiverRole = data?['role']?.toString().toLowerCase() ?? 'donor';
+        }
+      } catch (e) {
+        print("Could not fetch receiver role: $e");
+      }
+
+      // 👇 Smart text based on sender AND receiver roles 👇
       if (senderRole == 'ngo') {
-        notifTitle = 'Message from NGO';
-        notifMessage = 'The NGO you donated to ($senderName) wants to send you a message regarding your donation. Tap to view details.';
-      } 
-      // --- FIX: Added logic for Travel Agency ---
-      else if (senderRole == 'travel_agency') {
-        notifTitle = 'Message from Travel Agency';
-        notifMessage = 'The Travel Agency ($senderName) assigned to your donation has sent a message. Tap to view details.';
-      } 
-      else {
+        notifTitle = 'Message from NGO ($senderName)';
+        if (receiverRole == 'volunteer' || receiverRole == 'travel_agency') {
+          notifMessage = 'The NGO you accepted the delivery for wants to send you a message. Tap to view details.';
+        } else {
+          notifMessage = 'The NGO you donated to wants to send you a message regarding your donation. Tap to view details.';
+        }
+      } else if (senderRole == 'travel_agency') {
+        notifTitle = 'Message from Agency ($senderName)';
+        notifMessage = 'The Agency assigned to your donation has sent a message. Tap to view details.';
+      } else if (senderRole == 'volunteer') {
+        notifTitle = 'Message from $senderName (Volunteer)';
+        notifMessage = 'The Volunteer assigned to your pickup has sent a message. Tap to view details.';
+      } else {
+        // Default fallback (Usually Donor)
         notifTitle = 'Message from $senderName (Donor)';
         notifMessage = 'Tap to view details and reply.';
       }
 
+      // Generate the notification in the database
       NotificationModel alert = NotificationModel(
         id: _firestore.collection('notifications').doc().id,
-        receiverId: receiverId, 
-        senderId: senderId,               
+        receiverId: receiverId,
+        senderId: senderId,
         senderName: senderName,
-        type: 'new_message', 
+        type: 'new_message',
         title: notifTitle,
-        message: notifMessage, 
-        relatedItemId: chatRoomId, 
+        message: notifMessage,
+        relatedItemId: chatRoomId,
         createdAt: DateTime.now(),
       );
 
       Map<String, dynamic> alertData = alert.toMap();
       if (senderPhone != null) alertData['senderPhone'] = senderPhone;
       if (senderLocation != null) alertData['senderLocation'] = senderLocation;
-      if (senderRole != null) alertData['senderRole'] = senderRole; 
+      if (senderRole != null) alertData['senderRole'] = senderRole;
 
       await _firestore.collection('notifications').doc(alert.id).set(alertData);
 

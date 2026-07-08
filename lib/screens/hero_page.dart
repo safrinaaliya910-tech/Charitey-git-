@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'donor_listing_screen.dart';
+import 'community_hubs.dart'; 
+import '../providers/auth_provider.dart'; // Ensure AuthProvider is imported
+import 'package:provider/provider.dart'; // Ensure Provider is imported
 
 // Theme Colors
 final Color primary = const Color(0xFF7D444C);
@@ -225,34 +228,88 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
                 );
               }),
             ),
-            // ================= CTA & SEARCH =================
-            const SizedBox(height: 30),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: ScaleTransition(
-                scale: _buttonPulseAnimation,
-                child: GestureDetector(
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DonorListingScreen(initialSearchQuery: ''))),
-                  child: Container(
-                    width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 18),
-                    decoration: BoxDecoration(gradient: LinearGradient(colors: [primary, accent], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: accent.withOpacity(0.4), blurRadius: 20, offset: const Offset(0, 8))]),
-                    child: Center(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [Icon(Icons.volunteer_activism, color: Colors.white, size: 22), SizedBox(width: 10), Text("Browse Donation", style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold))])),
-                  ),
-                ),
-              ),
+           // === CTA & SEARCH ===
+          const SizedBox(height: 30),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Consumer<AuthProvider>(
+              builder: (context, authProvider, child) {
+                final userRole = authProvider.currentUserModel?.role;
+
+                // 👇 NEW: Dual Buttons specifically for Volunteers (Identical Colors) 👇
+                if (userRole == 'volunteer') {
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VolunteerNgoHubScreen())),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(colors: [primary, accent], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [BoxShadow(color: accent.withOpacity(0.4), blurRadius: 15, offset: const Offset(0, 6))],
+                            ),
+                            child: const Center(
+                              child: Text("NGOs & Requests", style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VolunteerDonorHubScreen())),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            decoration: BoxDecoration(
+                              // 👇 Fixed: Now uses the exact same gradient and shadow as the first button 👇
+                              gradient: LinearGradient(colors: [primary, accent], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [BoxShadow(color: accent.withOpacity(0.4), blurRadius: 15, offset: const Offset(0, 6))],
+                            ),
+                            child: const Center(
+                              // 👇 Fixed: Text color changed to white to match the gradient 👇
+                              child: Text("Donors & Donate", style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                
+                // 👇 OLD: Keep the single button for everyone else (Donors) 👇
+                else {
+                  return ScaleTransition(
+                    scale: _buttonPulseAnimation,
+                    child: GestureDetector(
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DonorListingScreen(initialSearchQuery: ''))),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: [primary, accent], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [BoxShadow(color: accent.withOpacity(0.4), blurRadius: 20, offset: const Offset(0, 8))],
+                        ),
+                        child: const Center(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.volunteer_activism, color: Colors.white, size: 22),
+                              SizedBox(width: 10),
+                              Text("Browse Donation", style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+              },
             ),
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: primary.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 8))]),
-                child: TextField(
-                  controller: _searchController,
-                  onSubmitted: (_) => _performSearch(),
-                  decoration: InputDecoration(hintText: "Search food, clothes, NGOs...", hintStyle: TextStyle(color: Colors.grey.shade400), prefixIcon: Icon(Icons.auto_awesome, color: accent.withOpacity(0.7)), suffixIcon: Padding(padding: const EdgeInsets.all(6.0), child: Container(padding: const EdgeInsets.symmetric(horizontal: 12), decoration: BoxDecoration(color: soft.withOpacity(0.3), borderRadius: BorderRadius.circular(14)), child: Icon(Icons.search, color: primary))), border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16)),
-                ),
-              ),
-            ),
+          ),
 
             // ================= LIVE COMMUNITY HEARTS =================
             const SizedBox(height: 30),

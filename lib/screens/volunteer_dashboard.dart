@@ -1,8 +1,9 @@
-//volunteer_dashboard.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../services/firestore_service.dart';
+import '../models/notification_model.dart';
 import 'chat_screen.dart';
 
 class VolunteerDashboard extends StatefulWidget {
@@ -16,7 +17,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
   final Color themeColor = const Color(0xFFB56F76);
   final ScrollController _scrollController = ScrollController();
   
-  // Controls which tab is active
   bool showAvailable = true;
 
   @override
@@ -25,12 +25,44 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     super.dispose();
   }
 
-  Future<void> _acceptTask(String donationId, String volunteerId) async {
+  Future<void> _acceptTask(String donationId, String volunteerId, String donorId, String ngoId, String itemName) async {
     try {
+      final user = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
+      
       await FirebaseFirestore.instance.collection('donations').doc(donationId).update({
         'status': 'delivery_accepted',
-        'assignedVolunteerId': volunteerId, // Tags the donation to this volunteer
+        'assignedVolunteerId': volunteerId, 
       });
+
+      String notifIdNgo = FirebaseFirestore.instance.collection('notifications').doc().id;
+      NotificationModel ngoNotif = NotificationModel(
+        id: notifIdNgo,
+        receiverId: ngoId,
+        senderId: volunteerId,
+        senderName: user!.name,
+        type: 'volunteer_accepted',
+        title: 'Volunteer Assigned',
+        message: '${user.name} has accepted the task to pick up and deliver $itemName.',
+        relatedItemId: donationId,
+        createdAt: DateTime.now(),
+        isRead: false,
+      );
+      await FirestoreService().sendNotification(ngoNotif);
+
+      String notifIdDonor = FirebaseFirestore.instance.collection('notifications').doc().id;
+      NotificationModel donorNotif = NotificationModel(
+        id: notifIdDonor,
+        receiverId: donorId,
+        senderId: volunteerId,
+        senderName: user.name,
+        type: 'volunteer_accepted',
+        title: 'Pickup Volunteer Assigned',
+        message: '${user.name} will be picking up your donation ($itemName) soon.',
+        relatedItemId: donationId,
+        createdAt: DateTime.now(),
+        isRead: false,
+      );
+      await FirestoreService().sendNotification(donorNotif);
       
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -41,7 +73,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       );
       
       setState(() {
-        showAvailable = false; // Switch to the Accepted tab automatically
+        showAvailable = false; 
       });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -50,19 +82,94 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     }
   }
 
+  // 👇 NEW: This safely pre-filters all tasks before drawing them so the Empty State works! 👇
+  Future<List<Widget>> _generateFilteredCards(List<QueryDocumentSnapshot> donations, String myUserId) async {
+    List<Widget> cardList = [];
+    
+    for (var donationDoc in donations) {
+      var donationData = donationDoc.data() as Map<String, dynamic>;
+      var donationId = donationDoc.id;
+      
+      String listingId = donationData['listingId'] ?? '';
+      String donorId = donationData['donorId'] ?? '';
+      
+      if (listingId.isEmpty || donorId.isEmpty) continue;
+      
+      String donorName = donationData['donorName'] ?? 'Unknown Donor';
+      String donorLocation = donationData['donorLocation'] ?? 'Location unavailable';
+      String donorPhone = donationData['donorPhone'] ?? 'Phone unavailable';
+      String status = donationData['status'] ?? 'pending';
+      String? assignedVolunteerId = donationData['assignedVolunteerId'];
+      
+      bool isAcceptedByMe = (status == 'delivery_accepted' && assignedVolunteerId == myUserId);
+      
+      // Tab filter
+      if (showAvailable) {
+        if (status == 'delivery_accepted') continue; 
+      } else {
+        if (!isAcceptedByMe) continue; 
+      }
+
+      // Fetch the NGO listing to see if they actually need a volunteer
+      var listingSnap = await FirebaseFirestore.instance.collection('ngo_listings').doc(listingId).get();
+      if (!listingSnap.exists) continue;
+      
+      var listingData = listingSnap.data() as Map<String, dynamic>;
+      bool? isVolunteerAvailable = listingData['isVolunteerAvailable'] as bool?;
+      
+      if (isVolunteerAvailable == true) {
+        continue; // The NGO has their own volunteer, so skip this card!
+      }
+      
+      String type = listingData['type'] ?? 'food';
+      String itemName = type == 'food' ? (listingData['foodType'] ?? "Food") : (listingData['productName'] ?? "Product");
+      String quantityVal = listingData['quantity']?.toString() ?? '';
+      String unitVal = listingData['unit']?.toString() ?? '';
+      String quantity = quantityVal.isEmpty ? '1 Item' : '$quantityVal $unitVal';
+      String availability = listingData['availability'] ?? 'Time not specified';
+      String ngoName = listingData['ngoName'] ?? 'Unknown NGO';
+      String ngoLocation = listingData['ngoLocation'] ?? 'Location unavailable';
+      String ngoId = listingData['ngoId'] ?? '';
+      
+      // Fetch NGO Phone
+      String ngoPhone = 'Phone unavailable';
+      var ngoUserSnap = await FirebaseFirestore.instance.collection('users').doc(ngoId).get();
+      if (ngoUserSnap.exists) {
+        var ngoUserData = ngoUserSnap.data() as Map<String, dynamic>;
+        ngoPhone = ngoUserData['phone'] ?? 'Phone unavailable';
+      }
+
+      cardList.add(
+        _buildDeliveryCard(
+          donationId: donationId,
+          itemName: itemName,
+          quantity: quantity,
+          availability: availability,
+          ngoName: ngoName,
+          ngoLocation: ngoLocation,
+          ngoPhone: ngoPhone,
+          ngoId: ngoId,
+          donorName: donorName,
+          donorLocation: donorLocation,
+          donorPhone: donorPhone,
+          donorId: donorId,
+          myId: myUserId,
+          isAcceptedByMe: isAcceptedByMe,
+        )
+      );
+    }
+    return cardList;
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUserModel;
-    
-    if (user == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (user == null) return const Center(child: CircularProgressIndicator());
     
     return Scaffold(
       backgroundColor: const Color(0xFFF7F8FA),
       body: Column(
         children: [
-          // TOP TOGGLE BUTTONS (Available vs Accepted)
           SafeArea(
             bottom: false,
             child: Container(
@@ -120,7 +227,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
             ),
           ),
           
-          // MAIN LIST VIEW (Streams Donations)
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -136,7 +242,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                   return _buildEmptyState();
                 }
                 
-                // Sort donations so newest is always at the top
                 var donations = donationSnapshot.data!.docs.toList();
                 donations.sort((a, b) {
                   var aData = a.data() as Map<String, dynamic>;
@@ -146,106 +251,31 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                   return bTime.compareTo(aTime);
                 });
                 
-                List<Widget> cardList = [];
-                
-                for (var donationDoc in donations) {
-                  var donationData = donationDoc.data() as Map<String, dynamic>;
-                  var donationId = donationDoc.id;
-                  
-                  String listingId = donationData['listingId'] ?? '';
-                  String donorId = donationData['donorId'] ?? '';
-                  
-                  if (listingId.isEmpty || donorId.isEmpty) continue;
-                  
-                  String donorName = donationData['donorName'] ?? 'Unknown Donor';
-                  String donorLocation = donationData['donorLocation'] ?? 'Location unavailable';
-                  String donorPhone = donationData['donorPhone'] ?? 'Phone unavailable';
-                  String status = donationData['status'] ?? 'pending';
-                  String? assignedVolunteerId = donationData['assignedVolunteerId'];
-                  
-                  bool isAcceptedByMe = (status == 'delivery_accepted' && assignedVolunteerId == user.uid);
-                  
-                  // TAB FILTERING LOGIC
-                  if (showAvailable) {
-                    if (status == 'delivery_accepted') continue; // Hide if already accepted by anyone
-                  } else {
-                    if (!isAcceptedByMe) continue; // Hide if not accepted by ME
+                // 👇 This is where the magic happens! We wait for the cards to be fully built and checked
+                return FutureBuilder<List<Widget>>(
+                  future: _generateFilteredCards(donations, user.uid),
+                  builder: (context, cardSnapshot) {
+                    if (cardSnapshot.connectionState == ConnectionState.waiting) {
+                      return Center(child: CircularProgressIndicator(color: themeColor));
+                    }
+                    
+                    // If the list comes back completely empty, show the message!
+                    if (!cardSnapshot.hasData || cardSnapshot.data!.isEmpty) {
+                      return _buildEmptyState();
+                    }
+                    
+                    return Scrollbar(
+                      controller: _scrollController,
+                      thumbVisibility: true,
+                      thickness: 6.0,
+                      radius: const Radius.circular(10),
+                      child: ListView(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 100),
+                        children: cardSnapshot.data!,
+                      ),
+                    );
                   }
-                  
-                  cardList.add(
-                    FutureBuilder<DocumentSnapshot>(
-                      future: FirebaseFirestore.instance.collection('ngo_listings').doc(listingId).get(),
-                      builder: (context, listingSnapshot) {
-                        if (!listingSnapshot.hasData || !listingSnapshot.data!.exists) {
-                          return const SizedBox.shrink();
-                        }
-                        
-                        var listingData = listingSnapshot.data!.data() as Map<String, dynamic>;
-                        
-                        // 👇 THE CORE LOGIC: Hide the task if the NGO toggled "I have volunteer for pickup"
-                        bool? isVolunteerAvailable = listingData['isVolunteerAvailable'] as bool?;
-                        if (isVolunteerAvailable == true) {
-                          return const SizedBox.shrink();
-                        }
-                        
-                        String type = listingData['type'] ?? 'food';
-                        String itemName = type == 'food'
-                            ? (listingData['foodType'] ?? "Food")
-                            : (listingData['productName'] ?? "Product");
-                            
-                        String quantityVal = listingData['quantity']?.toString() ?? '';
-                        String unitVal = listingData['unit']?.toString() ?? '';
-                        String quantity = quantityVal.isEmpty ? '1 Item' : '$quantityVal $unitVal';
-                        String availability = listingData['availability'] ?? 'Time not specified';
-                        String ngoName = listingData['ngoName'] ?? 'Unknown NGO';
-                        String ngoLocation = listingData['ngoLocation'] ?? 'Location unavailable';
-                        String ngoId = listingData['ngoId'] ?? '';
-                        
-                        return FutureBuilder<DocumentSnapshot>(
-                          future: FirebaseFirestore.instance.collection('users').doc(ngoId).get(),
-                          builder: (context, ngoUserSnapshot) {
-                            String ngoPhone = 'Phone unavailable';
-                            if (ngoUserSnapshot.hasData && ngoUserSnapshot.data!.exists) {
-                              var ngoUserData = ngoUserSnapshot.data!.data() as Map<String, dynamic>;
-                              ngoPhone = ngoUserData['phone'] ?? 'Phone unavailable';
-                            }
-                            
-                            return _buildDeliveryCard(
-                              donationId: donationId,
-                              itemName: itemName,
-                              quantity: quantity,
-                              availability: availability,
-                              ngoName: ngoName,
-                              ngoLocation: ngoLocation,
-                              ngoPhone: ngoPhone,
-                              donorName: donorName,
-                              donorLocation: donorLocation,
-                              donorPhone: donorPhone,
-                              donorId: donorId,
-                              myId: user.uid,
-                              isAcceptedByMe: isAcceptedByMe,
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  );
-                }
-                
-                if (cardList.isEmpty) {
-                  return _buildEmptyState();
-                }
-                
-                return Scrollbar(
-                  controller: _scrollController,
-                  thumbVisibility: true,
-                  thickness: 6.0,
-                  radius: const Radius.circular(10),
-                  child: ListView(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 100),
-                    children: cardList,
-                  ),
                 );
               },
             ),
@@ -263,6 +293,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     required String ngoName,
     required String ngoLocation,
     required String ngoPhone,
+    required String ngoId,
     required String donorName,
     required String donorLocation,
     required String donorPhone,
@@ -355,7 +386,12 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                         ),
                         const SizedBox(height: 8),
                         _buildDetailRow(Icons.person_outline, donorName),
-                       
+                        
+                        if (isAcceptedByMe) ...[
+                          const SizedBox(height: 4),
+                          _buildDetailRow(Icons.phone_outlined, donorPhone),
+                        ],
+                        
                         const SizedBox(height: 4),
                         _buildDetailRow(Icons.location_on_outlined, donorLocation),
                       ],
@@ -381,6 +417,11 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                         const SizedBox(height: 8),
                         _buildDetailRow(Icons.account_balance_outlined, ngoName),
                         
+                        if (isAcceptedByMe) ...[
+                          const SizedBox(height: 4),
+                          _buildDetailRow(Icons.phone_outlined, ngoPhone),
+                        ],
+                        
                         const SizedBox(height: 4),
                         _buildDetailRow(Icons.location_on_outlined, ngoLocation),
                       ],
@@ -390,11 +431,12 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
               ],
             ),
             const SizedBox(height: 20),
+            
             if (!isAcceptedByMe)
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () => _acceptTask(donationId, myId),
+                  onPressed: () => _acceptTask(donationId, myId, donorId, ngoId, itemName),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: themeColor,
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -408,29 +450,58 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                 ),
               )
             else
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ChatScreen(otherUserId: donorId, otherUserName: donorName),
+              Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ChatScreen(otherUserId: donorId, otherUserName: donorName),
+                          ),
+                        );
+                      },
+                      icon: Icon(Icons.chat_bubble_outline_rounded, color: themeColor, size: 20),
+                      label: Text(
+                        "Chat with Donor", 
+                        style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 15),
                       ),
-                    );
-                  },
-                  icon: Icon(Icons.chat_bubble_outline_rounded, color: themeColor, size: 20),
-                  label: Text(
-                    "Open Chat with Donor", 
-                    style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 16),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: BorderSide(color: themeColor.withValues(alpha: 0.5), width: 1.5),
+                        backgroundColor: themeColor.withValues(alpha: 0.05),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
                   ),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    side: BorderSide(color: themeColor.withValues(alpha: 0.5), width: 1.5),
-                    backgroundColor: themeColor.withValues(alpha: 0.05),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ChatScreen(otherUserId: ngoId, otherUserName: ngoName),
+                          ),
+                        );
+                      },
+                      icon: Icon(Icons.chat_bubble_outline_rounded, color: Colors.blueGrey.shade700, size: 20),
+                      label: Text(
+                        "Chat with NGO", 
+                        style: TextStyle(color: Colors.blueGrey.shade700, fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: BorderSide(color: Colors.blueGrey.shade300, width: 1.5),
+                        backgroundColor: Colors.blueGrey.shade50,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
                   ),
-                ),
+                ],
               )
           ],
         ),

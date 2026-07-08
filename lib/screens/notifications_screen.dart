@@ -10,7 +10,7 @@ import 'home_screen.dart';
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
 
-  Future<Map<String, dynamic>> _fetchDetailsData(NotificationModel notif, bool isDonationOffer, bool amINGO) async {
+  Future<Map<String, dynamic>> _fetchDetailsData(NotificationModel notif, bool isDonationOffer, bool amINGO, bool isVolunteerAccepted) async {
     Map<String, dynamic> result = {};
     try {
       if (isDonationOffer) {
@@ -34,14 +34,16 @@ class NotificationsScreen extends StatelessWidget {
           }
         }
       } else {
+        // This easily handles Volunteer Profiles, Chat Messages, and Tags 
         DocumentSnapshot senderSnap = await FirebaseFirestore.instance.collection('users').doc(notif.senderId).get();
         if (senderSnap.exists && senderSnap.data() != null) {
           result['senderProfileData'] = senderSnap.data() as Map<String, dynamic>;
         }
-        DocumentSnapshot notifSnap = await FirebaseFirestore.instance.collection('notifications').doc(notif.id).get();
-        if (notifSnap.exists && notifSnap.data() != null) {
-          result['notifData'] = notifSnap.data() as Map<String, dynamic>;
-        }
+      }
+      
+      DocumentSnapshot notifSnap = await FirebaseFirestore.instance.collection('notifications').doc(notif.id).get();
+      if (notifSnap.exists && notifSnap.data() != null) {
+        result['notifData'] = notifSnap.data() as Map<String, dynamic>;
       }
     } catch (e) {
       print("Error fetching dynamic notification details: $e");
@@ -49,10 +51,10 @@ class NotificationsScreen extends StatelessWidget {
     return result;
   }
 
-  void showRichDetailsPopup(BuildContext context, NotificationModel notif, Color themeColor, bool isDonationOffer) {
+  void _showRichDetailsPopup(BuildContext context, NotificationModel notif, Color themeColor, bool isDonationOffer, bool isVolunteerAccepted) {
     final currentUser = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
     bool amINGO = currentUser?.role == 'ngo';
-
+    
     showDialog(
       context: context,
       builder: (context) {
@@ -61,16 +63,19 @@ class NotificationsScreen extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Row(
             children: [
-              Icon(isDonationOffer ? Icons.volunteer_activism : Icons.message_rounded, color: themeColor),
+              Icon(
+                isDonationOffer ? Icons.volunteer_activism : (isVolunteerAccepted ? Icons.directions_car_rounded : Icons.message_rounded), 
+                color: themeColor
+              ),
               const SizedBox(width: 10),
               Text(
-                isDonationOffer ? "Donation Details" : "Contact Details",
+                isDonationOffer ? "Donation Details" : (isVolunteerAccepted ? "Volunteer Details" : "Contact Details"),
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)
               )
             ],
           ),
           content: FutureBuilder<Map<String, dynamic>>(
-            future: _fetchDetailsData(notif, isDonationOffer, amINGO),
+            future: _fetchDetailsData(notif, isDonationOffer, amINGO, isVolunteerAccepted),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return SizedBox(height: 100, child: Center(child: CircularProgressIndicator(color: themeColor)));
@@ -78,6 +83,7 @@ class NotificationsScreen extends StatelessWidget {
               if (!snapshot.hasData || snapshot.data!.isEmpty) {
                 return const Text("Details no longer available.");
               }
+              
               var fetchedData = snapshot.data!;
               String displayTitle = "";
               String nameLabel = "";
@@ -86,7 +92,7 @@ class NotificationsScreen extends StatelessWidget {
               String contactPhone = "";
               String contactLocation = "";
               String targetChatId = "";
-
+              
               if (isDonationOffer) {
                 var donationData = fetchedData['donationData'] ?? {};
                 if (amINGO) {
@@ -107,6 +113,15 @@ class NotificationsScreen extends StatelessWidget {
                   contactLocation = ngoProfile['address'] ?? ngoProfile['location'] ?? donationData['ngoLocation'] ?? 'Not Provided';
                   targetChatId = donationData['ngoId'] ?? notif.receiverId;
                 }
+              } else if (isVolunteerAccepted) {
+                var senderProfile = fetchedData['senderProfileData'] ?? {};
+                displayTitle = "Assigned Logistics:";
+                nameLabel = "Volunteer Name";
+                locationLabel = "Volunteer Location";
+                contactName = senderProfile['name'] ?? notif.senderName;
+                contactPhone = senderProfile['phone'] ?? 'Not Provided';
+                contactLocation = senderProfile['location'] ?? 'Not Provided';
+                targetChatId = notif.senderId;
               } else {
                 var senderProfile = fetchedData['senderProfileData'] ?? {};
                 var notifData = fetchedData['notifData'] ?? {};
@@ -116,6 +131,14 @@ class NotificationsScreen extends StatelessWidget {
                 contactPhone = senderProfile['phone'] ?? notifData['senderPhone'] ?? 'Not Provided';
                 contactLocation = senderProfile['address'] ?? senderProfile['location'] ?? notifData['senderLocation'] ?? 'Not Provided';
                 targetChatId = notif.senderId;
+              }
+
+              // Determine Button Text
+              String buttonText = "Open Chat";
+              if (isDonationOffer) {
+                buttonText = amINGO ? "Accept & Chat with Donor" : "Chat with NGO";
+              } else if (isVolunteerAccepted) {
+                buttonText = "Open Chat with Volunteer";
               }
 
               return Column(
@@ -137,7 +160,7 @@ class NotificationsScreen extends StatelessWidget {
                     child: Text(
                       notif.message,
                       style: TextStyle(color: Colors.grey.shade700, fontStyle: FontStyle.italic, height: 1.4),
-                    ),
+                    )
                   ),
                   const SizedBox(height: 20),
                   _detailRow(Icons.person_outline, nameLabel, contactName, themeColor),
@@ -163,7 +186,7 @@ class NotificationsScreen extends StatelessWidget {
                       },
                       icon: const Icon(Icons.chat_bubble_rounded),
                       label: Text(
-                        isDonationOffer ? (amINGO ? "Accept & Chat with Donor" : "Chat with NGO") : "Open Chat",
+                        buttonText,
                         style: const TextStyle(fontWeight: FontWeight.bold)
                       ),
                       style: ElevatedButton.styleFrom(
@@ -173,8 +196,8 @@ class NotificationsScreen extends StatelessWidget {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         elevation: 0,
                       ),
-                    ),
-                  )
+                    )
+                  ),
                 ],
               );
             }
@@ -184,7 +207,6 @@ class NotificationsScreen extends StatelessWidget {
     );
   }
 
-  // 👇 NEW: EXPIRATION DETAILS POPUP 👇
   void _showExpirationDetails(BuildContext context, NotificationModel notif) {
     showDialog(
       context: context,
@@ -234,8 +256,8 @@ class NotificationsScreen extends StatelessWidget {
                     elevation: 0,
                   ),
                   child: const Text("Understood", style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              )
+                )
+              ),
             ],
           ),
         );
@@ -261,6 +283,7 @@ class NotificationsScreen extends StatelessWidget {
             if (!snapshot.hasData || !snapshot.data!.exists) {
               return const SizedBox(height: 200, child: Center(child: Text("Donor details no longer available.")));
             }
+
             var donorData = snapshot.data!.data() as Map<String, dynamic>;
             String contactName = donorData['name'] ?? notification.senderName;
 
@@ -410,6 +433,7 @@ class NotificationsScreen extends StatelessWidget {
           }
           
           final notifications = snapshot.data ?? [];
+          
           if (notifications.isEmpty) {
             return Center(
               child: Column(
@@ -428,12 +452,14 @@ class NotificationsScreen extends StatelessWidget {
             itemCount: notifications.length,
             itemBuilder: (context, index) {
               final notif = notifications[index];
+              
               bool isMessage = notif.type == 'new_message';
               bool isTag = notif.type == 'tag';
               bool isDonationOffer = notif.type == 'donation_offer';
               bool isCancellation = notif.type == 'donation_cancelled';
-              // 👇 NEW: Expiration Checker
               bool isExpiration = notif.type == 'expired_request';
+              // 👇 NEW CHECKER 👇
+              bool isVolunteerAccepted = notif.type == 'volunteer_accepted';
 
               return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -449,11 +475,11 @@ class NotificationsScreen extends StatelessWidget {
                   leading: CircleAvatar(
                     backgroundColor: isCancellation ? Colors.red.shade50 : (isExpiration ? Colors.orange.shade50 : themeColor.withOpacity(0.1)),
                     child: Icon(
-                      isCancellation 
-                          ? Icons.cancel_presentation_rounded 
-                          : isExpiration 
-                              ? Icons.timer_off_rounded // Timer icon for expiration
-                              : (isTag ? Icons.photo_library_rounded : (isMessage ? Icons.message_rounded : Icons.volunteer_activism)),
+                      isCancellation
+                          ? Icons.cancel_presentation_rounded
+                          : isExpiration
+                              ? Icons.timer_off_rounded
+                              : (isTag ? Icons.photo_library_rounded : (isMessage ? Icons.message_rounded : (isVolunteerAccepted ? Icons.directions_car_rounded : Icons.volunteer_activism))),
                       color: isCancellation ? Colors.red : (isExpiration ? Colors.orange : themeColor),
                     ),
                   ),
@@ -462,6 +488,7 @@ class NotificationsScreen extends StatelessWidget {
                     style: TextStyle(
                       fontWeight: notif.isRead ? FontWeight.w600 : FontWeight.bold,
                       color: isCancellation ? Colors.red.shade900 : (isExpiration ? Colors.orange.shade900 : Colors.black87),
+                      height: 1.3
                     ),
                   ),
                   subtitle: Padding(
@@ -470,7 +497,7 @@ class NotificationsScreen extends StatelessWidget {
                       notif.message,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: Colors.grey.shade700, height: 1.3),
+                      style: TextStyle(color: Colors.grey.shade700),
                     ),
                   ),
                   trailing: notif.isRead ? null : Container(
@@ -490,17 +517,17 @@ class NotificationsScreen extends StatelessWidget {
                     } else if (isCancellation) {
                       _showDonorCancellationDetails(context, notif, themeColor);
                     } else if (isExpiration) {
-                      _showExpirationDetails(context, notif); // Show Expiration details popup
+                      _showExpirationDetails(context, notif); 
                     } else {
-                      showRichDetailsPopup(context, notif, themeColor, isDonationOffer);
+                      _showRichDetailsPopup(context, notif, themeColor, isDonationOffer, isVolunteerAccepted);
                     }
                   },
                 ),
               );
-            },
+            }
           );
-        },
-      ),
+        }
+      )
     );
   }
 }
