@@ -262,72 +262,83 @@ class ProfileScreenState extends State<ProfileScreen> {
                                 ),
                             ],
                           ),
-                        ],
-                        // Post feed (all users)
-                        const SizedBox(height: 40),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            role == 'ngo' ? (isVisiting ? "Posts" : "Your Posts") : "Tagged Posts",
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
-                          ),
-                        ),
-                        const SizedBox(height: 15),
-                        StreamBuilder<QuerySnapshot>(
-                          stream: FirebaseFirestore.instance.collection('posts').where(role == 'ngo' ? 'ngoId' : 'donorUid', isEqualTo: targetUid).snapshots(),
-                          builder: (context, postSnapshot) {
-                            if (postSnapshot.connectionState == ConnectionState.waiting) {
-                              return Center(child: CircularProgressIndicator(color: themeColor));
-                            }
-                            if (postSnapshot.hasError) {
-                              return Center(child: Text("Error loading posts.", style: TextStyle(color: Colors.grey.shade500)));
-                            }
-                            var posts = postSnapshot.data?.docs.toList() ?? [];
-                            posts.sort((a, b) {
-                              var aData = a.data() as Map<String, dynamic>;
-                              var bData = b.data() as Map<String, dynamic>;
-                              var aTime = aData['createdAt'];
-                              var bTime = bData['createdAt'];
-                              DateTime aDate = aTime is Timestamp ? aTime.toDate() : DateTime.fromMillisecondsSinceEpoch(0);
-                              DateTime bDate = bTime is Timestamp ? bTime.toDate() : DateTime.fromMillisecondsSinceEpoch(0);
-                              return bDate.compareTo(aDate);
-                            });
 
-                            if (posts.isEmpty) {
-                              return Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 30),
-                                  child: Column(
-                                    children: [
-                                      Icon(Icons.photo_library_outlined, size: 50, color: Colors.grey.shade300),
-                                      const SizedBox(height: 10),
-                                      Text(
-                                        role == 'ngo' ? "No posts yet." : "No tagged posts yet.",
-                                        style: TextStyle(color: Colors.grey.shade500),
-                                      ),
-                                    ],
+                          // ── VOLUNTEER IMPACT STORY CARD ──────────────────────
+                          if (role == 'volunteer') ...[
+                            const SizedBox(height: 25),
+                            VolunteerImpactStoryWidget(
+                              userId: targetUid,
+                              themeColor: themeColor,
+                            ),
+                          ],
+                        ],
+                       // Post feed (NGOs only)
+                        if (role == 'ngo') ...[
+                          const SizedBox(height: 40),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              isVisiting ? "Posts" : "Your Posts",
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                            ),
+                          ),
+                          const SizedBox(height: 15),
+                          StreamBuilder<QuerySnapshot>(
+                            stream: FirebaseFirestore.instance.collection('posts').where('ngoId', isEqualTo: targetUid).snapshots(),
+                            builder: (context, postSnapshot) {
+                              if (postSnapshot.connectionState == ConnectionState.waiting) {
+                                return Center(child: CircularProgressIndicator(color: themeColor));
+                              }
+                              if (postSnapshot.hasError) {
+                                return Center(child: Text("Error loading posts.", style: TextStyle(color: Colors.grey.shade500)));
+                              }
+                              var posts = postSnapshot.data?.docs.toList() ?? [];
+                              posts.sort((a, b) {
+                                var aData = a.data() as Map<String, dynamic>;
+                                var bData = b.data() as Map<String, dynamic>;
+                                var aTime = aData['createdAt'];
+                                var bTime = bData['createdAt'];
+                                DateTime aDate = aTime is Timestamp ? aTime.toDate() : DateTime.fromMillisecondsSinceEpoch(0);
+                                DateTime bDate = bTime is Timestamp ? bTime.toDate() : DateTime.fromMillisecondsSinceEpoch(0);
+                                return bDate.compareTo(aDate);
+                              });
+
+                              if (posts.isEmpty) {
+                                return Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 30),
+                                    child: Column(
+                                      children: [
+                                        Icon(Icons.photo_library_outlined, size: 50, color: Colors.grey.shade300),
+                                        const SizedBox(height: 10),
+                                        Text(
+                                          "No posts yet.",
+                                          style: TextStyle(color: Colors.grey.shade500),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              );
-                            }
-                            return ListView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              padding: EdgeInsets.zero,
-                              itemCount: posts.length,
-                              itemBuilder: (context, index) {
-                                var postData = posts[index].data() as Map<String, dynamic>;
-                                var post = PostModel.fromMap(postData, posts[index].id);
-                                return PostCardWidget(
-                                  post: post,
-                                  ngoName: name,
-                                  currentUserId: currentUserId,
-                                  themeColor: themeColor,
                                 );
-                              },
-                            );
-                          },
-                        ),
+                              }
+                              return ListView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                padding: EdgeInsets.zero,
+                                itemCount: posts.length,
+                                itemBuilder: (context, index) {
+                                  var postData = posts[index].data() as Map<String, dynamic>;
+                                  var post = PostModel.fromMap(postData, posts[index].id);
+                                  return PostCardWidget(
+                                    post: post,
+                                    ngoName: name,
+                                    currentUserId: currentUserId,
+                                    themeColor: themeColor,
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                        ],
                         // Logout (own profile only)
                         if (!isVisiting) ...[
                           const SizedBox(height: 25),
@@ -344,7 +355,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                                 await authProvider.signOut();
                                 if (context.mounted) {
                                   Navigator.of(context).pushAndRemoveUntil(
-                                   MaterialPageRoute(builder: (context) => const RoleSelectionScreen()), // <-- Added 'context'
+                                   MaterialPageRoute(builder: (context) => const RoleSelectionScreen()),
                                     (route) => false,
                                   );
                                 }
@@ -487,7 +498,7 @@ class ProfileScreenState extends State<ProfileScreen> {
   void _openImageViewer(BuildContext context, String imageUrl, String name) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => FullScreenImageViewer(imageUrl: imageUrl, name: name, themeColor: themeColor)), // <-- Added 'context'
+      MaterialPageRoute(builder: (context) => FullScreenImageViewer(imageUrl: imageUrl, name: name, themeColor: themeColor)),
     );
   }
 
@@ -921,9 +932,7 @@ class ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ========================================================
-  // 👇 NEW: VOLUNTEER TASKS BOTTOM SHEET 👇
-  // ========================================================
+  // VOLUNTEER TASKS BOTTOM SHEET
   Future<void> _showMyTasksSheet(BuildContext context) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUserModel;
@@ -995,8 +1004,851 @@ class ProfileScreenState extends State<ProfileScreen> {
   }
 } // End of ProfileScreenState
 
+
 // =========================================================================
-// 👇 UPDATED: VOLUNTEER TASK HISTORY CARD (WITH DONOR/NGO DETAILS) 👇
+// ⚡ VOLUNTEER IMPACT STORY WIDGET
+// =========================================================================
+class VolunteerImpactStoryWidget extends StatefulWidget {
+  final String userId;
+  final Color themeColor;
+
+  const VolunteerImpactStoryWidget({
+    Key? key,
+    required this.userId,
+    required this.themeColor,
+  }) : super(key: key);
+
+  @override
+  State<VolunteerImpactStoryWidget> createState() => _VolunteerImpactStoryWidgetState();
+}
+
+class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _chartController;
+  late Animation<double> _chartAnimation;
+  int? _selectedDayIndex;
+
+  static const Color _duskyRose = Color(0xFFB76E79);
+  static const Color _duskyRoseLight = Color(0xFFE8B4BC);
+  static const Color _duskyRoseDarkText = Color(0xFF6B2737);
+  static const Color _duskyRoseLabelText = Color(0xFF7A3B48);
+
+  @override
+  void initState() {
+    super.initState();
+    _chartController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    _chartAnimation = CurvedAnimation(parent: _chartController, curve: Curves.easeOut);
+    _chartController.forward();
+  }
+
+  @override
+  void dispose() {
+    _chartController.dispose();
+    super.dispose();
+  }
+
+  Map<String, dynamic> _computeStats(List<QueryDocumentSnapshot> docs) {
+    int totalCompleted = 0;
+    int totalPending = 0;
+
+    DateTime now = DateTime.now();
+    List<String> dayLabels = [];
+    List<double> acceptedCounts = List.filled(7, 0);
+    List<double> completedCounts = List.filled(7, 0);
+    Map<String, int> dayIndexMap = {};
+
+    for (int i = 6; i >= 0; i--) {
+      DateTime day = now.subtract(Duration(days: i));
+      String label = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][day.weekday - 1];
+      dayLabels.add(label);
+      String key = '${day.year}-${day.month}-${day.day}';
+      dayIndexMap[key] = 6 - i;
+    }
+
+    Set<String> streakDays = {};
+
+    for (var doc in docs) {
+      var data = doc.data() as Map<String, dynamic>;
+      String status = (data['status'] ?? '').toString().trim().toLowerCase();
+      var ts = data['createdAt'];
+
+      if (status == 'delivery_completed') {
+        totalCompleted++;
+      } else if (status != 'cancelled') {
+        totalPending++;
+      }
+
+      if (ts is Timestamp) {
+        DateTime date = ts.toDate();
+        String key = '${date.year}-${date.month}-${date.day}';
+        int? idx = dayIndexMap[key];
+        if (idx != null) {
+          acceptedCounts[idx]++;
+          if (status == 'delivery_completed') completedCounts[idx]++;
+        }
+        if (status == 'delivery_completed') streakDays.add(key);
+      }
+    }
+
+    // Compute streak
+    int streak = 0;
+    DateTime cursor = DateTime.now();
+    for (int i = 0; i < 60; i++) {
+      String key = '${cursor.year}-${cursor.month}-${cursor.day}';
+      if (streakDays.contains(key)) {
+        streak++;
+        cursor = cursor.subtract(const Duration(days: 1));
+      } else {
+        break;
+      }
+    }
+
+    // Personal best index
+    int personalBestIndex = -1;
+    double maxCompleted = 0;
+    for (int i = 0; i < completedCounts.length; i++) {
+      if (completedCounts[i] > maxCompleted) {
+        maxCompleted = completedCounts[i];
+        personalBestIndex = i;
+      }
+    }
+
+    return {
+      'totalCompleted': totalCompleted,
+      'totalPending': totalPending,
+      'streak': streak,
+      'livesTouched': totalCompleted * 3,
+      'dayLabels': dayLabels,
+      'acceptedCounts': acceptedCounts,
+      'completedCounts': completedCounts,
+      'personalBestIndex': personalBestIndex,
+    };
+  }
+
+  Map<String, dynamic> _getBadgeInfo(int totalCompleted) {
+    if (totalCompleted >= 31) {
+      return {
+        'rank': 'Legend', 'emoji': '💎',
+        'min': 31, 'max': null, 'next': null, 'nextEmoji': '',
+        'quote': 'You are the backbone of this community. Thank you.',
+      };
+    } else if (totalCompleted >= 16) {
+      return {
+        'rank': 'Champion', 'emoji': '🥇',
+        'min': 16, 'max': 30, 'next': 'Legend', 'nextEmoji': '💎',
+        'quote': 'You\'ve touched over ${totalCompleted * 3} lives. You\'re making real change.',
+      };
+    } else if (totalCompleted >= 6) {
+      return {
+        'rank': 'Supporter', 'emoji': '🥈',
+        'min': 6, 'max': 15, 'next': 'Champion', 'nextEmoji': '🥇',
+        'quote': 'Your support is building a better tomorrow!',
+      };
+    } else {
+      return {
+        'rank': 'Helper', 'emoji': '🥉',
+        'min': 0, 'max': 5, 'next': 'Supporter', 'nextEmoji': '🥈',
+        'quote': 'Every journey starts with one step. Keep going!',
+      };
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('donations')
+          .where('assignedVolunteerId', isEqualTo: widget.userId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox.shrink();
+
+        final stats = _computeStats(snapshot.data!.docs);
+        final int totalCompleted = stats['totalCompleted'];
+        final int totalPending = stats['totalPending'];
+        final int streak = stats['streak'];
+        final int livesTouched = stats['livesTouched'];
+        final List<String> dayLabels = List<String>.from(stats['dayLabels']);
+        final List<double> acceptedCounts = List<double>.from(stats['acceptedCounts']);
+        final List<double> completedCounts = List<double>.from(stats['completedCounts']);
+        final int personalBestIndex = stats['personalBestIndex'];
+        final badge = _getBadgeInfo(totalCompleted);
+
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              )
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── HEADER ──────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.bolt_rounded, color: widget.themeColor, size: 22),
+                    const SizedBox(width: 8),
+                    Text(
+                      'YOUR IMPACT STORY',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: widget.themeColor,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 20, bottom: 16),
+                child: Text(
+                  'Last 7 days  •  All Time',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                ),
+              ),
+
+              // ── LAYER 1: STATS STRIP ─────────────────────────────────
+              SizedBox(
+                height: 108,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    _buildStatChip(Icons.local_shipping_rounded, 'Total Delivered', totalCompleted.toString()),
+                    _buildStatChip(Icons.hourglass_top_rounded, 'Pending', totalPending.toString()),
+                    _buildStatChip(Icons.local_fire_department_rounded, 'Streak', '$streak days'),
+                    _buildStatChip(Icons.favorite_rounded, 'Lives Touched', '~$livesTouched people'),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 8),
+              Divider(color: Colors.grey.shade100, thickness: 1, height: 1),
+
+              // ── LAYER 2: ANIMATED CHART ──────────────────────────────
+              _buildChartSection(dayLabels, acceptedCounts, completedCounts, personalBestIndex),
+
+              Divider(color: Colors.grey.shade100, thickness: 1, height: 1),
+
+              // ── LAYER 3: RANK & BADGE ────────────────────────────────
+              _buildBadgeSection(totalCompleted, badge),
+
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatChip(IconData icon, String label, String value) {
+    return Container(
+      width: 126,
+      margin: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            _duskyRoseLight.withValues(alpha: 0.9),
+            _duskyRoseLight.withValues(alpha: 0.55),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: _duskyRose.withValues(alpha: 0.25),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: Colors.white.withValues(alpha: 0.6),
+            blurRadius: 2,
+            offset: const Offset(-1, -1),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          children: [
+            // subtle diagonal shine streak
+            Positioned(
+              top: -20,
+              right: -20,
+              child: Transform.rotate(
+                angle: 0.6,
+                child: Container(
+                  width: 60,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.white.withValues(alpha: 0.45),
+                        Colors.white.withValues(alpha: 0.0),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, size: 16, color: _duskyRoseDarkText),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: _duskyRoseDarkText,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: _duskyRoseLabelText,
+                    height: 1.3,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChartSection(
+    List<String> labels,
+    List<double> accepted,
+    List<double> completed,
+    int personalBestIndex,
+  ) {
+    double maxVal = 0;
+    for (var v in [...accepted, ...completed]) {
+      if (v > maxVal) maxVal = v;
+    }
+    if (maxVal == 0) maxVal = 5;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Legend row
+          Row(
+            children: [
+              Icon(Icons.show_chart, size: 15, color: widget.themeColor),
+              const SizedBox(width: 6),
+              Text(
+                'Activity (Last 7 Days)',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                width: 12,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: widget.themeColor.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text('Accepted', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+              const SizedBox(width: 10),
+              Container(
+                width: 12,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: widget.themeColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text('Completed', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Tap-to-see tooltip
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: _selectedDayIndex != null
+                ? Container(
+                    key: ValueKey(_selectedDayIndex),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: widget.themeColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: widget.themeColor.withValues(alpha: 0.25)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.touch_app_rounded, size: 14, color: widget.themeColor),
+                        const SizedBox(width: 6),
+                        Text(
+                          '${labels[_selectedDayIndex!]}: '
+                          '${completed[_selectedDayIndex!].toInt()} completed, '
+                          '${accepted[_selectedDayIndex!].toInt()} accepted',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: widget.themeColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : const SizedBox(key: ValueKey('empty'), height: 0),
+          ),
+
+          // Chart
+          GestureDetector(
+            onTapDown: (details) {
+              final RenderBox box = context.findRenderObject() as RenderBox;
+              double chartWidth = box.size.width - 32;
+              double sectionWidth = chartWidth / 7;
+              int idx = (details.localPosition.dx / sectionWidth).floor().clamp(0, 6);
+              setState(() {
+                _selectedDayIndex = _selectedDayIndex == idx ? null : idx;
+              });
+            },
+            child: AnimatedBuilder(
+              animation: _chartAnimation,
+              builder: (context, _) {
+                return CustomPaint(
+                  size: const Size(double.infinity, 150),
+                  painter: _ImpactChartPainter(
+                    accepted: accepted,
+                    completed: completed,
+                    labels: labels,
+                    themeColor: widget.themeColor,
+                    animationValue: _chartAnimation.value,
+                    maxVal: maxVal,
+                    personalBestIndex: personalBestIndex,
+                    selectedIndex: _selectedDayIndex,
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // BADGE SECTION — UNCHANGED, LEFT EXACTLY AS ORIGINAL
+  // ═══════════════════════════════════════════════════════════════════
+  Widget _buildBadgeSection(int totalCompleted, Map<String, dynamic> badge) {
+    final bool isLegend = badge['next'] == null;
+    final int min = badge['min'] as int;
+    final int? max = badge['max'] as int?;
+    final double progress = isLegend
+        ? 1.0
+        : ((totalCompleted - min) / ((max! - min))).clamp(0.0, 1.0);
+    final int toNext = isLegend ? 0 : ((max ?? 0) - totalCompleted + 1).clamp(0, 999);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Badge row
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Glowing badge icon
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: widget.themeColor.withValues(alpha: 0.10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: widget.themeColor.withValues(alpha: 0.25),
+                      blurRadius: 16,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Text(badge['emoji'], style: const TextStyle(fontSize: 32)),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          badge['rank'],
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: widget.themeColor,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: widget.themeColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '$totalCompleted deliveries',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: widget.themeColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 8,
+                        backgroundColor: Colors.grey.shade200,
+                        valueColor: AlwaysStoppedAnimation<Color>(widget.themeColor),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    if (!isLegend)
+                      Text(
+                        '$toNext more to become ${badge['next']} ${badge['nextEmoji']}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      )
+                    else
+                      Text(
+                        'Highest rank achieved! 🎉',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: widget.themeColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // ── LAYER 4: Motivational quote ──────────────────────────────
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  widget.themeColor.withValues(alpha: 0.08),
+                  widget.themeColor.withValues(alpha: 0.02),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: widget.themeColor.withValues(alpha: 0.15)),
+            ),
+            child: Text(
+              '"${badge['quote']}"',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey.shade700,
+                fontStyle: FontStyle.italic,
+                height: 1.6,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+// =========================================================================
+// 📈 IMPACT CHART PAINTER
+// =========================================================================
+class _ImpactChartPainter extends CustomPainter {
+  final List<double> accepted;
+  final List<double> completed;
+  final List<String> labels;
+  final Color themeColor;
+  final double animationValue;
+  final double maxVal;
+  final int personalBestIndex;
+  final int? selectedIndex;
+
+  _ImpactChartPainter({
+    required this.accepted,
+    required this.completed,
+    required this.labels,
+    required this.themeColor,
+    required this.animationValue,
+    required this.maxVal,
+    required this.personalBestIndex,
+    this.selectedIndex,
+  });
+
+  static const double _padLeft = 16;
+  static const double _padRight = 16;
+  static const double _padTop = 24;
+  static const double _padBottom = 28;
+
+  Offset _pt(int i, List<double> data, Size size) {
+    final int n = data.length;
+    final double w = size.width - _padLeft - _padRight;
+    final double h = size.height - _padTop - _padBottom;
+    double x = _padLeft + (n <= 1 ? w / 2 : (i / (n - 1)) * w);
+    double y = _padTop + h - (data[i] / maxVal) * h;
+    return Offset(x, y);
+  }
+
+  // Endpoint of a (possibly partially revealed) path — used to close the fill area
+  Offset _pathEndpoint(Path path, Size size) {
+    Offset last = Offset(_padLeft, _padTop + (size.height - _padTop - _padBottom));
+    for (final metric in path.computeMetrics()) {
+      final tangent = metric.getTangentForOffset(metric.length);
+      if (tangent != null) last = tangent.position;
+    }
+    return last;
+  }
+
+  // Smooth Catmull-Rom → cubic bezier curve through the data points
+  Path _buildSmoothPath(List<double> data, Size size) {
+    final path = Path();
+    final int n = data.length;
+    if (n < 2) return path;
+    final pts = List.generate(n, (i) => _pt(i, data, size));
+    path.moveTo(pts[0].dx, pts[0].dy);
+    for (int i = 0; i < pts.length - 1; i++) {
+      final p0 = i == 0 ? pts[i] : pts[i - 1];
+      final p1 = pts[i];
+      final p2 = pts[i + 1];
+      final p3 = (i + 2 < pts.length) ? pts[i + 2] : p2;
+
+      final cp1 = Offset(p1.dx + (p2.dx - p0.dx) / 6, p1.dy + (p2.dy - p0.dy) / 6);
+      final cp2 = Offset(p2.dx - (p3.dx - p1.dx) / 6, p2.dy - (p3.dy - p1.dy) / 6);
+      path.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, p2.dx, p2.dy);
+    }
+    return path;
+  }
+
+  // Reveals a fraction `t` (0..1) of a path based on its measured arc length
+  Path _revealPath(Path full, double t) {
+    if (t >= 1) return full;
+    if (t <= 0) return Path();
+    final path = Path();
+    for (final metric in full.computeMetrics()) {
+      path.addPath(metric.extractPath(0, metric.length * t), Offset.zero);
+    }
+    return path;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final int n = accepted.length;
+    if (n == 0) return;
+
+    final double chartH = size.height - _padTop - _padBottom;
+
+    // ── Grid lines ────────────────────────────────────────────────────
+    final Paint gridPaint = Paint()
+      ..color = Colors.grey.withValues(alpha: 0.12)
+      ..strokeWidth = 1;
+    for (int i = 0; i <= 4; i++) {
+      double y = _padTop + (i / 4) * chartH;
+      canvas.drawLine(Offset(_padLeft, y), Offset(size.width - _padRight, y), gridPaint);
+    }
+
+    // ── Selected-day vertical highlight ──────────────────────────────
+    if (selectedIndex != null && selectedIndex! < n) {
+      Offset selPt = _pt(selectedIndex!, completed, size);
+      final Paint selPaint = Paint()
+        ..color = themeColor.withValues(alpha: 0.18)
+        ..strokeWidth = 1.5;
+      canvas.drawLine(
+        Offset(selPt.dx, _padTop),
+        Offset(selPt.dx, _padTop + chartH),
+        selPaint,
+      );
+    }
+
+    // ── Build smooth curves & reveal by animation progress ─────────────
+    final Path fullAcceptedPath = _buildSmoothPath(accepted, size);
+    final Path fullCompletedPath = _buildSmoothPath(completed, size);
+    final Path animAcceptedPath = _revealPath(fullAcceptedPath, animationValue);
+    final Path animCompletedPath = _revealPath(fullCompletedPath, animationValue);
+
+    // ── Filled area under the completed curve ───────────────────────────
+    if (animationValue > 0 && n >= 2) {
+      final Path fillPath = Path.from(animCompletedPath);
+      final Offset endPt = _pathEndpoint(animCompletedPath, size);
+      fillPath.lineTo(endPt.dx, _padTop + chartH);
+      fillPath.lineTo(_pt(0, completed, size).dx, _padTop + chartH);
+      fillPath.close();
+
+      canvas.drawPath(
+        fillPath,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              themeColor.withValues(alpha: 0.22),
+              themeColor.withValues(alpha: 0.02),
+            ],
+          ).createShader(Rect.fromLTWH(0, _padTop, size.width, chartH))
+          ..style = PaintingStyle.fill,
+      );
+    }
+
+    // ── Accepted curve (lighter) ────────────────────────────────────────
+    canvas.drawPath(
+      animAcceptedPath,
+      Paint()
+        ..color = themeColor.withValues(alpha: 0.35)
+        ..strokeWidth = 1.5
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke,
+    );
+
+    // ── Completed curve — soft glow layer, then bold line ───────────────
+    canvas.drawPath(
+      animCompletedPath,
+      Paint()
+        ..color = themeColor.withValues(alpha: 0.4)
+        ..strokeWidth = 6
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+    canvas.drawPath(
+      animCompletedPath,
+      Paint()
+        ..color = themeColor
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke,
+    );
+
+    // ── Dots, labels, personal-best marker ──────────────────────────────
+    double progress = animationValue * (n - 1);
+    int visible = progress.ceil().clamp(0, n - 1);
+
+    for (int i = 0; i <= visible; i++) {
+      Offset pt = _pt(i, completed, size);
+      bool isSel = selectedIndex == i;
+      bool isPB = personalBestIndex == i && completed[i] > 0;
+
+      // Outer glow if selected
+      if (isSel) {
+        canvas.drawCircle(pt, 9, Paint()..color = themeColor.withValues(alpha: 0.18));
+      }
+      // White ring
+      canvas.drawCircle(pt, 5, Paint()..color = Colors.white);
+      // Colored border
+      canvas.drawCircle(
+        pt, 5,
+        Paint()
+          ..color = themeColor
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2,
+      );
+      // Filled centre if has data
+      if (completed[i] > 0) {
+        canvas.drawCircle(pt, 3, Paint()..color = themeColor);
+      }
+
+      // Personal-best marker (professional star icon, not emoji)
+      if (isPB) {
+        final tp = TextPainter(
+          text: TextSpan(
+            text: String.fromCharCode(Icons.star_rounded.codePoint),
+            style: TextStyle(
+              fontSize: 16,
+              fontFamily: Icons.star_rounded.fontFamily,
+              package: Icons.star_rounded.fontPackage,
+              color: themeColor,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        tp.paint(canvas, Offset(pt.dx - tp.width / 2, pt.dy - 28));
+      }
+
+      // Day label
+      final lp = TextPainter(
+        text: TextSpan(
+          text: labels[i],
+          style: TextStyle(
+            fontSize: 10,
+            color: isSel ? themeColor : Colors.grey.shade500,
+            fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      lp.paint(
+        canvas,
+        Offset(pt.dx - lp.width / 2, size.height - _padBottom + 6),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ImpactChartPainter old) =>
+      old.animationValue != animationValue || old.selectedIndex != selectedIndex;
+}
+
+// =========================================================================
+// VOLUNTEER TASK HISTORY CARD
 // =========================================================================
 class VolunteerTaskHistoryCard extends StatefulWidget {
   final String donationId;
@@ -1047,15 +1899,12 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
   Widget build(BuildContext context) {
     bool isCompleted = widget.status == 'delivery_completed';
     String itemName = widget.taskData['items'] ?? widget.taskData['itemName'] ?? 'Items';
-    
-    // 👇 NEW: Extracting all Donor and NGO details 👇
     String ngoName = widget.taskData['ngoName'] ?? 'NGO Partner';
     String ngoLocation = widget.taskData['ngoLocation'] ?? 'Location not provided';
     String donorName = widget.taskData['donorName'] ?? 'Donor';
     String donorLocation = widget.taskData['donorLocation'] ?? 'Location not provided';
-
     String rawQty = widget.taskData['quantity']?.toString() ?? widget.taskData['qty']?.toString() ?? widget.taskData['donatedAmount']?.toString() ?? '';
-    
+
     return FutureBuilder<DocumentSnapshot>(
       future: FirebaseFirestore.instance.collection('ngo_listings').doc(widget.taskData['listingId']).get(),
       builder: (context, snapshot) {
@@ -1064,26 +1913,19 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
           var listingData = snapshot.data!.data() as Map<String, dynamic>;
           unit = listingData['unit'] ?? '';
           if (listingData['type'] == 'food') {
-             itemName = listingData['foodType'] ?? itemName;
+            itemName = listingData['foodType'] ?? itemName;
           } else {
-             itemName = listingData['productName'] ?? itemName;
+            itemName = listingData['productName'] ?? itemName;
           }
-          
-          // Fallback: If donation doc missed the NGO details, grab them from the original listing
-          if (ngoName == 'NGO Partner' && listingData.containsKey('ngoName')) {
-             ngoName = listingData['ngoName'];
-          }
-          if (ngoLocation == 'Location not provided' && listingData.containsKey('ngoLocation')) {
-             ngoLocation = listingData['ngoLocation'];
-          }
+          if (ngoName == 'NGO Partner' && listingData.containsKey('ngoName')) ngoName = listingData['ngoName'];
+          if (ngoLocation == 'Location not provided' && listingData.containsKey('ngoLocation')) ngoLocation = listingData['ngoLocation'];
         }
-        
+
         String itemInfo = "$rawQty $unit $itemName".trim();
 
         return Stack(
           clipBehavior: Clip.none,
           children: [
-            // Hidden template for screenshotting
             Positioned(
               left: -5000,
               top: -5000,
@@ -1099,8 +1941,6 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                 ),
               ),
             ),
-            
-            // Visible Card
             Container(
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(16),
@@ -1117,7 +1957,7 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                     children: [
                       Expanded(
                         child: Text(
-                          "Delivery: $itemName", 
+                          "Delivery: $itemName",
                           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -1128,11 +1968,15 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                         decoration: BoxDecoration(
                           color: isCompleted ? Colors.green.shade50 : Colors.orange.shade50,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: isCompleted ? Colors.green.shade200 : Colors.orange.shade200)
+                          border: Border.all(color: isCompleted ? Colors.green.shade200 : Colors.orange.shade200),
                         ),
                         child: Text(
-                          isCompleted ? "Completed" : "Pending", 
-                          style: TextStyle(color: isCompleted ? Colors.green.shade700 : Colors.orange.shade700, fontWeight: FontWeight.bold, fontSize: 12)
+                          isCompleted ? "Completed" : "Pending",
+                          style: TextStyle(
+                            color: isCompleted ? Colors.green.shade700 : Colors.orange.shade700,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ],
@@ -1145,13 +1989,10 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                       Text("Delivery Item: $itemInfo", style: TextStyle(color: Colors.grey.shade800, fontWeight: FontWeight.w600)),
                     ],
                   ),
-                  
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 12),
                     child: Divider(height: 1),
                   ),
-
-                  // 👇 NEW: Side-by-side Donor & NGO details layout 👇
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1172,10 +2013,7 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 2),
-                                  child: Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade500),
-                                ),
+                                Padding(padding: const EdgeInsets.only(top: 2), child: Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade500)),
                                 const SizedBox(width: 4),
                                 Expanded(child: Text(donorLocation, style: TextStyle(fontSize: 12, color: Colors.grey.shade600), maxLines: 2, overflow: TextOverflow.ellipsis)),
                               ],
@@ -1201,10 +2039,7 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 2),
-                                  child: Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade500),
-                                ),
+                                Padding(padding: const EdgeInsets.only(top: 2), child: Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade500)),
                                 const SizedBox(width: 4),
                                 Expanded(child: Text(ngoLocation, style: TextStyle(fontSize: 12, color: Colors.grey.shade600), maxLines: 2, overflow: TextOverflow.ellipsis)),
                               ],
@@ -1215,22 +2050,50 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  
                   if (!isCompleted)
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: () async {
-                           await FirebaseFirestore.instance.collection('donations').doc(widget.donationId).update({
-                              'status': 'delivery_completed'
-                           });
+                          await FirebaseFirestore.instance.collection('donations').doc(widget.donationId).update({'status': 'delivery_completed'});
+
+                          final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                          final currentUserId = authProvider.currentFirebaseUser?.uid;
+                          final currentUserName = authProvider.currentUserModel?.name ?? 'Volunteer';
+
+                          if (currentUserId != null) {
+                            await FirebaseFirestore.instance.collection('users').doc(currentUserId).set({
+                              'deliveriesCompleted': FieldValue.increment(1)
+                            }, SetOptions(merge: true));
+                          }
+
+                          String taskDonorId = widget.taskData['donorId'] ?? '';
+                          String taskListingId = widget.taskData['listingId'] ?? '';
+
+                          if (taskDonorId.isNotEmpty && taskListingId.isNotEmpty) {
+                            var requestQuery = await FirebaseFirestore.instance
+                                .collection('volunteer_requests')
+                                .where('donorId', isEqualTo: taskDonorId)
+                                .where('listingId', isEqualTo: taskListingId)
+                                .limit(1)
+                                .get();
+
+                            if (requestQuery.docs.isNotEmpty) {
+                              await FirebaseFirestore.instance
+                                  .collection('volunteer_requests')
+                                  .doc(requestQuery.docs.first.id)
+                                  .update({
+                                'status': 'completed',
+                                'assignedVolunteer': currentUserName,
+                              });
+                            }
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: widget.themeColor,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(vertical: 12)
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
-                        // 👇 NEW: Clean and professional button text 👇
                         child: const Text("Mark Delivery as Completed", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                       ),
                     )
@@ -1244,21 +2107,23 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(color: widget.themeColor.withValues(alpha: 0.5)),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(vertical: 12)
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
-                    )
+                    ),
                 ],
               ),
             ),
           ],
         );
-      }
+      },
     );
   }
 }
+
+
 // =========================================================================
-// 👇 NEW: VOLUNTEER SHARE TEMPLATE (Generates the beautiful image) 👇
+// VOLUNTEER SHARE TEMPLATE
 // =========================================================================
 class VolunteerShareTemplate extends StatelessWidget {
   final String ngoName;
@@ -1320,7 +2185,10 @@ class VolunteerShareTemplate extends StatelessWidget {
   }
 }
 
+
+// =========================================================================
 // ENHANCED DONATION HISTORY CARD (FOR DONORS)
+// =========================================================================
 class EnhancedDonationHistoryCard extends StatefulWidget {
   final String ngoName;
   final String itemName;
@@ -1521,14 +2389,13 @@ class EnhancedDonationHistoryCardState extends State<EnhancedDonationHistoryCard
                     )
                   else
                     TextButton(onPressed: null, child: Text('24h Expired', style: TextStyle(color: Colors.grey.shade400))),
-                  
                   if (!widget.isCancelled)
                     ElevatedButton.icon(
                       onPressed: () => _shareDonationCard(context),
                       icon: const Icon(Icons.share, size: 18, color: Colors.white),
                       label: const Text("Share Impact", style: TextStyle(color: Colors.white)),
                       style: ElevatedButton.styleFrom(backgroundColor: widget.themeColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), elevation: 0),
-                    )
+                    ),
                 ],
               ),
             ],
@@ -1539,7 +2406,10 @@ class EnhancedDonationHistoryCardState extends State<EnhancedDonationHistoryCard
   }
 }
 
+
+// =========================================================================
 // DONATION SHARE TEMPLATE (FOR DONORS)
+// =========================================================================
 class DonationShareTemplate extends StatelessWidget {
   final String ngoName;
   final String itemName;
@@ -1638,7 +2508,10 @@ class DonationShareTemplate extends StatelessWidget {
   }
 }
 
+
+// =========================================================================
 // FULL SCREEN IMAGE VIEWER
+// =========================================================================
 class FullScreenImageViewer extends StatelessWidget {
   final String imageUrl;
   final String name;

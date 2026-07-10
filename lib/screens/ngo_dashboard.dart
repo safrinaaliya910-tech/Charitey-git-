@@ -28,6 +28,7 @@ class NgoDashboardState extends State<NgoDashboard>
   final Color themeColor = const Color(0xFFB56F76);
   final ScrollController _scrollController = ScrollController();
   bool _hasScrolled = false;
+  bool _showTaggedOnly = false;
   late AnimationController _bgController;
 
   @override
@@ -48,8 +49,7 @@ class NgoDashboardState extends State<NgoDashboard>
 
   void _scrollToTarget(List<QueryDocumentSnapshot> posts) {
     if (widget.targetPostId != null && !_hasScrolled) {
-      int index =
-          posts.indexWhere((doc) => doc.id == widget.targetPostId);
+      int index = posts.indexWhere((doc) => doc.id == widget.targetPostId);
       if (index != -1) {
         _hasScrolled = true;
         double offset = index * 550.0;
@@ -68,11 +68,9 @@ class NgoDashboardState extends State<NgoDashboard>
 
   @override
   Widget build(BuildContext context) {
-    final user =
-        Provider.of<AuthProvider>(context).currentUserModel;
+    final user = Provider.of<AuthProvider>(context).currentUserModel;
     if (user == null) {
-      return Center(
-          child: CircularProgressIndicator(color: themeColor));
+      return Center(child: CircularProgressIndicator(color: themeColor));
     }
 
     return Scaffold(
@@ -87,20 +85,12 @@ class NgoDashboardState extends State<NgoDashboard>
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment(
-                      math.cos(
-                          _bgController.value * math.pi * 2),
-                      math.sin(
-                          _bgController.value * math.pi * 2),
+                      math.cos(_bgController.value * math.pi * 2),
+                      math.sin(_bgController.value * math.pi * 2),
                     ),
                     end: Alignment(
-                      math.cos(_bgController.value *
-                              math.pi *
-                              2 +
-                          math.pi),
-                      math.sin(_bgController.value *
-                              math.pi *
-                              2 +
-                          math.pi),
+                      math.cos(_bgController.value * math.pi * 2 + math.pi),
+                      math.sin(_bgController.value * math.pi * 2 + math.pi),
                     ),
                     colors: const [
                       Color(0xFFF2D9DB),
@@ -116,89 +106,118 @@ class NgoDashboardState extends State<NgoDashboard>
           ),
 
           // ── Activity feed ──────────────────────────────────
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('posts')
-                .orderBy('createdAt', descending: true)
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState ==
-                  ConnectionState.waiting) {
-                return Center(
-                    child: CircularProgressIndicator(
-                        color: themeColor));
-              }
-              if (!snapshot.hasData ||
-                  snapshot.data!.docs.isEmpty) {
-                return _buildEmptyState(user.role);
-              }
+          Column(
+            children: [
+              // Show filter bar only for donors/volunteers
+              if (user.role != 'ngo') _buildFilterBar(),
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('posts')
+                      .orderBy('createdAt', descending: true)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Center(
+                        child: CircularProgressIndicator(color: themeColor),
+                      );
+                    }
+                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                      return _buildEmptyState(user.role, taggedOnly: false);
+                    }
 
-              var posts = snapshot.data!.docs;
-              _scrollToTarget(posts);
+                    var posts = snapshot.data!.docs;
+                    final visiblePosts = posts.where((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      final donorUid = data['donorUid'] ?? '';
+                      final volunteerUid = data['volunteerUid'] ?? '';
+                      final isTaggedForUser =
+                          donorUid == user.uid || volunteerUid == user.uid;
 
-              return ListView.builder(
-                controller: _scrollController,
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.only(
-                    bottom: 100, top: 10),
-                itemCount: posts.length,
-                itemBuilder: (context, index) {
-                  var post = PostModel.fromMap(
-                    posts[index].data()
-                        as Map<String, dynamic>,
-                    posts[index].id,
-                  );
-
-                  if (post.image.isEmpty ||
-                      !post.image.startsWith('http')) {
-                    return const SizedBox.shrink();
-                  }
-
-                  bool isTarget =
-                      post.postId == widget.targetPostId;
-
-                  return FutureBuilder<DocumentSnapshot>(
-                    future: FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(post.ngoId)
-                        .get(),
-                    builder: (context, userSnapshot) {
-                      String ngoName = "NGO";
-                      if (userSnapshot.hasData &&
-                          userSnapshot.data!.exists) {
-                        ngoName = (userSnapshot.data!.data()
-                                as Map<String, dynamic>)[
-                            'name'] ??
-                            "NGO";
+                      // NGO: show all posts (no tagged)
+                      if (user.role == 'ngo') {
+                        return true;
                       }
 
-                      return AnimatedContainer(
-                        duration:
-                            const Duration(milliseconds: 800),
-                        decoration: isTarget
-                            ? BoxDecoration(
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: themeColor
-                                        .withValues(alpha: 0.3),
-                                    blurRadius: 30,
-                                    spreadRadius: 8,
-                                  ),
-                                ],
-                              )
-                            : const BoxDecoration(),
-                        child: PostCardWidget(
-                          post: post,
-                          ngoName: ngoName,
-                          currentUserId: user.uid,
-                          themeColor: themeColor,
-                        ),
-                      );
-                    },
-                  );
-                },
-              );
-            },
+                      // Donor/Volunteer: apply filter
+                      return !_showTaggedOnly || isTaggedForUser;
+                    }).toList();
+
+                    if (visiblePosts.isEmpty) {
+                      final noPostsMessage = user.role == 'ngo'
+                          ? _buildEmptyState(user.role, taggedOnly: false)
+                          : _buildEmptyState(
+                              user.role,
+                              taggedOnly: _showTaggedOnly,
+                            );
+                      return noPostsMessage;
+                    }
+
+                    _scrollToTarget(posts);
+
+                    return ListView.builder(
+                      controller: _scrollController,
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.only(bottom: 100, top: 10),
+                      itemCount: visiblePosts.length,
+                      itemBuilder: (context, index) {
+                        var post = PostModel.fromMap(
+                          visiblePosts[index].data() as Map<String, dynamic>,
+                          visiblePosts[index].id,
+                        );
+
+                        if (post.image.isEmpty ||
+                            !post.image.startsWith('http')) {
+                          return const SizedBox.shrink();
+                        }
+
+                        bool isTarget = post.postId == widget.targetPostId;
+
+                        return FutureBuilder<DocumentSnapshot>(
+                          future: FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(post.ngoId)
+                              .get(),
+                          builder: (context, userSnapshot) {
+                            String ngoName = "NGO";
+                            if (userSnapshot.hasData &&
+                                userSnapshot.data!.exists) {
+                              ngoName =
+                                  (userSnapshot.data!.data()
+                                      as Map<String, dynamic>)['name'] ??
+                                  "NGO";
+                            }
+
+                            return AnimatedContainer(
+                              duration: const Duration(milliseconds: 800),
+                              decoration: isTarget
+                                  ? BoxDecoration(
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: themeColor.withValues(
+                                            alpha: 0.3,
+                                          ),
+                                          blurRadius: 30,
+                                          spreadRadius: 8,
+                                        ),
+                                      ],
+                                    )
+                                  : const BoxDecoration(),
+                              child: PostCardWidget(
+                                post: post,
+                                ngoName: ngoName,
+                                currentUserId: user.uid,
+                                themeColor: themeColor,
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -217,8 +236,7 @@ class NgoDashboardState extends State<NgoDashboard>
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) =>
-                          const CreatePostScreen(),
+                      builder: (context) => const CreatePostScreen(),
                     ),
                   );
                 },
@@ -230,12 +248,63 @@ class NgoDashboardState extends State<NgoDashboard>
               ),
             )
           : null,
-      floatingActionButtonLocation:
-          FloatingActionButtonLocation.endFloat,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
-  Widget _buildEmptyState(String? role) {
+  Widget _buildFilterBar() {
+    // Only show for donors/volunteers
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildFilterChip(
+              'All Posts',
+              !_showTaggedOnly,
+              () => setState(() => _showTaggedOnly = false),
+            ),
+          ),
+          Expanded(
+            child: _buildFilterChip(
+              'Tagged Posts',
+              _showTaggedOnly,
+              () => setState(() => _showTaggedOnly = true),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String label, bool selected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? themeColor : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: selected ? Colors.white : Colors.grey.shade700,
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(String? role, {bool taggedOnly = false}) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -270,8 +339,10 @@ class NgoDashboardState extends State<NgoDashboard>
           ),
           const SizedBox(height: 12),
           Text(
-            role == 'ngo'
-                ? "No posts yet.\nClick the + button to share an update!"
+            taggedOnly
+                ? "No tagged posts yet.\nPosts you are tagged in will appear here."
+                : role == 'ngo'
+                ? "No posts yet.\nCheck back later for updates!"
                 : "No posts yet.\nCheck back later for updates!",
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -294,6 +365,7 @@ class PostCardWidget extends StatefulWidget {
   final String ngoName;
   final String currentUserId;
   final Color themeColor;
+  final bool showMentions;
 
   const PostCardWidget({
     Key? key,
@@ -301,6 +373,7 @@ class PostCardWidget extends StatefulWidget {
     required this.ngoName,
     required this.currentUserId,
     required this.themeColor,
+    this.showMentions = true,
   }) : super(key: key);
 
   @override
@@ -316,8 +389,7 @@ class _PostCardWidgetState extends State<PostCardWidget> {
     FirebaseFirestore.instance
         .collection('posts')
         .doc(widget.post.postId)
-        .update(
-            {'likes': FieldValue.increment(_isLiked ? 1 : -1)});
+        .update({'likes': FieldValue.increment(_isLiked ? 1 : -1)});
   }
 
   Future<void> _sharePost() async {
@@ -338,26 +410,21 @@ class _PostCardWidgetState extends State<PostCardWidget> {
       final response = await http.get(url);
       final bytes = response.bodyBytes;
       final tempDir = await getTemporaryDirectory();
-      final path =
-          '${tempDir.path}/shared_post_${widget.post.postId}.jpg';
+      final path = '${tempDir.path}/shared_post_${widget.post.postId}.jpg';
       File(path).writeAsBytesSync(bytes);
 
-      String textToShare =
-          "${widget.post.description}\n\n";
+      String textToShare = "${widget.post.description}\n\n";
       if (widget.post.donorId.isNotEmpty) {
-        textToShare +=
-            "✨ ${widget.post.donorId}\n\n";
+        textToShare += "✨ ${widget.post.donorId}\n\n";
       }
       textToShare += "Shared via Charitey App❤️";
 
-      await Share.shareXFiles([XFile(path)],
-          text: textToShare);
+      await Share.shareXFiles([XFile(path)], text: textToShare);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content:
-                    Text("Error sharing post: $e")));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error sharing post: $e")));
       }
     } finally {
       if (mounted) setState(() => _isSharing = false);
@@ -375,8 +442,7 @@ class _PostCardWidgetState extends State<PostCardWidget> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel",
-                style: TextStyle(color: Colors.grey)),
+            child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
           ),
           TextButton(
             onPressed: () async {
@@ -386,8 +452,7 @@ class _PostCardWidgetState extends State<PostCardWidget> {
                   .doc(widget.post.postId)
                   .delete();
               if (mounted) {
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(
+                ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text("Post deleted"),
                     backgroundColor: Colors.red,
@@ -397,9 +462,7 @@ class _PostCardWidgetState extends State<PostCardWidget> {
             },
             child: const Text(
               "Delete",
-              style: TextStyle(
-                  color: Colors.red,
-                  fontWeight: FontWeight.bold),
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
             ),
           ),
         ],
@@ -408,20 +471,21 @@ class _PostCardWidgetState extends State<PostCardWidget> {
   }
 
   void _editPost() {
-    TextEditingController descController =
-        TextEditingController(
-            text: widget.post.description);
-    TextEditingController tagController =
-        TextEditingController(text: widget.post.donorId);
+    TextEditingController descController = TextEditingController(
+      text: widget.post.description,
+    );
+    TextEditingController tagController = TextEditingController(
+      text: widget.post.donorId,
+    );
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
-        title: const Text("Edit Post",
-            style:
-                TextStyle(fontWeight: FontWeight.bold)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          "Edit Post",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -429,11 +493,10 @@ class _PostCardWidgetState extends State<PostCardWidget> {
               controller: tagController,
               decoration: InputDecoration(
                 labelText: "Tag Donor (Optional)",
-                prefixIcon:
-                    const Icon(Icons.person_add),
+                prefixIcon: const Icon(Icons.person_add),
                 border: OutlineInputBorder(
-                    borderRadius:
-                        BorderRadius.circular(12)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -443,8 +506,8 @@ class _PostCardWidgetState extends State<PostCardWidget> {
               decoration: InputDecoration(
                 labelText: "Description",
                 border: OutlineInputBorder(
-                    borderRadius:
-                        BorderRadius.circular(12)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ],
@@ -452,15 +515,14 @@ class _PostCardWidgetState extends State<PostCardWidget> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel",
-                style: TextStyle(color: Colors.grey)),
+            child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: widget.themeColor,
               shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(10)),
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             onPressed: () async {
               Navigator.pop(context);
@@ -468,13 +530,11 @@ class _PostCardWidgetState extends State<PostCardWidget> {
                   .collection('posts')
                   .doc(widget.post.postId)
                   .update({
-                'description':
-                    descController.text.trim(),
-                'donorId': tagController.text.trim(),
-              });
+                    'description': descController.text.trim(),
+                    'donorId': tagController.text.trim(),
+                  });
               if (mounted) {
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(
+                ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text("Post updated!"),
                     backgroundColor: Colors.green,
@@ -482,8 +542,7 @@ class _PostCardWidgetState extends State<PostCardWidget> {
                 );
               }
             },
-            child: const Text("Save",
-                style: TextStyle(color: Colors.white)),
+            child: const Text("Save", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -492,14 +551,13 @@ class _PostCardWidgetState extends State<PostCardWidget> {
 
   @override
   Widget build(BuildContext context) {
-    String formattedDate = DateFormat('MMM d, yyyy')
-        .format(widget.post.createdAt);
-    bool isMyPost =
-        widget.post.ngoId == widget.currentUserId;
+    String formattedDate = DateFormat(
+      'MMM d, yyyy',
+    ).format(widget.post.createdAt);
+    bool isMyPost = widget.post.ngoId == widget.currentUserId;
 
     return Container(
-      margin: const EdgeInsets.symmetric(
-          horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
@@ -530,10 +588,7 @@ class _PostCardWidgetState extends State<PostCardWidget> {
                         context,
                         MaterialPageRoute(
                           builder: (context) =>
-                              ProfileScreen(
-                            visitedUserId:
-                                widget.post.ngoId,
-                          ),
+                              ProfileScreen(visitedUserId: widget.post.ngoId),
                         ),
                       );
                     },
@@ -543,34 +598,24 @@ class _PostCardWidgetState extends State<PostCardWidget> {
                         // fallback to initial letter
                         CircleAvatar(
                           radius: 22,
-                          backgroundColor: widget
-                              .themeColor
-                              .withValues(alpha: 0.15),
-                          backgroundImage: (widget.post
-                                          .ngoProfileImage !=
-                                      null &&
-                                  widget.post
-                                      .ngoProfileImage!
-                                      .isNotEmpty)
-                              ? NetworkImage(widget.post
-                                  .ngoProfileImage!)
+                          backgroundColor: widget.themeColor.withValues(
+                            alpha: 0.15,
+                          ),
+                          backgroundImage:
+                              (widget.post.ngoProfileImage != null &&
+                                  widget.post.ngoProfileImage!.isNotEmpty)
+                              ? NetworkImage(widget.post.ngoProfileImage!)
                               : null,
-                          child: (widget.post
-                                          .ngoProfileImage ==
-                                      null ||
-                                  widget.post
-                                      .ngoProfileImage!
-                                      .isEmpty)
+                          child:
+                              (widget.post.ngoProfileImage == null ||
+                                  widget.post.ngoProfileImage!.isEmpty)
                               ? Text(
                                   widget.ngoName.isNotEmpty
-                                      ? widget.ngoName[0]
-                                          .toUpperCase()
+                                      ? widget.ngoName[0].toUpperCase()
                                       : 'N',
                                   style: TextStyle(
-                                    color:
-                                        widget.themeColor,
-                                    fontWeight:
-                                        FontWeight.w900,
+                                    color: widget.themeColor,
+                                    fontWeight: FontWeight.w900,
                                     fontSize: 18,
                                   ),
                                 )
@@ -579,14 +624,12 @@ class _PostCardWidgetState extends State<PostCardWidget> {
                         const SizedBox(width: 14),
                         Expanded(
                           child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 widget.ngoName,
                                 style: const TextStyle(
-                                  fontWeight:
-                                      FontWeight.w800,
+                                  fontWeight: FontWeight.w800,
                                   fontSize: 15.5,
                                   letterSpacing: 0.2,
                                   color: Colors.black87,
@@ -596,11 +639,9 @@ class _PostCardWidgetState extends State<PostCardWidget> {
                               Text(
                                 formattedDate,
                                 style: TextStyle(
-                                  color: Colors
-                                      .grey.shade500,
+                                  color: Colors.grey.shade500,
                                   fontSize: 12.5,
-                                  fontWeight:
-                                      FontWeight.w600,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
@@ -613,30 +654,29 @@ class _PostCardWidgetState extends State<PostCardWidget> {
 
                 if (isMyPost)
                   PopupMenuButton<String>(
-                    icon: Icon(Icons.more_horiz,
-                        color: Colors.grey.shade600),
+                    icon: Icon(Icons.more_horiz, color: Colors.grey.shade600),
                     shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(16)),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     onSelected: (value) {
                       if (value == 'edit') _editPost();
-                      if (value == 'delete')
-                        _deletePost();
+                      if (value == 'delete') _deletePost();
                     },
-                    itemBuilder: (BuildContext context) =>
-                        [
+                    itemBuilder: (BuildContext context) => [
                       const PopupMenuItem(
                         value: 'edit',
                         child: Row(
                           children: [
-                            Icon(Icons.edit_rounded,
-                                size: 20,
-                                color: Colors.black87),
+                            Icon(
+                              Icons.edit_rounded,
+                              size: 20,
+                              color: Colors.black87,
+                            ),
                             SizedBox(width: 12),
-                            Text('Edit',
-                                style: TextStyle(
-                                    fontWeight:
-                                        FontWeight.w600)),
+                            Text(
+                              'Edit',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
                           ],
                         ),
                       ),
@@ -644,16 +684,19 @@ class _PostCardWidgetState extends State<PostCardWidget> {
                         value: 'delete',
                         child: Row(
                           children: [
-                            Icon(Icons.delete_rounded,
-                                size: 20,
-                                color: Colors.redAccent),
+                            Icon(
+                              Icons.delete_rounded,
+                              size: 20,
+                              color: Colors.redAccent,
+                            ),
                             SizedBox(width: 12),
-                            Text('Delete',
-                                style: TextStyle(
-                                    color:
-                                        Colors.redAccent,
-                                    fontWeight:
-                                        FontWeight.w600)),
+                            Text(
+                              'Delete',
+                              style: TextStyle(
+                                color: Colors.redAccent,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -666,20 +709,18 @@ class _PostCardWidgetState extends State<PostCardWidget> {
           // ── Post image ────────────────────────────────
           Container(
             width: double.infinity,
-            constraints:
-                const BoxConstraints(maxHeight: 380),
+            constraints: const BoxConstraints(maxHeight: 380),
             color: Colors.grey.shade50,
             child: Image.network(
               widget.post.image,
               fit: BoxFit.cover,
-              errorBuilder:
-                  (context, error, stackTrace) =>
-                      const Padding(
+              errorBuilder: (context, error, stackTrace) => const Padding(
                 padding: EdgeInsets.all(40.0),
                 child: Icon(
-                    Icons.broken_image_outlined,
-                    size: 50,
-                    color: Colors.grey),
+                  Icons.broken_image_outlined,
+                  size: 50,
+                  color: Colors.grey,
+                ),
               ),
             ),
           ),
@@ -687,19 +728,24 @@ class _PostCardWidgetState extends State<PostCardWidget> {
           // ── Like + Share row ──────────────────────────
           Padding(
             padding: const EdgeInsets.only(
-                left: 16, right: 16, top: 14, bottom: 8),
+              left: 16,
+              right: 16,
+              top: 14,
+              bottom: 8,
+            ),
             child: Row(
               children: [
                 GestureDetector(
                   onTap: _toggleLike,
                   child: AnimatedSwitcher(
-                    duration:
-                        const Duration(milliseconds: 300),
-                    transitionBuilder: (Widget child,
-                        Animation<double> animation) {
-                      return ScaleTransition(
-                          scale: animation, child: child);
-                    },
+                    duration: const Duration(milliseconds: 300),
+                    transitionBuilder:
+                        (Widget child, Animation<double> animation) {
+                          return ScaleTransition(
+                            scale: animation,
+                            child: child,
+                          );
+                        },
                     child: Icon(
                       _isLiked
                           ? Icons.favorite_rounded
@@ -714,8 +760,7 @@ class _PostCardWidgetState extends State<PostCardWidget> {
                 ),
                 const SizedBox(width: 18),
                 GestureDetector(
-                  onTap:
-                      _isSharing ? null : _sharePost,
+                  onTap: _isSharing ? null : _sharePost,
                   child: _isSharing
                       ? SizedBox(
                           height: 24,
@@ -737,34 +782,42 @@ class _PostCardWidgetState extends State<PostCardWidget> {
 
           // ── Likes count + caption ─────────────────────
           Padding(
-            padding: const EdgeInsets.only(
-                left: 16, right: 16, bottom: 20),
+            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   "${widget.post.likes} likes",
                   style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 14.5),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14.5,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 RichText(
                   text: TextSpan(
                     style: const TextStyle(
-                        color: Colors.black87,
-                        fontSize: 14.5,
-                        height: 1.4),
+                      color: Colors.black87,
+                      fontSize: 14.5,
+                      height: 1.4,
+                    ),
                     children: [
                       TextSpan(
                         text: "${widget.ngoName} ",
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w800),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
-                      if (widget.post.donorId.isNotEmpty)
+                      if (widget.showMentions && widget.post.donorId.isNotEmpty)
                         TextSpan(
-                          text:
-                              "${widget.post.donorId} ",
+                          text: "${widget.post.donorId} ",
+                          style: TextStyle(
+                            color: widget.themeColor,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      if (widget.showMentions &&
+                          widget.post.volunteerName.isNotEmpty)
+                        TextSpan(
+                          text: "${widget.post.volunteerName} ",
                           style: TextStyle(
                             color: widget.themeColor,
                             fontWeight: FontWeight.w800,
@@ -772,8 +825,7 @@ class _PostCardWidgetState extends State<PostCardWidget> {
                         ),
                       TextSpan(
                         text: widget.post.description,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w400),
+                        style: const TextStyle(fontWeight: FontWeight.w400),
                       ),
                     ],
                   ),

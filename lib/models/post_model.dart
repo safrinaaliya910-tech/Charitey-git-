@@ -5,6 +5,8 @@ class PostModel {
   final String ngoId; // FIXED TYPO
   final String donorId;
   final String donorUid;
+  final String volunteerName;
+  final String volunteerUid;
   final String? ngoProfileImage;
   final String image;
   final String description;
@@ -16,6 +18,8 @@ class PostModel {
     required this.ngoId,
     required this.donorId,
     this.donorUid = '',
+    this.volunteerName = '',
+    this.volunteerUid = '',
     this.ngoProfileImage,
     required this.image,
     required this.description,
@@ -29,6 +33,8 @@ class PostModel {
       'ngoId': ngoId,
       'donorId': donorId,
       'donorUid': donorUid,
+      'volunteerName': volunteerName,
+      'volunteerUid': volunteerUid,
       'ngoProfileImage': ngoProfileImage,
       'image': image,
       'description': description,
@@ -43,6 +49,8 @@ class PostModel {
       ngoId: map['ngoId'] ?? map['ngold'] ?? '', // Handles old typo data safely
       donorId: map['donorId'] ?? '',
       donorUid: map['donorUid'] ?? '',
+      volunteerName: map['volunteerName'] ?? '',
+      volunteerUid: map['volunteerUid'] ?? '',
       ngoProfileImage: map['ngoProfileImage'] as String?,
       image: map['image'] ?? '',
       description: map['description'] ?? '',

@@ -29,10 +29,31 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     try {
       final user = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
       
+      // 1. Update the original donations collection
       await FirebaseFirestore.instance.collection('donations').doc(donationId).update({
         'status': 'delivery_accepted',
         'assignedVolunteerId': volunteerId, 
       });
+
+      // 👇 NEW: 2. Update the volunteer_requests collection for the Admin Panel 👇
+      // This searches for the pending request involving this specific Donor and NGO and marks it accepted.
+      var requestQuery = await FirebaseFirestore.instance
+          .collection('volunteer_requests')
+          .where('donorId', isEqualTo: donorId)
+          .where('ngoId', isEqualTo: ngoId)
+          .where('status', isEqualTo: 'pending')
+          .limit(1)
+          .get();
+
+      if (requestQuery.docs.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('volunteer_requests')
+            .doc(requestQuery.docs.first.id)
+            .update({
+              'status': 'accepted', // Changes status for Admin Panel!
+              'assignedVolunteer': user!.name, // Records the volunteer's name
+            });
+      }
 
       String notifIdNgo = FirebaseFirestore.instance.collection('notifications').doc().id;
       NotificationModel ngoNotif = NotificationModel(

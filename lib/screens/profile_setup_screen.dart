@@ -18,7 +18,8 @@ class ProfileSetupScreen extends StatefulWidget {
   State<ProfileSetupScreen> createState() => _ProfileSetupScreenState();
 }
 
-class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTickerProviderStateMixin {
+class _ProfileSetupScreenState extends State<ProfileSetupScreen>
+    with SingleTickerProviderStateMixin {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
@@ -47,7 +48,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
 
   // 👇 UPDATED: Calculated total pages accurately for the new Location requirement 👇
   int get _totalPages {
-    if (widget.role == "ngo" || widget.role == "travel_agency" || widget.role == "volunteer") {
+    if (widget.role == "ngo" ||
+        widget.role == "travel_agency" ||
+        widget.role == "volunteer") {
       return 5; // Image, Name, Phone, Location, License
     }
     return 4; // Donors: Image, Name, Phone, Location
@@ -59,7 +62,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
     if (_currentPage == 0) {
       isValid = true;
     } else if (_currentPage == 1) {
-      isValid = nameController.text.trim().isNotEmpty && usernameController.text.trim().isNotEmpty;
+      isValid =
+          nameController.text.trim().isNotEmpty &&
+          usernameController.text.trim().isNotEmpty;
     } else if (_currentPage == 2) {
       isValid = phoneController.text.trim().length == 10;
     } else if (_currentPage == 3) {
@@ -69,7 +74,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
       // License validation only applies to roles with 5 pages
       isValid = licenseController.text.trim().isNotEmpty;
     }
-    
+
     if (_currentPage == _totalPages - 1) {
       return isValid && agreedToTerms;
     }
@@ -87,13 +92,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
       bool hasNumber = RegExp(r'[0-9]').hasMatch(desiredUsername);
       bool hasUnderscore = desiredUsername.contains('_');
       bool hasInvalidChars = RegExp(r'[^a-z0-9_]').hasMatch(desiredUsername);
-      
+
       if (!hasLetter || !hasNumber || !hasUnderscore || hasInvalidChars) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Username must include at least 1 letter, 1 number, and 1 underscore (_). No spaces allowed."),
+            content: Text(
+              "Username must include at least 1 letter, 1 number, and 1 underscore (_). No spaces allowed.",
+            ),
             duration: Duration(seconds: 4),
-          )
+          ),
         );
         return;
       }
@@ -107,7 +114,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
         if (querySnapshot.docs.isNotEmpty) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("The username '@$desiredUsername' is already taken. Please choose another.")),
+              SnackBar(
+                content: Text(
+                  "The username '@$desiredUsername' is already taken. Please choose another.",
+                ),
+              ),
             );
           }
           setState(() => _isCheckingUsername = false);
@@ -115,7 +126,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error checking username: $e")));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Error checking username: $e")),
+          );
         }
         setState(() => _isCheckingUsername = false);
         return;
@@ -145,16 +158,19 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
   }
 
   String _getTermsText() {
+    const generalTerms =
+        "General Terms & Conditions:\n\n28. Charitey is a platform connecting donors, NGOs, and volunteers.\n\n29. Users are responsible for complying with applicable laws.\n\n30. Charitey reserves the right to modify these Terms & Conditions.\n\n31. Continued use of the platform indicates acceptance of the latest policies.\n\nAgreement:\n\nBy selecting \"I Agree\", you confirm that you have read, understood, and accepted these Terms & Conditions.";
+
     if (widget.role == 'ngo') {
-      return "NGO Terms & Conditions:\n\n1. Accuracy: You agree to provide accurate and truthful information regarding your organization and its operations.\n\n2. Usage of Donations: You agree to use donated food and products strictly for charitable purposes and not for resale or profit.\n\n3. Volunteer Arrangement: You are fully responsible for arranging your own volunteers for the pickup of donations from the donor's location.\n\n4. Platform Misuse: Any misuse of the platform, fraudulent requests, or harassment of donors will result in an immediate ban.\n\n5. Liability: Charitey is a facilitating platform and is not liable for the quality of food or products provided by donors.";
+      return "NGO Terms & Conditions:\n\n11. Organization details and documents submitted are genuine and accurate.\n\n12. Donations will only be used for charitable purposes.\n\n13. Accepted donations will be collected within the agreed timeframe.\n\n14. Donated items will not be resold or misused.\n\n15. You will maintain respectful communication with donors and volunteers.\n\n16. Donor information will remain confidential.\n\n17. Any disputes or suspicious activities will be reported to Charitey.\n\n18. Charitey may verify your organization at any time.\n\n19. Policy violations may result in suspension or permanent removal.\n\n$generalTerms";
     } else if (widget.role == 'donor') {
-      return "Donor Terms & Conditions:\n\n1. Quality of Goods: You agree that all food and products donated are safe, hygienic, and in good condition.\n\n2. Accurate Information: You agree to provide an accurate pickup location and reliable contact information.\n\n3. Commitment: You understand that once a donation is accepted by an NGO, you should not cancel the request without a valid and urgent reason.\n\n4. Respect & Privacy: You agree to treat NGOs and their volunteers with respect and maintain their privacy.\n\n5. Liability: You donate at your own free will. Charitey is not responsible for any incidents occurring during the handover process.";
+      return "Donor Terms & Conditions:\n\n1. All donated items are safe, clean, legal, and in usable condition.\n\n2. Food donations are hygienically prepared and safe for consumption.\n\n3. You will provide accurate donation, pickup, and contact details.\n\n4. You will be available during the agreed pickup schedule.\n\n5. You will not cancel an accepted donation without a valid reason.\n\n6. You will not donate expired, damaged, hazardous, or prohibited items.\n\n7. You will communicate respectfully with NGOs and volunteers.\n\n8. False information or misuse may result in account suspension.\n\n9. Charitey may verify donations before approval.\n\n10. Repeated policy violations may lead to permanent account removal.\n\n$generalTerms";
     } else if (widget.role == 'travel_agency') {
-      return "Travel Agency Terms & Conditions:\n\n1. Timeliness: You agree to transport donations safely and timely to the designated NGO locations.\n\n2. Vehicle Information: You must provide accurate vehicle, driver, and tracking details to ensure transparency.\n\n3. No Hidden Fees: You agree to not charge extra fees outside the initial platform agreement.\n\n4. Goods Handling: You are responsible for handling all donated items with extreme care to prevent damage or spoilage during transit.";
+      return "Travel Agency Terms & Conditions:\n\n1. Timeliness: You agree to transport donations safely and timely to the designated NGO locations.\n\n2. Vehicle Information: You must provide accurate vehicle, driver, and tracking details to ensure transparency.\n\n3. No Hidden Fees: You agree to not charge extra fees outside the initial platform agreement.\n\n4. Goods Handling: You are responsible for handling all donated items with extreme care to prevent damage or spoilage during transit.\n\n$generalTerms";
     } else if (widget.role == 'volunteer') {
-      return "Volunteer Terms & Conditions:\n\n1. Reliability: You agree to strictly adhere to the schedule provided for donation pickups.\n\n2. Verification: You must present a valid ID to donors upon request for security purposes.\n\n3. Care: You agree to handle all donated items with care and ensure they reach the NGO exactly as they were provided.\n\n4. Conduct: Professional and polite conduct is expected at all times when interacting with Donors and NGOs.";
+      return "Volunteer Terms & Conditions:\n\n20. You will complete assigned pickups and deliveries responsibly.\n\n21. You will handle donated items carefully and safely.\n\n22. You will not request money, gifts, or personal benefits.\n\n23. You will maintain professional and respectful behaviour.\n\n24. You will protect the privacy of donors and NGOs.\n\n25. You will report accidents, delays, or issues immediately.\n\n26. You will follow Charitey's safety guidelines and platform policies.\n\n27. Misconduct or repeated cancellations may result in suspension.\n\n$generalTerms";
     }
-    return "General Terms & Conditions:\n\n1. You agree to use the platform responsibly.\n2. Be respectful to other users.";
+    return generalTerms;
   }
 
   void _showTermsPopup() {
@@ -164,7 +180,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
       builder: (context) {
         return Dialog(
           backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
           elevation: 10,
           child: Container(
             constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
@@ -190,7 +208,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                   ],
                 ),
                 const SizedBox(height: 16),
-                const Divider(height: 1, thickness: 1, color: Color(0xFFF0F0F0)),
+                const Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: Color(0xFFF0F0F0),
+                ),
                 const SizedBox(height: 16),
                 Flexible(
                   child: SingleChildScrollView(
@@ -207,7 +229,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Divider(height: 1, thickness: 1, color: Color(0xFFF0F0F0)),
+                const Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: Color(0xFFF0F0F0),
+                ),
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
@@ -215,7 +241,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                     TextButton(
                       onPressed: () => Navigator.pop(context),
                       style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                       ),
                       child: Text(
                         "Close",
@@ -236,14 +265,20 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                         backgroundColor: themeColor,
                         foregroundColor: Colors.white,
                         elevation: 0,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
                       child: const Text(
                         "I Agree",
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
                       ),
                     ),
                   ],
@@ -268,11 +303,18 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
         foregroundColor: Colors.black87,
         title: Text(
           "${widget.role.toUpperCase().replaceAll('_', ' ')} SETUP",
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.2),
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            letterSpacing: 1.2,
+          ),
         ),
         centerTitle: true,
         leading: _currentPage > 0
-            ? IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded), onPressed: _previousPage)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                onPressed: _previousPage,
+              )
             : null,
         actions: [
           TextButton(
@@ -282,7 +324,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                 (Route<dynamic> route) => false,
               );
             },
-            child: Text("Skip", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade500)),
+            child: Text(
+              "Skip",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade500,
+              ),
+            ),
           ),
         ],
       ),
@@ -291,18 +339,35 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
           Positioned(
             top: -100,
             right: -80,
-            child: Container(width: 300, height: 300, decoration: BoxDecoration(color: themeColor.withValues(alpha: 0.1), shape: BoxShape.circle)),
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                color: themeColor.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+            ),
           ),
           Positioned(
             bottom: 50,
             left: -100,
-            child: Container(width: 250, height: 250, decoration: BoxDecoration(color: themeColor.withValues(alpha: 0.05), shape: BoxShape.circle)),
+            child: Container(
+              width: 250,
+              height: 250,
+              decoration: BoxDecoration(
+                color: themeColor.withValues(alpha: 0.05),
+                shape: BoxShape.circle,
+              ),
+            ),
           ),
           SafeArea(
             child: Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 10.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24.0,
+                    vertical: 10.0,
+                  ),
                   child: Row(
                     children: List.generate(
                       _totalPages,
@@ -312,7 +377,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                           margin: const EdgeInsets.symmetric(horizontal: 4.0),
                           height: 6,
                           decoration: BoxDecoration(
-                            color: index <= _currentPage ? themeColor : Colors.grey.shade300,
+                            color: index <= _currentPage
+                                ? themeColor
+                                : Colors.grey.shade300,
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
@@ -324,7 +391,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                   child: PageView(
                     controller: _pageController,
                     physics: const NeverScrollableScrollPhysics(),
-                    onPageChanged: (int page) => setState(() => _currentPage = page),
+                    onPageChanged: (int page) =>
+                        setState(() => _currentPage = page),
                     children: pages,
                   ),
                 ),
@@ -333,7 +401,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 20, offset: const Offset(0, -10))],
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 20,
+                        offset: const Offset(0, -10),
+                      ),
+                    ],
                   ),
                   child: SafeArea(
                     top: false,
@@ -342,7 +416,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                       children: [
                         if (_currentPage == _totalPages - 1)
                           Padding(
-                            padding: const EdgeInsets.only(bottom: 16.0, left: 4.0, right: 4.0),
+                            padding: const EdgeInsets.only(
+                              bottom: 16.0,
+                              left: 4.0,
+                              right: 4.0,
+                            ),
                             child: Row(
                               children: [
                                 SizedBox(
@@ -351,7 +429,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                                   child: Checkbox(
                                     value: agreedToTerms,
                                     activeColor: themeColor,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
                                     onChanged: (val) {
                                       setState(() {
                                         agreedToTerms = val ?? false;
@@ -366,14 +446,19 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                                     child: RichText(
                                       text: TextSpan(
                                         text: "I have read and agree to the ",
-                                        style: TextStyle(color: Colors.grey.shade700, fontSize: 13, height: 1.4),
+                                        style: TextStyle(
+                                          color: Colors.grey.shade700,
+                                          fontSize: 13,
+                                          height: 1.4,
+                                        ),
                                         children: [
                                           TextSpan(
                                             text: "Terms & Conditions",
                                             style: TextStyle(
                                               color: themeColor,
                                               fontWeight: FontWeight.bold,
-                                              decoration: TextDecoration.underline,
+                                              decoration:
+                                                  TextDecoration.underline,
                                             ),
                                           ),
                                         ],
@@ -395,18 +480,37 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                               disabledForegroundColor: Colors.grey.shade500,
                               elevation: _isCurrentPageValid ? 4 : 0,
                               shadowColor: themeColor.withValues(alpha: 0.4),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
                             ),
-                            onPressed: (_isCurrentPageValid && !_isCheckingUsername) ? _nextPage : null,
+                            onPressed:
+                                (_isCurrentPageValid && !_isCheckingUsername)
+                                ? _nextPage
+                                : null,
                             child: _isCheckingUsername
-                                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                                : Text(_getButtonText(), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(
+                                    _getButtonText(),
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.2,
+                                    ),
+                                  ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                )
+                ),
               ],
             ),
           ),
@@ -416,7 +520,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
   }
 
   String _getButtonText() {
-    if (_currentPage == 0 && _selectedImage == null && _selectedImageBytes == null) return "SKIP PHOTO";
+    if (_currentPage == 0 &&
+        _selectedImage == null &&
+        _selectedImageBytes == null)
+      return "SKIP PHOTO";
     if (_currentPage == _totalPages - 1) return "COMPLETE SETUP";
     return "CONTINUE";
   }
@@ -427,15 +534,22 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
       _buildImageStep(),
       _buildNameStep(),
       _buildPhoneStep(),
-      _buildAddressStep() // ALL ROLES NOW GET LOCATION
+      _buildAddressStep(), // ALL ROLES NOW GET LOCATION
     ];
-    if (widget.role == "ngo" || widget.role == "travel_agency" || widget.role == "volunteer") {
+    if (widget.role == "ngo" ||
+        widget.role == "travel_agency" ||
+        widget.role == "volunteer") {
       pages.add(_buildLicenseStep());
     }
     return pages;
   }
 
-  Widget _buildStepContainer({required String title, required String subtitle, required Widget child, IconData? icon}) {
+  Widget _buildStepContainer({
+    required String title,
+    required String subtitle,
+    required Widget child,
+    IconData? icon,
+  }) {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -450,7 +564,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                   decoration: BoxDecoration(
                     color: Colors.white,
                     shape: BoxShape.circle,
-                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 15, offset: const Offset(0, 5))]
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 15,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
                   ),
                   child: Icon(icon, size: 40, color: themeColor),
                 ),
@@ -459,13 +579,22 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
             ],
             Text(
               title,
-              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: Color(0xFF2D3142), height: 1.2),
+              style: const TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF2D3142),
+                height: 1.2,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               subtitle,
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade600, height: 1.4),
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+                height: 1.4,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -511,15 +640,38 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                 decoration: BoxDecoration(
                   color: Colors.white,
                   shape: BoxShape.circle,
-                  border: Border.all(color: themeColor.withValues(alpha: 0.2), width: 4),
-                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 20, offset: const Offset(0, 10))],
+                  border: Border.all(
+                    color: themeColor.withValues(alpha: 0.2),
+                    width: 4,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
                 ),
                 child: ClipOval(
                   child: (_selectedImage == null && _selectedImageBytes == null)
-                      ? Icon(Icons.person_rounded, size: 70, color: Colors.grey.shade300)
+                      ? Icon(
+                          Icons.person_rounded,
+                          size: 70,
+                          color: Colors.grey.shade300,
+                        )
                       : kIsWeb
-                          ? Image.memory(_selectedImageBytes!, width: 140, height: 140, fit: BoxFit.cover)
-                          : Image.file(_selectedImage!, width: 140, height: 140, fit: BoxFit.cover),
+                      ? Image.memory(
+                          _selectedImageBytes!,
+                          width: 140,
+                          height: 140,
+                          fit: BoxFit.cover,
+                        )
+                      : Image.file(
+                          _selectedImage!,
+                          width: 140,
+                          height: 140,
+                          fit: BoxFit.cover,
+                        ),
                 ),
               ),
               Container(
@@ -529,7 +681,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 3),
                 ),
-                child: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 20),
+                child: const Icon(
+                  Icons.camera_alt_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
               ),
             ],
           ),
@@ -551,7 +707,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: TextField(
         controller: controller,
@@ -559,36 +721,65 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
         keyboardType: keyboardType,
         maxLength: maxLength,
         inputFormatters: inputFormatters,
-        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.black87),
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          color: Colors.black87,
+        ),
         decoration: InputDecoration(
           counterText: '',
           labelText: label,
           hintText: hint,
           labelStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
-          hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.normal, fontSize: 14),
+          hintStyle: TextStyle(
+            color: Colors.grey.shade400,
+            fontWeight: FontWeight.normal,
+            fontSize: 14,
+          ),
           prefixIcon: Icon(icon, color: themeColor, size: 20),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
           filled: true,
           fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 16,
+          ),
         ),
       ),
     );
   }
 
   Widget _buildNameStep() {
-    String label = widget.role == "ngo" ? "NGO Name" : (widget.role == "travel_agency" ? "Agency Name" : "Full Name");
+    String label = widget.role == "ngo"
+        ? "NGO Name"
+        : (widget.role == "travel_agency" ? "Agency Name" : "Full Name");
     return _buildStepContainer(
       title: "What's your name?",
       subtitle: "Let us know how to address you",
       icon: Icons.badge_rounded,
       child: Column(
         children: [
-          _buildTextField(controller: nameController, label: label, hint: "Enter $label", icon: Icons.person_outline_rounded),
+          _buildTextField(
+            controller: nameController,
+            label: label,
+            hint: "Enter $label",
+            icon: Icons.person_outline_rounded,
+          ),
           const SizedBox(height: 12),
-          _buildTextField(controller: usernameController, label: "Unique Username", hint: "e.g. safrin_99", icon: Icons.alternate_email_rounded),
+          _buildTextField(
+            controller: usernameController,
+            label: "Unique Username",
+            hint: "e.g. safrin_99",
+            icon: Icons.alternate_email_rounded,
+          ),
           const SizedBox(height: 6),
-          Text("Must include 1 letter, 1 number, and 1 underscore.", style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+          Text(
+            "Must include 1 letter, 1 number, and 1 underscore.",
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+          ),
         ],
       ),
     );
@@ -616,17 +807,31 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
       title: "Location",
       subtitle: "What is your city or base of operations?",
       icon: Icons.location_on_rounded,
-      child: _buildTextField(controller: addressController, label: "City / Area", hint: "Enter city name", icon: Icons.home_outlined),
+      child: _buildTextField(
+        controller: addressController,
+        label: "City / Area",
+        hint: "Enter city name",
+        icon: Icons.home_outlined,
+      ),
     );
   }
 
   Widget _buildLicenseStep() {
-    String label = widget.role == "volunteer" ? "Driving License ID" : (widget.role == "travel_agency" ? "Registration No." : "NGO License ID");
+    String label = widget.role == "volunteer"
+        ? "Driving License ID"
+        : (widget.role == "travel_agency"
+              ? "Registration No."
+              : "NGO License ID");
     return _buildStepContainer(
       title: "Verification",
       subtitle: "Please provide your $label for trust and verification",
       icon: Icons.verified_user_rounded,
-      child: _buildTextField(controller: licenseController, label: label, hint: "Enter $label", icon: Icons.credit_card_outlined),
+      child: _buildTextField(
+        controller: licenseController,
+        label: label,
+        hint: "Enter $label",
+        icon: Icons.credit_card_outlined,
+      ),
     );
   }
 
@@ -637,15 +842,26 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> with SingleTick
     String? profileImageUrl;
 
     if (_selectedImage != null || _selectedImageBytes != null) {
-      profileImageUrl = await StorageService().uploadImage(_selectedImage, _selectedImageBytes);
+      profileImageUrl = await StorageService().uploadImage(
+        _selectedImage,
+        _selectedImageBytes,
+      );
     }
 
     await authProvider.updateProfile(
-      name: nameController.text.trim().isNotEmpty ? nameController.text.trim() : null,
+      name: nameController.text.trim().isNotEmpty
+          ? nameController.text.trim()
+          : null,
       username: finalUsername.isNotEmpty ? finalUsername : null,
-      phone: phoneController.text.trim().isNotEmpty ? phoneController.text.trim() : null,
-      location: addressController.text.trim().isNotEmpty ? addressController.text.trim() : null,
-      license: licenseController.text.trim().isNotEmpty ? licenseController.text.trim() : null,
+      phone: phoneController.text.trim().isNotEmpty
+          ? phoneController.text.trim()
+          : null,
+      location: addressController.text.trim().isNotEmpty
+          ? addressController.text.trim()
+          : null,
+      license: licenseController.text.trim().isNotEmpty
+          ? licenseController.text.trim()
+          : null,
       profileImage: profileImageUrl,
     );
 

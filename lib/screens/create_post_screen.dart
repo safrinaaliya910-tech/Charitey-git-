@@ -15,16 +15,16 @@ class CreatePostScreen extends StatefulWidget {
   const CreatePostScreen({Key? key}) : super(key: key);
 
   @override
-  State<CreatePostScreen> createState() =>
-      _CreatePostScreenState();
+  State<CreatePostScreen> createState() => _CreatePostScreenState();
 }
 
 class _CreatePostScreenState extends State<CreatePostScreen> {
-  final TextEditingController _descriptionController =
-      TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
 
   String _selectedDonorName = '';
   String _selectedDonorUid = '';
+  String _selectedVolunteerName = '';
+  String _selectedVolunteerUid = '';
 
   File? _selectedImage;
   Uint8List? _webImage;
@@ -40,8 +40,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   }
 
   Future<void> _pickImage() async {
-    final picked =
-        await _picker.pickImage(source: ImageSource.gallery);
+    final picked = await _picker.pickImage(source: ImageSource.gallery);
     if (picked != null) {
       if (kIsWeb) {
         _webImage = await picked.readAsBytes();
@@ -57,14 +56,13 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         _descriptionController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text(
-                'Please select an image and write a description.')),
+          content: Text('Please select an image and write a description.'),
+        ),
       );
       return;
     }
 
-    final authProvider =
-        Provider.of<AuthProvider>(context, listen: false);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUserModel;
     if (user == null) return;
 
@@ -74,15 +72,15 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       final storageService = StorageService();
       String? imageUrl;
 
-      imageUrl = await storageService.uploadImage(
-          _selectedImage, _webImage);
+      imageUrl = await storageService.uploadImage(_selectedImage, _webImage);
 
       if (imageUrl == null || imageUrl.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                  "Image upload failed. Please check your connection and try again."),
+                "Image upload failed. Please check your connection and try again.",
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -91,10 +89,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         return;
       }
 
-      String postId = FirebaseFirestore.instance
-          .collection('posts')
-          .doc()
-          .id;
+      String postId = FirebaseFirestore.instance.collection('posts').doc().id;
 
       PostModel newPost = PostModel(
         postId: postId,
@@ -104,6 +99,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         ngoProfileImage: user.profileImage,
         donorId: _selectedDonorName,
         donorUid: _selectedDonorUid,
+        volunteerName: _selectedVolunteerName,
+        volunteerUid: _selectedVolunteerUid,
         image: imageUrl,
         description: _descriptionController.text.trim(),
         likes: 0,
@@ -115,73 +112,98 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           .doc(postId)
           .set(newPost.toMap());
 
-      // Notify tagged donor
+      // Notify tagged users (donor and volunteer)
+      final recipients = <Map<String, String>>[];
       if (_selectedDonorUid.isNotEmpty) {
+        recipients.add({'uid': _selectedDonorUid, 'name': _selectedDonorName});
+        print(
+          'DEBUG: Added donor - uid: $_selectedDonorUid, name: $_selectedDonorName',
+        );
+      }
+      if (_selectedVolunteerUid.isNotEmpty) {
+        recipients.add({
+          'uid': _selectedVolunteerUid,
+          'name': _selectedVolunteerName,
+        });
+        print(
+          'DEBUG: Added volunteer - uid: $_selectedVolunteerUid, name: $_selectedVolunteerName',
+        );
+      }
+
+      print('DEBUG: Total recipients to notify: ${recipients.length}');
+      for (int i = 0; i < recipients.length; i++) {
+        final recipient = recipients[i];
+        final uid = recipient['uid'] ?? '';
+        print('DEBUG: Processing recipient $i - uid: $uid');
+        if (uid.isEmpty) {
+          print('DEBUG: Skipping recipient $i - empty uid');
+          continue;
+        }
         String notifId = FirebaseFirestore.instance
             .collection('notifications')
             .doc()
             .id;
         NotificationModel notification = NotificationModel(
           id: notifId,
-          receiverId: _selectedDonorUid,
+          receiverId: uid,
           senderId: user.uid,
           senderName: user.name,
           title: "You were tagged in a post!",
-          message:
-              "${user.name} tagged you in their Impact Gallery.",
+          message: "${user.name} tagged you in their Impact Gallery.",
           type: 'tag',
           relatedItemId: postId,
           createdAt: DateTime.now(),
           isRead: false,
         );
+        print('DEBUG: Sending notification to recipient $i (uid: $uid)');
         await FirestoreService().sendNotification(notification);
+        print('DEBUG: Notification sent to recipient $i');
       }
+      print('DEBUG: All notifications sent');
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content:
-              Text('🎉 Post published to Impact Gallery!'),
+          content: Text('🎉 Post published to Impact Gallery!'),
           backgroundColor: Colors.green,
         ),
       );
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: $e")));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   /// Searches users by username (strips leading '@').
-  Future<List<Map<String, String>>> _searchUsers(
-      String query) async {
+  Future<List<Map<String, String>>> _searchUsers(String query) async {
     if (query.isEmpty) return [];
 
-    String safeQuery =
-        query.replaceAll('@', '').toLowerCase();
+    String safeQuery = query.replaceAll('@', '').toLowerCase();
 
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection('users')
-          .where('username',
-              isGreaterThanOrEqualTo: safeQuery)
-          .where('username',
-              isLessThanOrEqualTo: '$safeQuery\uf8ff')
+          .where('username', isGreaterThanOrEqualTo: safeQuery)
+          .where('username', isLessThanOrEqualTo: '$safeQuery\uf8ff')
           .limit(5)
           .get();
 
-      return snapshot.docs.map((doc) {
-        var data = doc.data();
-        return {
-          'uid': doc.id,
-          'name': data['name'] as String? ?? 'Unknown',
-          'username':
-              data['username'] as String? ?? '',
-        };
-      }).where((u) => u['username']!.isNotEmpty).toList();
+      return snapshot.docs
+          .map((doc) {
+            var data = doc.data();
+            return {
+              'uid': doc.id,
+              'name': data['name'] as String? ?? 'Unknown',
+              'username': data['username'] as String? ?? '',
+            };
+          })
+          .where((u) => u['username']!.isNotEmpty)
+          .toList();
     } catch (e) {
       debugPrint("Search error: $e");
       return [];
@@ -197,15 +219,16 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              size: 22, color: Colors.black87),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            size: 22,
+            color: Colors.black87,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
           "New Post",
-          style: TextStyle(
-              color: Colors.black87,
-              fontWeight: FontWeight.bold),
+          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
         ),
       ),
       body: SingleChildScrollView(
@@ -222,37 +245,30 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 decoration: BoxDecoration(
                   color: Colors.grey.shade200,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                      color: Colors.grey.shade300,
-                      width: 2),
+                  border: Border.all(color: Colors.grey.shade300, width: 2),
                 ),
-                child: _selectedImage != null ||
-                        _webImage != null
+                child: _selectedImage != null || _webImage != null
                     ? ClipRRect(
-                        borderRadius:
-                            BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(14),
                         child: kIsWeb
-                            ? Image.memory(_webImage!,
-                                fit: BoxFit.cover)
-                            : Image.file(_selectedImage!,
-                                fit: BoxFit.cover),
+                            ? Image.memory(_webImage!, fit: BoxFit.cover)
+                            : Image.file(_selectedImage!, fit: BoxFit.cover),
                       )
                     : Column(
-                        mainAxisAlignment:
-                            MainAxisAlignment.center,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                              Icons.add_a_photo_outlined,
-                              size: 50,
-                              color: themeColor),
+                            Icons.add_a_photo_outlined,
+                            size: 50,
+                            color: themeColor,
+                          ),
                           const SizedBox(height: 12),
                           Text(
                             "Tap to upload a photo",
                             style: TextStyle(
-                                color:
-                                    Colors.grey.shade600,
-                                fontWeight:
-                                    FontWeight.bold),
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ],
                       ),
@@ -263,108 +279,190 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             // ── Tag donor (autocomplete) ─────────────────
             const Text(
               "Tag Donor (Optional)",
-              style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
             const SizedBox(height: 8),
             Autocomplete<Map<String, String>>(
-              optionsBuilder:
-                  (TextEditingValue textEditingValue) async {
+              optionsBuilder: (TextEditingValue textEditingValue) async {
                 if (textEditingValue.text == '') {
-                  return const Iterable<
-                      Map<String, String>>.empty();
+                  return const Iterable<Map<String, String>>.empty();
                 }
-                return await _searchUsers(
-                    textEditingValue.text);
+                return await _searchUsers(textEditingValue.text);
               },
-              displayStringForOption:
-                  (Map<String, String> option) =>
-                      "@${option['username']}",
+              displayStringForOption: (Map<String, String> option) =>
+                  "@${option['username']}",
               onSelected: (Map<String, String> selection) {
                 setState(() {
-                  _selectedDonorName =
-                      "@${selection['username']}";
+                  _selectedDonorName = "@${selection['username']}";
                   _selectedDonorUid = selection['uid']!;
                 });
               },
-              fieldViewBuilder: (context, controller,
-                  focusNode, onEditingComplete) {
-                return TextFormField(
-                  controller: controller,
-                  focusNode: focusNode,
-                  onEditingComplete: onEditingComplete,
-                  decoration: InputDecoration(
-                    hintText: "Search @username...",
-                    prefixIcon: Icon(
-                        Icons.alternate_email_rounded,
-                        color: Colors.grey.shade500),
-                    filled: true,
-                    fillColor: Colors.white,
-                    contentPadding:
-                        const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 16),
-                    border: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                            color: Colors.grey.shade300)),
-                    enabledBorder: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                            color: Colors.grey.shade300)),
-                    focusedBorder: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                            color: themeColor)),
-                  ),
-                );
-              },
-              optionsViewBuilder:
-                  (context, onSelected, options) {
+              fieldViewBuilder:
+                  (context, controller, focusNode, onEditingComplete) {
+                    return TextFormField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      onEditingComplete: onEditingComplete,
+                      decoration: InputDecoration(
+                        hintText: "Search @username...",
+                        prefixIcon: Icon(
+                          Icons.alternate_email_rounded,
+                          color: Colors.grey.shade500,
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 16,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: themeColor),
+                        ),
+                      ),
+                    );
+                  },
+              optionsViewBuilder: (context, onSelected, options) {
                 return Align(
                   alignment: Alignment.topLeft,
                   child: Material(
                     elevation: 4.0,
-                    borderRadius:
-                        BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(12),
                     child: Container(
-                      width:
-                          MediaQuery.of(context).size.width -
-                              40,
-                      constraints: const BoxConstraints(
-                          maxHeight: 200),
+                      width: MediaQuery.of(context).size.width - 40,
+                      constraints: const BoxConstraints(maxHeight: 200),
                       decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius:
-                              BorderRadius.circular(12)),
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       child: ListView.builder(
                         padding: const EdgeInsets.all(8),
                         itemCount: options.length,
                         shrinkWrap: true,
-                        itemBuilder:
-                            (BuildContext context,
-                                int index) {
-                          final option =
-                              options.elementAt(index);
+                        itemBuilder: (BuildContext context, int index) {
+                          final option = options.elementAt(index);
                           return ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: themeColor
-                                  .withValues(alpha: 0.1),
-                              child: Icon(Icons.person,
-                                  color: themeColor),
+                              backgroundColor: themeColor.withValues(
+                                alpha: 0.1,
+                              ),
+                              child: Icon(Icons.person, color: themeColor),
                             ),
                             title: Text(
                               "@${option['username']}",
                               style: const TextStyle(
-                                  fontWeight:
-                                      FontWeight.bold,
-                                  fontSize: 16),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
                             ),
-                            onTap: () =>
-                                onSelected(option),
+                            onTap: () => onSelected(option),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+
+            const SizedBox(height: 20),
+
+            // ── Tag volunteer (autocomplete) ──────────────
+            const Text(
+              "Tag Volunteer (Optional)",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            Autocomplete<Map<String, String>>(
+              optionsBuilder: (TextEditingValue textEditingValue) async {
+                if (textEditingValue.text == '') {
+                  return const Iterable<Map<String, String>>.empty();
+                }
+                return await _searchUsers(textEditingValue.text);
+              },
+              displayStringForOption: (Map<String, String> option) =>
+                  "@${option['username']}",
+              onSelected: (Map<String, String> selection) {
+                setState(() {
+                  _selectedVolunteerName = "@${selection['username']}";
+                  _selectedVolunteerUid = selection['uid']!;
+                });
+              },
+              fieldViewBuilder:
+                  (context, controller, focusNode, onEditingComplete) {
+                    return TextFormField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      onEditingComplete: onEditingComplete,
+                      decoration: InputDecoration(
+                        hintText: "Search @username...",
+                        prefixIcon: Icon(
+                          Icons.volunteer_activism_rounded,
+                          color: Colors.grey.shade500,
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 16,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: themeColor),
+                        ),
+                      ),
+                    );
+                  },
+              optionsViewBuilder: (context, onSelected, options) {
+                return Align(
+                  alignment: Alignment.topLeft,
+                  child: Material(
+                    elevation: 4.0,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      width: MediaQuery.of(context).size.width - 40,
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(8),
+                        itemCount: options.length,
+                        shrinkWrap: true,
+                        itemBuilder: (BuildContext context, int index) {
+                          final option = options.elementAt(index);
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: themeColor.withValues(
+                                alpha: 0.1,
+                              ),
+                              child: Icon(Icons.person, color: themeColor),
+                            ),
+                            title: Text(
+                              "@${option['username']}",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            onTap: () => onSelected(option),
                           );
                         },
                       ),
@@ -379,34 +477,28 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             // ── Description ──────────────────────────────
             const Text(
               "Description",
-              style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
             const SizedBox(height: 8),
             TextFormField(
               controller: _descriptionController,
               maxLines: 4,
               decoration: InputDecoration(
-                hintText:
-                    "Write a caption about this impact...",
+                hintText: "Write a caption about this impact...",
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(
-                    borderRadius:
-                        BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                        color: Colors.grey.shade300)),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
                 enabledBorder: OutlineInputBorder(
-                    borderRadius:
-                        BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                        color: Colors.grey.shade300)),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
                 focusedBorder: OutlineInputBorder(
-                    borderRadius:
-                        BorderRadius.circular(12),
-                    borderSide:
-                        BorderSide(color: themeColor)),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: themeColor),
+                ),
               ),
             ),
             const SizedBox(height: 40),

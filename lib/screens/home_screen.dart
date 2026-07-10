@@ -26,11 +26,8 @@ import 'volunteer_dashboard.dart'; // <-- Make sure this is imported!
 class HomeScreen extends StatefulWidget {
   final int initialIndex;
   final String? targetPostId;
-  const HomeScreen({
-    Key? key,
-    this.initialIndex = 0,
-    this.targetPostId
-  }) : super(key: key);
+  const HomeScreen({Key? key, this.initialIndex = 0, this.targetPostId})
+    : super(key: key);
 
   @override
   State<HomeScreen> createState() => HomeScreenState();
@@ -46,7 +43,10 @@ class HomeScreenState extends State<HomeScreen> {
     _currentIndex = widget.initialIndex;
     targetPostId = widget.targetPostId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final user = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
+      final user = Provider.of<AuthProvider>(
+        context,
+        listen: false,
+      ).currentUserModel;
       if (user != null && user.role == 'ngo') {
         FirestoreService().cleanUpExpiredRequests(user.uid);
       }
@@ -87,10 +87,22 @@ class HomeScreenState extends State<HomeScreen> {
       ];
       navItems = const [
         BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.bar_chart_rounded), label: 'Activity'),
-        BottomNavigationBarItem(icon: Icon(Icons.add_circle_rounded), label: 'Request'),
-        BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_rounded), label: 'Chat'),
-        BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.bar_chart_rounded),
+          label: 'Activity',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.add_circle_rounded),
+          label: 'Request',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.chat_bubble_rounded),
+          label: 'Chat',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person_rounded),
+          label: 'Profile',
+        ),
       ];
     }
     // --- 2. TRAVEL AGENCY ROLE ---
@@ -104,10 +116,22 @@ class HomeScreenState extends State<HomeScreen> {
       ];
       navItems = const [
         BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.bar_chart_rounded), label: 'Activity'),
-        BottomNavigationBarItem(icon: Icon(Icons.local_shipping_rounded), label: 'Deliveries'),
-        BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_rounded), label: 'Chat'),
-        BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.bar_chart_rounded),
+          label: 'Activity',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.local_shipping_rounded),
+          label: 'Deliveries',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.chat_bubble_rounded),
+          label: 'Chat',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person_rounded),
+          label: 'Profile',
+        ),
       ];
     }
     // 👇 3. NEW: VOLUNTEER ROLE 👇
@@ -121,10 +145,22 @@ class HomeScreenState extends State<HomeScreen> {
       ];
       navItems = const [
         BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.bar_chart_rounded), label: 'Activity'),
-        BottomNavigationBarItem(icon: Icon(Icons.directions_car_rounded), label: 'Tasks'),
-        BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_rounded), label: 'Chat'),
-        BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.bar_chart_rounded),
+          label: 'Activity',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.directions_car_rounded),
+          label: 'Tasks',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.chat_bubble_rounded),
+          label: 'Chat',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person_rounded),
+          label: 'Profile',
+        ),
       ];
     }
     // --- 4. DONOR ROLE (Default) ---
@@ -138,10 +174,22 @@ class HomeScreenState extends State<HomeScreen> {
       ];
       navItems = const [
         BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.bar_chart_rounded), label: 'Activity'),
-        BottomNavigationBarItem(icon: Icon(Icons.favorite_rounded), label: 'Donate'),
-        BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_rounded), label: 'Chat'),
-        BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.bar_chart_rounded),
+          label: 'Activity',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.favorite_rounded),
+          label: 'Donate',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.chat_bubble_rounded),
+          label: 'Chat',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person_rounded),
+          label: 'Profile',
+        ),
       ];
     }
 
@@ -151,7 +199,7 @@ class HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFFAFAFA),
-      extendBody: true, 
+      extendBody: true,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -172,7 +220,7 @@ class HomeScreenState extends State<HomeScreen> {
                 ],
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(20), 
+                borderRadius: BorderRadius.circular(20),
                 child: Image.asset(
                   'assets/dove_icon.png',
                   height: 40,
@@ -193,10 +241,10 @@ class HomeScreenState extends State<HomeScreen> {
             const Text(
               "CHARITEY",
               style: TextStyle(
-                color: Color(0xFF7D444C), 
-                fontSize: 18, 
-                fontWeight: FontWeight.bold, 
-                letterSpacing: 1.2
+                color: Color(0xFF7D444C),
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
               ),
             ),
           ],
@@ -207,12 +255,18 @@ class HomeScreenState extends State<HomeScreen> {
             builder: (context, snapshot) {
               bool hasUnread = false;
               if (snapshot.hasData) {
-                hasUnread = snapshot.data!.any((notification) => !notification.isRead);
+                hasUnread = snapshot.data!.any(
+                  (notification) => !notification.isRead,
+                );
               }
               return IconButton(
                 icon: Stack(
                   children: [
-                    const Icon(Icons.notifications_none_rounded, color: Colors.black87, size: 26),
+                    const Icon(
+                      Icons.notifications_none_rounded,
+                      color: Colors.black87,
+                      size: 26,
+                    ),
                     if (hasUnread)
                       Positioned(
                         right: 2,
@@ -224,7 +278,11 @@ class HomeScreenState extends State<HomeScreen> {
                             color: Colors.red,
                             shape: BoxShape.circle,
                             boxShadow: [
-                              BoxShadow(color: Colors.white, spreadRadius: 1, blurRadius: 1)
+                              BoxShadow(
+                                color: Colors.white,
+                                spreadRadius: 1,
+                                blurRadius: 1,
+                              ),
                             ],
                           ),
                         ),
@@ -232,29 +290,59 @@ class HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
                 onPressed: () {
-                 Navigator.push(context, MaterialPageRoute (builder: (context) => const NotificationsScreen()));
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const NotificationsScreen(),
+                    ),
+                  );
                 },
               );
-            }
+            },
           ),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert_rounded, color: Colors.black87, size: 26),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            icon: const Icon(
+              Icons.more_vert_rounded,
+              color: Colors.black87,
+              size: 26,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             offset: const Offset(0, 50),
             color: const Color(0xFFFFF0F1),
             onSelected: (String result) async {
               if (result == 'contact') {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const ContactUsScreen()));
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ContactUsScreen()),
+                );
               } else if (result == 'about') {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutUsScreen()));
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AboutUsScreen()),
+                );
               } else if (result == 'feedback') {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const FeedbackScreen()));
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const FeedbackScreen()),
+                );
               } else if (result == 'recent_donations') {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const RecentDonationsScreen()));
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const RecentDonationsScreen(),
+                  ),
+                );
               } else if (result == 'logout') {
                 await authProvider.signOut();
                 if (!context.mounted) return;
-               Navigator.pushReplacement (context, MaterialPageRoute (builder: (context) => const RoleSelectionScreen()));
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const RoleSelectionScreen(),
+                  ),
+                );
               }
             },
             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
@@ -262,9 +350,19 @@ class HomeScreenState extends State<HomeScreen> {
                 value: 'contact',
                 child: Row(
                   children: const [
-                    Icon(Icons.contact_mail_rounded, color: Color(0xFF7D444C), size: 20),
+                    Icon(
+                      Icons.contact_mail_rounded,
+                      color: Color(0xFF7D444C),
+                      size: 20,
+                    ),
                     SizedBox(width: 12),
-                    Text('Contact Support', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
+                    Text(
+                      'Contact Support',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -272,9 +370,19 @@ class HomeScreenState extends State<HomeScreen> {
                 value: 'about',
                 child: Row(
                   children: const [
-                    Icon(Icons.info_outline_rounded, color: Color(0xFF7D444C), size: 20),
+                    Icon(
+                      Icons.info_outline_rounded,
+                      color: Color(0xFF7D444C),
+                      size: 20,
+                    ),
                     SizedBox(width: 12),
-                    Text('About Charitey', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
+                    Text(
+                      'About Charitey',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -282,9 +390,19 @@ class HomeScreenState extends State<HomeScreen> {
                 value: 'feedback',
                 child: Row(
                   children: const [
-                    Icon(Icons.feedback_rounded, color: Color(0xFF7D444C), size: 20),
+                    Icon(
+                      Icons.feedback_rounded,
+                      color: Color(0xFF7D444C),
+                      size: 20,
+                    ),
                     SizedBox(width: 12),
-                    Text('Share Feedback', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
+                    Text(
+                      'Share Feedback',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -293,9 +411,19 @@ class HomeScreenState extends State<HomeScreen> {
                 value: 'logout',
                 child: Row(
                   children: const [
-                    Icon(Icons.logout_rounded, color: Colors.redAccent, size: 20),
+                    Icon(
+                      Icons.logout_rounded,
+                      color: Colors.redAccent,
+                      size: 20,
+                    ),
                     SizedBox(width: 12),
-                    Text('Sign Out', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                    Text(
+                      'Sign Out',
+                      style: TextStyle(
+                        color: Colors.redAccent,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -311,7 +439,7 @@ class HomeScreenState extends State<HomeScreen> {
       bottomNavigationBar: SafeArea(
         child: Container(
           margin: const EdgeInsets.only(left: 16, right: 16, bottom: 12),
-          height: 85, 
+          height: 85,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
@@ -329,7 +457,7 @@ class HomeScreenState extends State<HomeScreen> {
                         color: const Color(0xFF7D444C).withValues(alpha: 0.08),
                         blurRadius: 16,
                         offset: const Offset(0, 4),
-                      )
+                      ),
                     ],
                   ),
                   child: Row(
@@ -366,7 +494,9 @@ class HomeScreenState extends State<HomeScreen> {
                                 style: TextStyle(
                                   color: isActive ? themeColor : Colors.black38,
                                   fontSize: 10,
-                                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                                  fontWeight: isActive
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
                                 ),
                               ),
                             ],
@@ -385,7 +515,7 @@ class HomeScreenState extends State<HomeScreen> {
                   child: GestureDetector(
                     onTap: () {
                       setState(() {
-                        _currentIndex = 2; 
+                        _currentIndex = 2;
                         targetPostId = null;
                       });
                     },
@@ -397,10 +527,12 @@ class HomeScreenState extends State<HomeScreen> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF7D444C).withValues(alpha: 0.35),
+                            color: const Color(
+                              0xFF7D444C,
+                            ).withValues(alpha: 0.35),
                             blurRadius: 12,
                             offset: const Offset(0, 6),
-                          )
+                          ),
                         ],
                       ),
                       child: Column(
@@ -442,7 +574,7 @@ class HomeScreenState extends State<HomeScreen> {
 
 class ChatListScreen extends StatelessWidget {
   const ChatListScreen({super.key});
-  
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
@@ -455,22 +587,21 @@ class ChatListScreen extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            Color(0xFFFDF7F8), 
-            Color(0xFFEEDAE0), 
-          ],
+          colors: [Color(0xFFFDF7F8), Color(0xFFEEDAE0)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           stops: [0.1, 1.0],
         ),
       ),
       child: Scaffold(
-        backgroundColor: Colors.transparent, 
+        backgroundColor: Colors.transparent,
         body: StreamBuilder<List<ChatPreviewModel>>(
           stream: chatService.getChatInbox(user.uid),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return Center(child: CircularProgressIndicator(color: themeColor));
+              return Center(
+                child: CircularProgressIndicator(color: themeColor),
+              );
             }
             if (snapshot.hasError) {
               return const Center(child: Text("Error loading chats."));
@@ -485,67 +616,151 @@ class ChatListScreen extends StatelessWidget {
                   children: [
                     Container(
                       padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.5), shape: BoxShape.circle),
-                      child: Icon(Icons.chat_bubble_outline, size: 60, color: Colors.grey.shade400),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.5),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.chat_bubble_outline,
+                        size: 60,
+                        color: Colors.grey.shade400,
+                      ),
                     ),
                     const SizedBox(height: 20),
-                    const Text("No conversations yet", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
+                    const Text(
+                      "No conversations yet",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
                     const SizedBox(height: 8),
-                    Text("Your active chats will appear here.", textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: Colors.grey.shade600, height: 1.4)),
+                    Text(
+                      "Your active chats will appear here.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Colors.grey.shade600,
+                        height: 1.4,
+                      ),
+                    ),
                   ],
                 ),
               );
             }
 
             return ListView.builder(
-              padding: const EdgeInsets.only(top: 8, bottom: 100), 
+              padding: const EdgeInsets.only(top: 8, bottom: 100),
               itemCount: chatPreviews.length,
               itemBuilder: (context, index) {
                 final preview = chatPreviews[index];
-                String formattedTime = DateFormat('h:mm a').format(preview.lastMessageTime);
+                String formattedTime = DateFormat(
+                  'h:mm a',
+                ).format(preview.lastMessageTime);
 
                 return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.white, 
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.03),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     leading: CircleAvatar(
                       radius: 25,
                       backgroundColor: themeColor.withOpacity(0.15),
                       child: Text(
-                        preview.participantName.isNotEmpty ? preview.participantName[0].toUpperCase() : '?',
-                        style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 18),
+                        preview.participantName.isNotEmpty
+                            ? preview.participantName[0].toUpperCase()
+                            : '?',
+                        style: TextStyle(
+                          color: themeColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
                       ),
                     ),
-                    title: Text(preview.participantName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    title: Text(
+                      preview.participantName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
                     subtitle: Padding(
                       padding: const EdgeInsets.only(top: 4.0),
                       child: Text(
-                        preview.lastMessage, maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: preview.hasUnread ? Colors.black87 : Colors.grey.shade600, fontWeight: preview.hasUnread ? FontWeight.w600 : FontWeight.normal),
+                        preview.lastMessage,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: preview.hasUnread
+                              ? Colors.black87
+                              : Colors.grey.shade600,
+                          fontWeight: preview.hasUnread
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
                       ),
                     ),
                     trailing: SizedBox(
-                      width: 65, 
+                      width: 65,
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text(formattedTime, style: TextStyle(fontSize: 12, color: preview.hasUnread ? themeColor : Colors.grey.shade500)),
+                          Text(
+                            formattedTime,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: preview.hasUnread
+                                  ? themeColor
+                                  : Colors.grey.shade500,
+                            ),
+                          ),
                           if (preview.hasUnread) ...[
                             const SizedBox(height: 6),
-                            Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: themeColor, shape: BoxShape.circle)),
-                          ]
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: themeColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
                     onTap: () {
-                      FirebaseFirestore.instance.collection('users').doc(user.uid).collection('chat_previews').doc(preview.chatRoomId).update({'hasUnread': false});
-                      Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(otherUserId: preview.participantId, otherUserName: preview.participantName)));
+                      FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(user.uid)
+                          .collection('chat_previews')
+                          .doc(preview.chatRoomId)
+                          .update({'hasUnread': false});
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ChatScreen(
+                            otherUserId: preview.participantId,
+                            otherUserName: preview.participantName,
+                          ),
+                        ),
+                      );
                     },
                   ),
                 );
@@ -564,7 +779,7 @@ class ChatListScreen extends StatelessWidget {
 
 class AboutUsScreen extends StatelessWidget {
   const AboutUsScreen({super.key});
-  
+
   final Color themeColor = const Color(0xFF7D444C);
   final Color bgColor = const Color(0xFFFBEBEB);
 
@@ -575,50 +790,160 @@ class AboutUsScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: bgColor,
         elevation: 0,
-        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.black87), onPressed: () => Navigator.pop(context)),
-        title: Text("About Charitey", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 24)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black87),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          "About Charitey",
+          style: TextStyle(
+            color: themeColor,
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
+          ),
+        ),
       ),
-      body: Padding(
+      body: ListView(
         padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("Our Mission", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-            const SizedBox(height: 8),
-            Text("Charitey is a platform that connects generous donors with NGOs, volunteers, and agencies to deliver help quickly and efficiently to those in need.", style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.5)),
-            const SizedBox(height: 24),
-            Text("What We Do", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-            const SizedBox(height: 8),
-            _bullet("Connect donors with verified NGOs"),
-            _bullet("Enable volunteers to contribute meaningfully"),
-            _bullet("Coordinate logistics with partner agencies"),
-            _bullet("Track impact and transparency"),
-            _bullet("Make charitable giving easy and accessible"),
-            const SizedBox(height: 24),
-            Text("Our Values", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-            const SizedBox(height: 8),
-            Text("Transparency • Trust • Impact •\nCommunity • Compassion", style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.5)),
-            const Spacer(),
-            SizedBox(
-              width: double.infinity,
-              height: 55,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(backgroundColor: themeColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
-                child: const Text("Close", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        physics: const BouncingScrollPhysics(),
+        children: [
+          Text(
+            "About Charitey",
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            "Charitey brings donors, NGOs, and volunteers together in one powerful community to move help quickly, safely, and responsibly to people who need it most.",
+            style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.6),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            "Our Mission",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "To build a trusted platform that enables individuals, organizations, and volunteers to work together in delivering essential resources efficiently, transparently, and responsibly.",
+            style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.6),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            "Our Vision",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "To become the world's most trusted community platform for social impact, where every act of generosity creates lasting change and every community thrives through collective responsibility.",
+            style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.6),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            "Our Core Values",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _bullet("Compassion – Every action begins with empathy."),
+          _bullet(
+            "Integrity – Transparency and honesty guide every interaction.",
+          ),
+          _bullet(
+            "Trust – Building lasting confidence among donors, NGOs, and volunteers.",
+          ),
+          _bullet("Community – Stronger together, greater impact."),
+          _bullet(
+            "Responsibility – Every contribution is handled with care and accountability.",
+          ),
+          _bullet(
+            "Innovation – Using technology to make kindness more accessible.",
+          ),
+          const SizedBox(height: 28),
+          Center(
+            child: Text(
+              "Together, we don't just give. We create hope.",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: themeColor,
+                height: 1.4,
               ),
             ),
-            const SizedBox(height: 20),
-          ],
-        ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              "One community. One purpose. Endless impact.",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.black54,
+                height: 1.4,
+              ),
+            ),
+          ),
+          const SizedBox(height: 28),
+          SizedBox(
+            width: double.infinity,
+            height: 55,
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: themeColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
+              ),
+              child: const Text(
+                "Close",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
       ),
     );
   }
 
   Widget _bullet(String text) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6.0),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text("• ", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), Expanded(child: Text(text, style: const TextStyle(fontSize: 15, height: 1.4)))]),
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "• ",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 15, height: 1.5),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -649,8 +974,8 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          "Share Feedback", 
-          style: TextStyle(color: themeColor, fontWeight: FontWeight.bold)
+          "Share Feedback",
+          style: TextStyle(color: themeColor, fontWeight: FontWeight.bold),
         ),
       ),
       body: ListView(
@@ -658,55 +983,69 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         physics: const BouncingScrollPhysics(),
         children: [
           _buildQuestionWithOptions(
-            1, 
+            1,
             "Q1. How would you rate your overall experience with Charitey?",
             [
               '⭐☆☆☆☆ 1 Star',
               '⭐⭐☆☆☆ 2 Stars',
               '⭐⭐⭐☆☆ 3 Stars',
               '⭐⭐⭐⭐☆ 4 Stars',
-              '⭐⭐⭐⭐⭐ 5 Stars'
-            ]
+              '⭐⭐⭐⭐⭐ 5 Stars',
+            ],
           ),
           _buildQuestionWithOptions(
-            2, 
+            2,
             "Q2. How easy was it to use the Charitey app?",
-            ['Very Easy', 'Easy', 'Somewhat Difficult', 'Difficult']
+            ['Very Easy', 'Easy', 'Somewhat Difficult', 'Difficult'],
           ),
           _buildQuestionWithOptions(
-            3, 
+            3,
             "Q3. How satisfied are you with the services provided by Charitey?",
-            ['Very Satisfied', 'Satisfied', 'Somewhat Satisfied', 'Not Satisfied']
+            [
+              'Very Satisfied',
+              'Satisfied',
+              'Somewhat Satisfied',
+              'Not Satisfied',
+            ],
           ),
           _buildQuestionWithOptions(
-            4, 
+            4,
             "Q4. How helpful was Charitey in meeting your needs?",
-            ['Very Helpful', 'Helpful', 'Slightly Helpful', 'Not Helpful']
+            ['Very Helpful', 'Helpful', 'Slightly Helpful', 'Not Helpful'],
           ),
           _buildQuestionWithOptions(
-            5, 
+            5,
             "Q5. How likely are you to recommend Charitey to your friends or family?",
-            ['Definitely', 'Probably', 'Maybe', 'No']
+            ['Definitely', 'Probably', 'Maybe', 'No'],
           ),
           const SizedBox(height: 20),
           ElevatedButton(
             onPressed: _isSubmitting ? null : _submitFeedback,
             style: ElevatedButton.styleFrom(
-              backgroundColor: themeColor, 
-              padding: const EdgeInsets.symmetric(vertical: 16), 
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+              backgroundColor: themeColor,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-            child: _isSubmitting 
+            child: _isSubmitting
                 ? const SizedBox(
-                    height: 20, 
-                    width: 20, 
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
                   )
                 : const Text(
-                    "Submit", 
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
+                    "Submit",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-          )
+          ),
         ],
       ),
     );
@@ -717,9 +1056,9 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     if (answers.values.contains('')) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please answer all 5 questions before submitting.'), 
+          content: Text('Please answer all 5 questions before submitting.'),
           backgroundColor: Colors.redAccent,
-        )
+        ),
       );
       return;
     }
@@ -757,19 +1096,18 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
       // 5. Success UI
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Feedback Submitted! Thank you.'), 
+          content: Text('Feedback Submitted! Thank you.'),
           backgroundColor: Colors.green,
-        )
+        ),
       );
       Navigator.pop(context);
-
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to submit: $e'), 
+          content: Text('Failed to submit: $e'),
           backgroundColor: Colors.redAccent,
-        )
+        ),
       );
     } finally {
       if (mounted) {
@@ -778,20 +1116,24 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     }
   }
 
-  Widget _buildQuestionWithOptions(int qIndex, String question, List<String> options) {
+  Widget _buildQuestionWithOptions(
+    int qIndex,
+    String question,
+    List<String> options,
+  ) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: cardColor, 
-        borderRadius: BorderRadius.circular(12)
+        color: cardColor,
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            question, 
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)
+            question,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
           ),
           const SizedBox(height: 12),
           ...options.map((option) {
@@ -804,9 +1146,11 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                 child: Row(
                   children: [
                     Icon(
-                      isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked, 
-                      color: isSelected ? themeColor : Colors.black54, 
-                      size: 20
+                      isSelected
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
+                      color: isSelected ? themeColor : Colors.black54,
+                      size: 20,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -835,55 +1179,151 @@ class RecentDonationsScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.black87), onPressed: () => Navigator.pop(context)),
-        title: Text("Recent Donations", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black87),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          "Recent Donations",
+          style: TextStyle(color: themeColor, fontWeight: FontWeight.bold),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text("Overview", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(
+            "Overview",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(16)),
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text("Total Raised", style: TextStyle(color: Colors.grey)), Text("N/A", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)), const SizedBox(height: 10), Text("0", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)), Text("Completed", style: TextStyle(fontSize: 12))]),
-                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [Text("Total Donations", style: TextStyle(color: Colors.grey)), Text("93", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)), const SizedBox(height: 10), Text("93", style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)), Text("Pending", style: TextStyle(fontSize: 12))]),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Total Raised", style: TextStyle(color: Colors.grey)),
+                    Text(
+                      "N/A",
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      "0",
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text("Completed", style: TextStyle(fontSize: 12)),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      "Total Donations",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    Text(
+                      "93",
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      "93",
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text("Pending", style: TextStyle(fontSize: 12)),
+                  ],
+                ),
               ],
             ),
           ),
           const SizedBox(height: 24),
-          Text("Recent Donations", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(
+            "Recent Donations",
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 12),
-          _buildDonationCard("quFu5DfaelN06vmaaNjQ", "13 Apr 2026, 10:41 AM", "PENDING", Colors.grey.shade400),
-          _buildDonationCard("88XkROatWB9TaLCCNKC8", "13 Apr 2026, 9:16 AM", "DELIVERY_ACCEPTED", Colors.orange),
-          _buildDonationCard("gwTgwflYOQfFvgHOf274", "13 Apr 2026, 9:13 AM", "DELIVERY_ACCEPTED", Colors.orange),
+          _buildDonationCard(
+            "quFu5DfaelN06vmaaNjQ",
+            "13 Apr 2026, 10:41 AM",
+            "PENDING",
+            Colors.grey.shade400,
+          ),
+          _buildDonationCard(
+            "88XkROatWB9TaLCCNKC8",
+            "13 Apr 2026, 9:16 AM",
+            "DELIVERY_ACCEPTED",
+            Colors.orange,
+          ),
+          _buildDonationCard(
+            "gwTgwflYOQfFvgHOf274",
+            "13 Apr 2026, 9:13 AM",
+            "DELIVERY_ACCEPTED",
+            Colors.orange,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildDonationCard(String id, String date, String status, Color statusColor) {
+  Widget _buildDonationCard(
+    String id,
+    String date,
+    String status,
+    Color statusColor,
+  ) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("Sree", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              Text(status, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
+              Text(
+                "Sree",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              Text(
+                status,
+                style: TextStyle(
+                  color: statusColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
           Text("ID: $id", style: TextStyle(color: Colors.grey, fontSize: 12)),
           const SizedBox(height: 4),
-          Text("Date: $date", style: TextStyle(color: Colors.grey, fontSize: 12)),
+          Text(
+            "Date: $date",
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
         ],
       ),
     );
@@ -895,8 +1335,24 @@ class ContactUsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Contact Support", style: TextStyle(color: const Color(0xFF7D444C), fontWeight: FontWeight.bold)), backgroundColor: Colors.white, iconTheme: IconThemeData(color: Colors.black)),
-      body: Center(child: Text("Contact Support: support@charitey.com\nPhone: +91 9876543210", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, height: 1.5))),
+      appBar: AppBar(
+        title: Text(
+          "Contact Support",
+          style: TextStyle(
+            color: const Color(0xFF7D444C),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: Colors.white,
+        iconTheme: IconThemeData(color: Colors.black),
+      ),
+      body: Center(
+        child: Text(
+          "Contact Support: support@charitey.com\nPhone: +91 9876543210",
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 16, height: 1.5),
+        ),
+      ),
     );
   }
 }

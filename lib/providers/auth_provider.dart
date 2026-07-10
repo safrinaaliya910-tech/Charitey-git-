@@ -1,3 +1,4 @@
+//auth_provider.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -21,6 +22,10 @@ class AuthProvider with ChangeNotifier {
   // EXPOSE AUTH SERVICE: This allows login screens to reference authProvider.authService
   AuthService get authService => _authService;
   User? get currentFirebaseUser => FirebaseAuth.instance.currentUser;
+
+  // User-friendly message set after a failed email/password sign-in attempt.
+  // Populated by AuthService.signInWithEmailAndPassword via signIn/signInWithRole.
+  String? get lastError => _authService.lastError;
 
   AuthProvider() {
     _init();

@@ -1,3 +1,4 @@
+//ngo_login_screen.dart
 // lib/screens/ngo_login_screen.dart
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -91,10 +92,12 @@ class _NgoLoginScreenState extends State<NgoLoginScreen>
         (route) => false,
       );
     } else {
+      // Show the specific reason (e.g. "linked to Google") when available,
+      // otherwise fall back to the generic NGO message.
+      final message = authProvider.lastError ??
+          'Invalid credentials or this account is not registered as an NGO.';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid credentials or this account is not registered as an NGO.'),
-        ),
+        SnackBar(content: Text(message)),
       );
     }
   }

@@ -11,6 +11,10 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // Holds a user-friendly message after a failed email/password sign-in.
+  // Read this from AuthProvider.lastError right after a failed signIn call.
+  String? lastError;
+
   User? get currentUser => _auth.currentUser;
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
@@ -58,6 +62,8 @@ class AuthService {
 
   Future<UserModel?> signInWithEmailAndPassword(
       String email, String password) async {
+    lastError = null; // reset before each attempt
+
     try {
       UserCredential result = await _auth.signInWithEmailAndPassword(
         email: email,
@@ -74,15 +80,45 @@ class AuthService {
           return UserModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
         }
       }
+    } on FirebaseAuthException catch (e) {
+      debugPrint('Error signing in: ${e.code}');
+      lastError = await _buildSignInErrorMessage(email, e);
     } catch (e) {
       debugPrint('Error signing in: $e');
+      lastError = 'Something went wrong. Please try again.';
     }
     return null;
+  }
+
+    // Returns a user-friendly message for email/password sign-in failures.
+  Future<String> _buildSignInErrorMessage(
+      String email, FirebaseAuthException e) async {
+    switch (e.code) {
+      case 'invalid-credential':
+      case 'wrong-password':
+        return 'Incorrect email or password. If you originally signed up with Google, please use Continue with Google.';
+      case 'user-not-found':
+        return 'No account found with this email. Please sign up first.';
+      case 'invalid-email':
+        return 'Please enter a valid email address.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
+      case 'too-many-requests':
+        return 'Too many failed attempts. Please try again later.';
+      case 'network-request-failed':
+        return 'No internet connection. Please check your internet connection.';
+      default:
+        return e.message ?? 'Unable to sign in. Please try again.';
+    }
   }
 
   // ================= GOOGLE SIGN IN =================
   // Pass [assignRole] when registering via Google so new users get
   // the correct role. For login screens pass null — existing role is kept.
+  //
+  // FIX: Both web and mobile flows now force the account chooser to
+  // appear on every sign-in attempt, instead of silently reusing the
+  // last signed-in Google session.
 
   Future<UserModel?> signInWithGoogle({String? assignRole}) async {
     try {
@@ -99,7 +135,16 @@ class AuthService {
 
   Future<UserModel?> _signInWithGoogleMobile({String? assignRole}) async {
     final GoogleSignIn googleSignIn = GoogleSignIn();
-    await googleSignIn.signOut();
+
+    // FIX: disconnect() fully revokes the previous session (not just
+    // clearing the local cache like signOut() does), guaranteeing the
+    // account picker shows every time — even with a single Google
+    // account on the device.
+    try {
+      await googleSignIn.disconnect();
+    } catch (_) {
+      // Throws if there was no previous session — safe to ignore.
+    }
 
     final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
     if (googleUser == null) {
@@ -121,6 +166,12 @@ class AuthService {
     GoogleAuthProvider googleProvider = GoogleAuthProvider();
     googleProvider.addScope('email');
     googleProvider.addScope('profile');
+
+    // FIX: forces Google to always show the account chooser on web,
+    // instead of silently reusing the existing browser session.
+    googleProvider.setCustomParameters({
+      'prompt': 'select_account',
+    });
 
     UserCredential userCredential = await _auth.signInWithPopup(googleProvider);
     User? user = userCredential.user;

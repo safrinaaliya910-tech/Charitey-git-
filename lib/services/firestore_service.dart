@@ -131,16 +131,28 @@ class FirestoreService {
         transaction.set(donationRef, donation.toMap()); 
 
         // e. Write: Auto-create a volunteer request for this donation
-        DocumentReference volunteerRequestRef = _firestore.collection('volunteer_requests').doc(); 
-        VolunteerRequestModel vRequest = VolunteerRequestModel( 
-          requestId: volunteerRequestRef.id, 
-          ngoId: donation.ngoId, 
-          donorId: donation.donorId, 
-          listingId: donation.listingId, 
-          status: 'pending', 
-          createdAt: DateTime.now(), 
+       DocumentReference volunteerRequestRef = FirebaseFirestore.instance.collection('volunteer_requests').doc();
+        
+        // Safely extract item name and unit from the listing data
+        String itemName = data['type'] == 'food' || data['type'] == 'FOOD'
+            ? (data['foodType'] ?? 'Food') 
+            : (data['productName'] ?? 'Product');
+        String unit = data['unit'] ?? '';
+        
+        VolunteerRequestModel vRequest = VolunteerRequestModel(
+          requestId: volunteerRequestRef.id,
+          ngoId: donation.ngoId,           // FIXED: Changed from ngold to ngoId
+          ngoName: data['ngoName'] ?? 'Unknown NGO', 
+          donorId: donation.donorId,   
+          donorName: donation.donorName, 
+          listingId: donation.listingId,
+          itemName: itemName,
+          quantity: "${donation.donatedQuantity} $unit".trim(), // FIXED: Changed from quantity/donatedAmount to donatedQuantity
+          status: 'pending',
+          createdAt: DateTime.now(),
         );
-        transaction.set(volunteerRequestRef, vRequest.toMap()); 
+
+        transaction.set(volunteerRequestRef, vRequest.toMap()); // Make sure this matches your variable name (vRequest)
 
         // f. Write: Create notification record inside the transaction execution block
         transaction.set(notificationRef, notification.toMap()); 

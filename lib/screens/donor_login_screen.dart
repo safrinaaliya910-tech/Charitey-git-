@@ -93,10 +93,12 @@ class _DonorLoginScreenState extends State<DonorLoginScreen>
         (route) => false,
       );
     } else {
+      // Show the specific reason (e.g. "linked to Google") when available,
+      // otherwise fall back to the generic donor message.
+      final message = authProvider.lastError ??
+          'Invalid credentials or this account is not registered as a Donor.';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid credentials or this account is not registered as a Donor.'),
-        ),
+        SnackBar(content: Text(message)),
       );
     }
   }

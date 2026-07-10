@@ -63,8 +63,12 @@ class _TravelAgencyLoginScreenState extends State<TravelAgencyLoginScreen> {
         (route) => false,
       );
     } else {
+      // Show the specific reason (e.g. "linked to Google") when available,
+      // otherwise fall back to the generic message.
+      final message = authProvider.lastError ??
+          'Login failed. Please check your credentials.';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Login failed. Please check your credentials.')),
+        SnackBar(content: Text(message)),
       );
     }
   }
