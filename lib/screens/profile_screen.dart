@@ -39,28 +39,36 @@ class ProfileScreenState extends State<ProfileScreen> {
     }
 
     final String currentUserId = authProvider.currentFirebaseUser?.uid ?? '';
-    final bool isVisiting = widget.visitedUserId != null && widget.visitedUserId != currentUserId;
+    final bool isVisiting =
+        widget.visitedUserId != null && widget.visitedUserId != currentUserId;
     final String targetUid = isVisiting ? widget.visitedUserId! : currentUserId;
 
     return FutureBuilder<DocumentSnapshot?>(
-      future: isVisiting ? FirebaseFirestore.instance.collection('users').doc(targetUid).get() : Future.value(null),
+      future: isVisiting
+          ? FirebaseFirestore.instance.collection('users').doc(targetUid).get()
+          : Future.value(null),
       builder: (context, userSnapshot) {
-        if (isVisiting && userSnapshot.connectionState == ConnectionState.waiting) {
+        if (isVisiting &&
+            userSnapshot.connectionState == ConnectionState.waiting) {
           return Scaffold(
             backgroundColor: const Color(0xFFFDF7F8),
             body: Center(child: CircularProgressIndicator(color: themeColor)),
           );
         }
 
-        String name = currentUser.name;
+       String name = currentUser.name;
         String username = currentUser.username;
         String email = currentUser.email;
         String phone = currentUser.phone;
         String location = currentUser.location;
         String profileImage = currentUser.profileImage;
+        String license = currentUser.license;
         String role = currentUser.role.toString().trim().toLowerCase();
 
-        if (isVisiting && userSnapshot.hasData && userSnapshot.data != null && userSnapshot.data!.exists) {
+        if (isVisiting &&
+            userSnapshot.hasData &&
+            userSnapshot.data != null &&
+            userSnapshot.data!.exists) {
           var data = userSnapshot.data!.data() as Map<String, dynamic>;
           name = data['name'] ?? 'Unknown';
           username = data['username'] ?? '';
@@ -84,7 +92,6 @@ class ProfileScreenState extends State<ProfileScreen> {
             backgroundColor: Colors.transparent,
             body: Stack(
               children: [
-                // 1. HERO BACKGROUND HEADER
                 Container(
                   height: 240,
                   decoration: BoxDecoration(
@@ -99,14 +106,12 @@ class ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                 ),
-                // 2. SCROLLABLE CONTENT
                 SafeArea(
                   child: SingleChildScrollView(
                     physics: const BouncingScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(20, 50, 20, 20),
                     child: Column(
                       children: [
-                        // Profile card
                         Container(
                           padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
                           decoration: BoxDecoration(
@@ -117,7 +122,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                                 color: Colors.black.withValues(alpha: 0.12),
                                 blurRadius: 20,
                                 offset: const Offset(0, 10),
-                              )
+                              ),
                             ],
                           ),
                           child: Column(
@@ -125,17 +130,33 @@ class ProfileScreenState extends State<ProfileScreen> {
                               Transform.translate(
                                 offset: const Offset(0, -40),
                                 child: GestureDetector(
-                                  onTap: profileImage.isEmpty ? null : () => _openImageViewer(context, profileImage, name),
+                                  onTap: profileImage.isEmpty
+                                      ? null
+                                      : () => _openImageViewer(
+                                          context,
+                                          profileImage,
+                                          name,
+                                        ),
                                   child: CircleAvatar(
                                     radius: 54,
                                     backgroundColor: Colors.white,
                                     child: CircleAvatar(
                                       radius: 50,
-                                      backgroundColor: themeColor.withValues(alpha: 0.1),
-                                      backgroundImage: profileImage.isNotEmpty ? NetworkImage(profileImage) : null,
+                                      backgroundColor: themeColor.withValues(
+                                        alpha: 0.1,
+                                      ),
+                                      backgroundImage: profileImage.isNotEmpty
+                                          ? NetworkImage(profileImage)
+                                          : null,
                                       child: isUploading
                                           ? const CircularProgressIndicator()
-                                          : (profileImage.isEmpty ? Icon(Icons.person_rounded, size: 50, color: themeColor) : null),
+                                          : (profileImage.isEmpty
+                                                ? Icon(
+                                                    Icons.person_rounded,
+                                                    size: 50,
+                                                    color: themeColor,
+                                                  )
+                                                : null),
                                     ),
                                   ),
                                 ),
@@ -146,23 +167,37 @@ class ProfileScreenState extends State<ProfileScreen> {
                                   children: [
                                     Text(
                                       name,
-                                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                                      style: const TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                     if (username.isNotEmpty)
                                       Text(
                                         "@$username",
-                                        style: TextStyle(color: themeColor, fontWeight: FontWeight.bold),
+                                        style: TextStyle(
+                                          color: themeColor,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
-                                    Text(
-                                      email,
-                                      style: TextStyle(color: Colors.grey.shade500),
-                                    ),
+                                   if (!isVisiting)
+                                      Text(
+                                        email,
+                                        style: TextStyle(
+                                          color: Colors.grey.shade500,
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),
-                              const SizedBox(height: 12),
-                              if (phone.isNotEmpty) _buildInfoTile(Icons.phone_android_rounded, phone),
+                              const SizedBox(height: 4),
+                              if (!isVisiting && phone.isNotEmpty) _buildInfoTile(Icons.phone_android_rounded, phone),
                               if (location.isNotEmpty) _buildInfoTile(Icons.location_on_rounded, location),
+                              if (!isVisiting && license.isNotEmpty && (role == 'ngo' || role == 'volunteer' || role == 'travel_agency'))
+                                _buildInfoTile(
+                                  role == 'volunteer' ? Icons.credit_card_rounded : Icons.verified_user_rounded,
+                                  license,
+                                ),
                               const SizedBox(height: 20),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
@@ -171,51 +206,89 @@ class ProfileScreenState extends State<ProfileScreen> {
                                     SizedBox(
                                       width: 140,
                                       child: ElevatedButton(
-                                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const EditProfileScreen())),
+                                        onPressed: () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                const EditProfileScreen(),
+                                          ),
+                                        ),
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: themeColor,
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              30,
+                                            ),
+                                          ),
                                         ),
-                                        child: const Text("Edit Profile", style: TextStyle(color: Colors.white)),
+                                        child: const Text(
+                                          "Edit Profile",
+                                          style: TextStyle(color: Colors.white),
+                                        ),
                                       ),
                                     ),
                                   if (isVisiting && role == 'ngo') ...[
                                     StreamBuilder<DocumentSnapshot>(
-                                      stream: FirebaseFirestore.instance.collection('users').doc(currentUserId).snapshots(),
+                                      stream: FirebaseFirestore.instance
+                                          .collection('users')
+                                          .doc(currentUserId)
+                                          .snapshots(),
                                       builder: (context, snapshot) {
                                         List<dynamic> favorites = [];
-                                        if (snapshot.hasData && snapshot.data!.exists) {
-                                          final data = snapshot.data!.data() as Map<String, dynamic>?;
+                                        if (snapshot.hasData &&
+                                            snapshot.data!.exists) {
+                                          final data =
+                                              snapshot.data!.data()
+                                                  as Map<String, dynamic>?;
                                           favorites = data?['favorites'] ?? [];
                                         }
-                                        bool isFav = favorites.contains(targetUid);
+                                        bool isFav = favorites.contains(
+                                          targetUid,
+                                        );
                                         return IconButton(
-                                          icon: Icon(isFav ? Icons.favorite : Icons.favorite_border),
-                                          color: isFav ? Colors.red : themeColor,
+                                          icon: Icon(
+                                            isFav
+                                                ? Icons.favorite
+                                                : Icons.favorite_border,
+                                          ),
+                                          color: isFav
+                                              ? Colors.red
+                                              : themeColor,
                                           iconSize: 32,
-                                          onPressed: () => _toggleFavoriteNgo(currentUserId, targetUid, isFav),
+                                          onPressed: () => _toggleFavoriteNgo(
+                                            currentUserId,
+                                            targetUid,
+                                            isFav,
+                                          ),
                                         );
                                       },
                                     ),
-                                  ]
+                                  ],
                                 ],
                               ),
                             ],
                           ),
                         ),
-                        // Own-profile sections
                         if (!isVisiting) ...[
                           const SizedBox(height: 25),
-                          // Quick action buttons
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
                               _buildActionButton(
-                                role == 'ngo' ? "My Requests" : (role == 'volunteer' ? "My Deliveries" : "My Donations"),
-                                role == 'volunteer' ? Icons.local_shipping_rounded : Icons.history,
+                                role == 'ngo'
+                                    ? "My Requests"
+                                    : (role == 'volunteer'
+                                          ? "My Deliveries"
+                                          : "My Donations"),
+                                role == 'volunteer'
+                                    ? Icons.local_shipping_rounded
+                                    : Icons.history,
                                 () {
                                   if (role == 'ngo') {
-                                    _showRecentRequestsSheet(context, targetUid);
+                                    _showRecentRequestsSheet(
+                                      context,
+                                      targetUid,
+                                    );
                                   } else if (role == 'volunteer') {
                                     _showMyTasksSheet(context);
                                   } else {
@@ -223,47 +296,91 @@ class ProfileScreenState extends State<ProfileScreen> {
                                   }
                                 },
                               ),
-                              _buildActionButton("Share", Icons.share, () => _shareApp(context)),
+                              _buildActionButton(
+                                "Share",
+                                Icons.share,
+                                () => _shareApp(context),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 25),
-                          // Stat card
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               if (role == 'ngo')
                                 StreamBuilder<QuerySnapshot>(
-                                  stream: FirebaseFirestore.instance.collection('ngo_listings').where('ngoId', isEqualTo: targetUid).snapshots(),
+                                  stream: FirebaseFirestore.instance
+                                      .collection('ngo_listings')
+                                      .where('ngoId', isEqualTo: targetUid)
+                                      .snapshots(),
                                   builder: (context, snapshot) {
                                     String count = "0";
-                                    if (snapshot.hasData) count = snapshot.data!.docs.length.toString();
-                                    return _buildStatCard("Total Requests", count, () => _showRecentRequestsSheet(context, targetUid));
+                                    if (snapshot.hasData)
+                                      count = snapshot.data!.docs.length
+                                          .toString();
+                                    return _buildStatCard(
+                                      "Total Requests",
+                                      count,
+                                      () => _showRecentRequestsSheet(
+                                        context,
+                                        targetUid,
+                                      ),
+                                    );
                                   },
                                 )
                               else if (role == 'volunteer')
                                 StreamBuilder<QuerySnapshot>(
-                                  stream: FirebaseFirestore.instance.collection('donations').where('assignedVolunteerId', isEqualTo: targetUid).snapshots(),
+                                  stream: FirebaseFirestore.instance
+                                      .collection('donations')
+                                      .where(
+                                        'assignedVolunteerId',
+                                        isEqualTo: targetUid,
+                                      )
+                                      .snapshots(),
                                   builder: (context, snapshot) {
                                     String count = "0";
                                     if (snapshot.hasData) {
-                                      count = snapshot.data!.docs.where((d) => (d.data() as Map<String, dynamic>)['status'] == 'delivery_completed').length.toString();
+                                      count = snapshot.data!.docs
+                                          .where(
+                                            (d) =>
+                                                (d.data()
+                                                    as Map<
+                                                      String,
+                                                      dynamic
+                                                    >)['status'] ==
+                                                'delivery_completed',
+                                          )
+                                          .length
+                                          .toString();
                                     }
-                                    return _buildStatCard("Completed Tasks", count, () => _showMyTasksSheet(context));
+                                    return _buildStatCard(
+                                      "Completed Tasks",
+                                      count,
+                                      () => _showMyTasksSheet(context),
+                                    );
                                   },
                                 )
                               else
                                 StreamBuilder<QuerySnapshot>(
-                                  stream: FirebaseFirestore.instance.collection('donations').where('donorId', isEqualTo: targetUid).snapshots(),
+                                  stream: FirebaseFirestore.instance
+                                      .collection('donations')
+                                      .where('donorId', isEqualTo: targetUid)
+                                      .snapshots(),
                                   builder: (context, snapshot) {
                                     String count = "0";
-                                    if (snapshot.hasData) count = snapshot.data!.docs.length.toString();
-                                    return _buildStatCard("Total Donations", count, () => _showMyDonationsSheet(context));
+                                    if (snapshot.hasData)
+                                      count = snapshot.data!.docs.length
+                                          .toString();
+                                    return _buildStatCard(
+                                      "Total Donations",
+                                      count,
+                                      () => _showMyDonationsSheet(context),
+                                    );
                                   },
                                 ),
                             ],
                           ),
 
-                          // ── VOLUNTEER IMPACT STORY CARD ──────────────────────
                           if (role == 'volunteer') ...[
                             const SizedBox(height: 25),
                             VolunteerImpactStoryWidget(
@@ -271,49 +388,88 @@ class ProfileScreenState extends State<ProfileScreen> {
                               themeColor: themeColor,
                             ),
                           ],
+
+                          if (role != 'ngo' && role != 'volunteer') ...[
+                            const SizedBox(height: 25),
+                            DonorImpactStoryWidget(
+                              userId: targetUid,
+                              themeColor: themeColor,
+                            ),
+                          ],
                         ],
-                       // Post feed (NGOs only)
                         if (role == 'ngo') ...[
                           const SizedBox(height: 40),
                           Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
                               isVisiting ? "Posts" : "Your Posts",
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 15),
                           StreamBuilder<QuerySnapshot>(
-                            stream: FirebaseFirestore.instance.collection('posts').where('ngoId', isEqualTo: targetUid).snapshots(),
+                            stream: FirebaseFirestore.instance
+                                .collection('posts')
+                                .where('ngoId', isEqualTo: targetUid)
+                                .snapshots(),
                             builder: (context, postSnapshot) {
-                              if (postSnapshot.connectionState == ConnectionState.waiting) {
-                                return Center(child: CircularProgressIndicator(color: themeColor));
+                              if (postSnapshot.connectionState ==
+                                  ConnectionState.waiting) {
+                                return Center(
+                                  child: CircularProgressIndicator(
+                                    color: themeColor,
+                                  ),
+                                );
                               }
                               if (postSnapshot.hasError) {
-                                return Center(child: Text("Error loading posts.", style: TextStyle(color: Colors.grey.shade500)));
+                                return Center(
+                                  child: Text(
+                                    "Error loading posts.",
+                                    style: TextStyle(
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ),
+                                );
                               }
-                              var posts = postSnapshot.data?.docs.toList() ?? [];
+                              var posts =
+                                  postSnapshot.data?.docs.toList() ?? [];
                               posts.sort((a, b) {
                                 var aData = a.data() as Map<String, dynamic>;
                                 var bData = b.data() as Map<String, dynamic>;
                                 var aTime = aData['createdAt'];
                                 var bTime = bData['createdAt'];
-                                DateTime aDate = aTime is Timestamp ? aTime.toDate() : DateTime.fromMillisecondsSinceEpoch(0);
-                                DateTime bDate = bTime is Timestamp ? bTime.toDate() : DateTime.fromMillisecondsSinceEpoch(0);
+                                DateTime aDate = aTime is Timestamp
+                                    ? aTime.toDate()
+                                    : DateTime.fromMillisecondsSinceEpoch(0);
+                                DateTime bDate = bTime is Timestamp
+                                    ? bTime.toDate()
+                                    : DateTime.fromMillisecondsSinceEpoch(0);
                                 return bDate.compareTo(aDate);
                               });
 
                               if (posts.isEmpty) {
                                 return Center(
                                   child: Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 30),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 30,
+                                    ),
                                     child: Column(
                                       children: [
-                                        Icon(Icons.photo_library_outlined, size: 50, color: Colors.grey.shade300),
+                                        Icon(
+                                          Icons.photo_library_outlined,
+                                          size: 50,
+                                          color: Colors.grey.shade300,
+                                        ),
                                         const SizedBox(height: 10),
                                         Text(
                                           "No posts yet.",
-                                          style: TextStyle(color: Colors.grey.shade500),
+                                          style: TextStyle(
+                                            color: Colors.grey.shade500,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -326,8 +482,13 @@ class ProfileScreenState extends State<ProfileScreen> {
                                 padding: EdgeInsets.zero,
                                 itemCount: posts.length,
                                 itemBuilder: (context, index) {
-                                  var postData = posts[index].data() as Map<String, dynamic>;
-                                  var post = PostModel.fromMap(postData, posts[index].id);
+                                  var postData =
+                                      posts[index].data()
+                                          as Map<String, dynamic>;
+                                  var post = PostModel.fromMap(
+                                    postData,
+                                    posts[index].id,
+                                  );
                                   return PostCardWidget(
                                     post: post,
                                     ngoName: name,
@@ -339,23 +500,36 @@ class ProfileScreenState extends State<ProfileScreen> {
                             },
                           ),
                         ],
-                        // Logout (own profile only)
                         if (!isVisiting) ...[
                           const SizedBox(height: 25),
                           Container(
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(15),
-                              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 5)],
+                              boxShadow: const [
+                                BoxShadow(color: Colors.black12, blurRadius: 5),
+                              ],
                             ),
                             child: ListTile(
-                              leading: const Icon(Icons.logout_rounded, color: Colors.red),
-                              title: const Text("Logout", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                              leading: const Icon(
+                                Icons.logout_rounded,
+                                color: Colors.red,
+                              ),
+                              title: const Text(
+                                "Logout",
+                                style: TextStyle(
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                               onTap: () async {
                                 await authProvider.signOut();
                                 if (context.mounted) {
                                   Navigator.of(context).pushAndRemoveUntil(
-                                   MaterialPageRoute(builder: (context) => const RoleSelectionScreen()),
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const RoleSelectionScreen(),
+                                    ),
                                     (route) => false,
                                   );
                                 }
@@ -368,18 +542,30 @@ class ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                 ),
-                // 3. FLOATING TOP BUTTONS
                 SafeArea(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16.0,
+                      vertical: 8.0,
+                    ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         if (isVisiting)
                           Container(
-                            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.15), shape: BoxShape.circle),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.15),
+                              shape: BoxShape.circle,
+                            ),
                             child: IconButton(
-                              icon: const Padding(padding: EdgeInsets.only(left: 6.0), child: Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20)),
+                              icon: const Padding(
+                                padding: EdgeInsets.only(left: 6.0),
+                                child: Icon(
+                                  Icons.arrow_back_ios_new_rounded,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
                               onPressed: () => Navigator.pop(context),
                             ),
                           )
@@ -397,7 +583,6 @@ class ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // BUILDER HELPERS
   Widget _buildActionButton(String label, IconData icon, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
@@ -408,12 +593,20 @@ class ProfileScreenState extends State<ProfileScreen> {
             decoration: BoxDecoration(
               color: Colors.white,
               shape: BoxShape.circle,
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8)],
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 8,
+                ),
+              ],
             ),
             child: Icon(icon, color: themeColor, size: 26),
           ),
           const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
         ],
       ),
     );
@@ -429,13 +622,33 @@ class ProfileScreenState extends State<ProfileScreen> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(15),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 5)],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 5,
+              ),
+            ],
           ),
           child: Column(
             children: [
-              Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: themeColor)),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: themeColor,
+                ),
+              ),
               const SizedBox(height: 4),
-              Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w500), textAlign: TextAlign.center),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.grey,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+              ),
             ],
           ),
         ),
@@ -443,9 +656,9 @@ class ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildInfoTile(IconData icon, String text) {
+ Widget _buildInfoTile(IconData icon, String text) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.only(bottom: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -457,60 +670,56 @@ class ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildActivityTile(String title, String subtitle, IconData icon) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: themeColor.withValues(alpha: 0.1)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: themeColor),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // LOGIC METHODS
-  Future<void> _toggleFavoriteNgo(String donorId, String ngoId, bool isFav) async {
+  Future<void> _toggleFavoriteNgo(
+    String donorId,
+    String ngoId,
+    bool isFav,
+  ) async {
     if (donorId.isEmpty || ngoId.isEmpty) return;
     final docRef = FirebaseFirestore.instance.collection('users').doc(donorId);
     if (isFav) {
-      await docRef.update({'favorites': FieldValue.arrayRemove([ngoId])});
+      await docRef.update({
+        'favorites': FieldValue.arrayRemove([ngoId]),
+      });
     } else {
-      await docRef.update({'favorites': FieldValue.arrayUnion([ngoId])});
+      await docRef.update({
+        'favorites': FieldValue.arrayUnion([ngoId]),
+      });
     }
   }
 
   void _openImageViewer(BuildContext context, String imageUrl, String name) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => FullScreenImageViewer(imageUrl: imageUrl, name: name, themeColor: themeColor)),
+      MaterialPageRoute(
+        builder: (context) => FullScreenImageViewer(
+          imageUrl: imageUrl,
+          name: name,
+          themeColor: themeColor,
+        ),
+      ),
     );
   }
 
-  Future<bool> _showCancelStepDialog(BuildContext context, String title, String message) async {
+  Future<bool> _showCancelStepDialog(
+    BuildContext context,
+    String title,
+    String message,
+  ) async {
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(title),
         content: Text(message),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Yes', style: TextStyle(color: themeColor))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Yes', style: TextStyle(color: themeColor)),
+          ),
         ],
       ),
     );
@@ -531,20 +740,28 @@ class ProfileScreenState extends State<ProfileScreen> {
             TextField(
               controller: reasonController,
               maxLines: 3,
-              decoration: const InputDecoration(hintText: 'Reason', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                hintText: 'Reason',
+                border: OutlineInputBorder(),
+              ),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, reasonController.text), child: Text('Submit', style: TextStyle(color: themeColor))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, reasonController.text),
+            child: Text('Submit', style: TextStyle(color: themeColor)),
+          ),
         ],
       ),
     );
     return result?.trim().isEmpty == true ? null : result?.trim();
   }
 
-  // BOTTOM SHEET MY DONATIONS (DONOR)
   Future<void> _showMyDonationsSheet(BuildContext context) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUserModel;
@@ -555,7 +772,9 @@ class ProfileScreenState extends State<ProfileScreen> {
       context: context,
       backgroundColor: const Color(0xFFFDF7F8),
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+      ),
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.85,
         padding: const EdgeInsets.only(top: 20, left: 16, right: 16),
@@ -563,19 +782,44 @@ class ProfileScreenState extends State<ProfileScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(
-              child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
             ),
             const SizedBox(height: 20),
-            Text("Recent Donation History", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: themeColor)),
+            Text(
+              "Recent Donation History",
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: themeColor,
+              ),
+            ),
             const SizedBox(height: 15),
             Expanded(
               child: currentUserId.isEmpty
-                  ? const Center(child: Text("Unable to load donation history."))
+                  ? const Center(
+                      child: Text("Unable to load donation history."),
+                    )
                   : StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance.collection('donations').where('donorId', isEqualTo: currentUserId).snapshots(),
+                      stream: FirebaseFirestore.instance
+                          .collection('donations')
+                          .where('donorId', isEqualTo: currentUserId)
+                          .snapshots(),
                       builder: (context, snapshot) {
-                        if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
-                        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: themeColor));
+                        if (snapshot.hasError)
+                          return Center(
+                            child: Text("Error: ${snapshot.error}"),
+                          );
+                        if (snapshot.connectionState == ConnectionState.waiting)
+                          return Center(
+                            child: CircularProgressIndicator(color: themeColor),
+                          );
 
                         var allDocs = snapshot.data!.docs;
                         Map<String, Map<String, dynamic>> groupedDonations = {};
@@ -583,38 +827,64 @@ class ProfileScreenState extends State<ProfileScreen> {
                         for (var doc in allDocs) {
                           var data = doc.data() as Map<String, dynamic>;
                           String listingId = data['listingId'] ?? doc.id;
-                          String rawQty = data['quantity']?.toString() ?? data['qty']?.toString() ?? data['donatedAmount']?.toString() ?? '0';
-                          String cleanQty = rawQty.replaceAll(RegExp(r'[^0-9]'), '');
-                          int mathQty = int.tryParse(cleanQty.isEmpty ? '0' : cleanQty) ?? 0;
+                          String rawQty =
+                              data['quantity']?.toString() ??
+                              data['qty']?.toString() ??
+                              data['donatedAmount']?.toString() ??
+                              '0';
+                          String cleanQty = rawQty.replaceAll(
+                            RegExp(r'[^0-9]'),
+                            '',
+                          );
+                          int mathQty =
+                              int.tryParse(cleanQty.isEmpty ? '0' : cleanQty) ??
+                              0;
 
                           if (groupedDonations.containsKey(listingId)) {
-                            groupedDonations[listingId]!['aggregatedQty'] = (groupedDonations[listingId]!['aggregatedQty'] as int) + mathQty;
-                            var existingTime = groupedDonations[listingId]!['createdAt'];
+                            groupedDonations[listingId]!['aggregatedQty'] =
+                                (groupedDonations[listingId]!['aggregatedQty']
+                                    as int) +
+                                mathQty;
+                            var existingTime =
+                                groupedDonations[listingId]!['createdAt'];
                             var thisTime = data['createdAt'];
-                            DateTime existingDate = existingTime is Timestamp ? existingTime.toDate() : DateTime.fromMillisecondsSinceEpoch(0);
-                            DateTime thisDate = thisTime is Timestamp ? thisTime.toDate() : DateTime.fromMillisecondsSinceEpoch(0);
+                            DateTime existingDate = existingTime is Timestamp
+                                ? existingTime.toDate()
+                                : DateTime.fromMillisecondsSinceEpoch(0);
+                            DateTime thisDate = thisTime is Timestamp
+                                ? thisTime.toDate()
+                                : DateTime.fromMillisecondsSinceEpoch(0);
                             if (thisDate.isAfter(existingDate)) {
-                              groupedDonations[listingId]!['createdAt'] = data['createdAt'];
-                              groupedDonations[listingId]!['status'] = data['status'];
+                              groupedDonations[listingId]!['createdAt'] =
+                                  data['createdAt'];
+                              groupedDonations[listingId]!['status'] =
+                                  data['status'];
                               groupedDonations[listingId]!['docId'] = doc.id;
                             }
                           } else {
                             data['aggregatedQty'] = mathQty;
                             data['docId'] = doc.id;
-                            groupedDonations[listingId] = Map<String, dynamic>.from(data);
+                            groupedDonations[listingId] =
+                                Map<String, dynamic>.from(data);
                           }
                         }
-
                         var donations = groupedDonations.values.toList();
                         donations.sort((a, b) {
                           var aTime = a['createdAt'];
                           var bTime = b['createdAt'];
-                          DateTime aDate = aTime is Timestamp ? aTime.toDate() : DateTime.fromMillisecondsSinceEpoch(0);
-                          DateTime bDate = bTime is Timestamp ? bTime.toDate() : DateTime.fromMillisecondsSinceEpoch(0);
+                          DateTime aDate = aTime is Timestamp
+                              ? aTime.toDate()
+                              : DateTime.fromMillisecondsSinceEpoch(0);
+                          DateTime bDate = bTime is Timestamp
+                              ? bTime.toDate()
+                              : DateTime.fromMillisecondsSinceEpoch(0);
                           return bDate.compareTo(aDate);
                         });
 
-                        if (donations.isEmpty) return const Center(child: Text("No donation history found."));
+                        if (donations.isEmpty)
+                          return const Center(
+                            child: Text("No donation history found."),
+                          );
 
                         return ListView.builder(
                           physics: const BouncingScrollPhysics(),
@@ -626,60 +896,117 @@ class ProfileScreenState extends State<ProfileScreen> {
                             DateTime? createdDate;
                             if (createdAt is Timestamp) {
                               createdDate = createdAt.toDate();
-                              dateText = '${createdDate.day}/${createdDate.month}/${createdDate.year}';
+                              dateText =
+                                  '${createdDate.day}/${createdDate.month}/${createdDate.year}';
                             }
-                            String ngoName = donation['ngoName'] ?? 'NGO Partner';
-                            String itemName = donation['items'] ?? donation['itemName'] ?? 'Item';
+                            String ngoName =
+                                donation['ngoName'] ?? 'NGO Partner';
+                            String itemName =
+                                donation['items'] ??
+                                donation['itemName'] ??
+                                'Item';
                             int donatedQty = donation['aggregatedQty'] as int;
                             String rawDisplayQty = donatedQty.toString();
-                            String status = donation['status']?.toString().trim().toLowerCase() ?? 'pending';
+                            String status =
+                                donation['status']
+                                    ?.toString()
+                                    .trim()
+                                    .toLowerCase() ??
+                                'pending';
                             String ngoId = donation['ngoId'] ?? '';
                             String listingId = donation['listingId'] ?? '';
                             String targetDocId = donation['docId'] ?? '';
                             final bool isCancelled = status == 'cancelled';
-                            final bool canCancel = status == 'pending' && createdDate != null && DateTime.now().difference(createdDate).inHours < 24;
+                            final bool canCancel =
+                                status == 'pending' &&
+                                createdDate != null &&
+                                DateTime.now().difference(createdDate).inHours <
+                                    24;
 
                             return FutureBuilder<List<DocumentSnapshot?>>(
                               future: () async {
-                                final ngoDoc = ngoId.isNotEmpty ? await FirebaseFirestore.instance.collection('users').doc(ngoId).get() : null;
+                                final ngoDoc = ngoId.isNotEmpty
+                                    ? await FirebaseFirestore.instance
+                                          .collection('users')
+                                          .doc(ngoId)
+                                          .get()
+                                    : null;
                                 DocumentSnapshot? listingDoc;
-                                if (listingId.isNotEmpty) listingDoc = await FirebaseFirestore.instance.collection('ngo_listings').doc(listingId).get();
+                                if (listingId.isNotEmpty)
+                                  listingDoc = await FirebaseFirestore.instance
+                                      .collection('ngo_listings')
+                                      .doc(listingId)
+                                      .get();
                                 return [ngoDoc, listingDoc];
                               }(),
                               builder: (context, combinedSnapshot) {
-                                if (combinedSnapshot.connectionState == ConnectionState.waiting) return const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Center(child: CircularProgressIndicator()));
-                                
+                                if (combinedSnapshot.connectionState ==
+                                    ConnectionState.waiting)
+                                  return const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 20),
+                                    child: Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  );
+
                                 int totalQty = donatedQty;
                                 int fulfilledQty = donatedQty;
                                 String unit = '';
                                 String type = 'PRODUCT';
 
-                                if (combinedSnapshot.hasData && combinedSnapshot.data != null) {
+                                if (combinedSnapshot.hasData &&
+                                    combinedSnapshot.data != null) {
                                   final ngoSnapshot = combinedSnapshot.data![0];
-                                  if (ngoSnapshot != null && ngoSnapshot.exists) {
-                                    var userData = ngoSnapshot.data() as Map<String, dynamic>?;
+                                  if (ngoSnapshot != null &&
+                                      ngoSnapshot.exists) {
+                                    var userData =
+                                        ngoSnapshot.data()
+                                            as Map<String, dynamic>?;
                                     ngoName = userData?['name'] ?? ngoName;
                                   }
-                                  if (combinedSnapshot.data!.length > 1 && combinedSnapshot.data![1] != null) {
-                                    final listingSnapshot = combinedSnapshot.data![1]!;
+                                  if (combinedSnapshot.data!.length > 1 &&
+                                      combinedSnapshot.data![1] != null) {
+                                    final listingSnapshot =
+                                        combinedSnapshot.data![1]!;
                                     if (listingSnapshot.exists) {
-                                      var listingData = listingSnapshot.data() as Map<String, dynamic>?;
+                                      var listingData =
+                                          listingSnapshot.data()
+                                              as Map<String, dynamic>?;
                                       if (listingData != null) {
-                                        if (listingData['type'] == 'food' || listingData['type'] == 'FOOD') {
-                                          itemName = listingData['foodType'] ?? itemName;
+                                        if (listingData['type'] == 'food' ||
+                                            listingData['type'] == 'FOOD') {
+                                          itemName =
+                                              listingData['foodType'] ??
+                                              itemName;
                                           type = 'FOOD';
                                         } else {
-                                          itemName = listingData['productName'] ?? itemName;
-                                          type = (listingData['type'] ?? 'PRODUCT').toString().toUpperCase();
+                                          itemName =
+                                              listingData['productName'] ??
+                                              itemName;
+                                          type =
+                                              (listingData['type'] ?? 'PRODUCT')
+                                                  .toString()
+                                                  .toUpperCase();
                                         }
                                         unit = listingData['unit'] ?? '';
-                                        totalQty = int.tryParse(listingData['quantity']?.toString() ?? '0') ?? donatedQty;
-                                        fulfilledQty = int.tryParse(listingData['fulfilledQuantity']?.toString() ?? '0') ?? donatedQty;
+                                        totalQty =
+                                            int.tryParse(
+                                              listingData['quantity']
+                                                      ?.toString() ??
+                                                  '0',
+                                            ) ??
+                                            donatedQty;
+                                        fulfilledQty =
+                                            int.tryParse(
+                                              listingData['fulfilledQuantity']
+                                                      ?.toString() ??
+                                                  '0',
+                                            ) ??
+                                            donatedQty;
                                       }
                                     }
                                   }
                                 }
-
                                 int remainingQty = totalQty - fulfilledQty;
                                 if (remainingQty < 0) remainingQty = 0;
 
@@ -698,58 +1025,125 @@ class ProfileScreenState extends State<ProfileScreen> {
                                   canCancel: canCancel,
                                   themeColor: themeColor,
                                   onCancel: () async {
-                                    bool stepOne = await _showCancelStepDialog(context, 'Step 1 of 3', 'Do you really want to cancel this donation?');
+                                    bool stepOne = await _showCancelStepDialog(
+                                      context,
+                                      'Step 1 of 3',
+                                      'Do you really want to cancel this donation?',
+                                    );
                                     if (!stepOne) return;
                                     if (!context.mounted) return;
-                                    bool stepTwo = await _showCancelStepDialog(context, 'Step 2 of 3', 'This action cannot be undone. Are you sure?');
+                                    bool stepTwo = await _showCancelStepDialog(
+                                      context,
+                                      'Step 2 of 3',
+                                      'This action cannot be undone. Are you sure?',
+                                    );
                                     if (!stepTwo) return;
                                     if (!context.mounted) return;
-                                    String? reason = await _showCancelReasonDialog(context);
-                                    if (reason == null || reason.trim().isEmpty) return;
+                                    String? reason =
+                                        await _showCancelReasonDialog(context);
+                                    if (reason == null || reason.trim().isEmpty)
+                                      return;
 
                                     try {
-                                      await FirebaseFirestore.instance.collection('donations').doc(targetDocId).update({
-                                        'status': 'cancelled',
-                                        'cancelReason': reason.trim(),
-                                        'cancelledAt': Timestamp.now(),
-                                      });
+                                      await FirebaseFirestore.instance
+                                          .collection('donations')
+                                          .doc(targetDocId)
+                                          .update({
+                                            'status': 'cancelled',
+                                            'cancelReason': reason.trim(),
+                                            'cancelledAt': Timestamp.now(),
+                                          });
 
                                       if (ngoId.isNotEmpty) {
-                                        String notificationId = FirebaseFirestore.instance.collection('notifications').doc().id;
-                                        NotificationModel notification = NotificationModel(
+                                        String notificationId =
+                                            FirebaseFirestore.instance
+                                                .collection('notifications')
+                                                .doc()
+                                                .id;
+                                        NotificationModel
+                                        notification = NotificationModel(
                                           id: notificationId,
                                           receiverId: ngoId,
                                           senderId: currentUserId,
                                           senderName: user.name,
                                           title: 'Donation Cancelled',
-                                          message: '${user.name} cancelled the donation for $itemName. Reason: "${reason.trim()}". Phone: ${user.phone}',
+                                          message:
+                                              '${user.name} cancelled the donation for $itemName. Reason: "${reason.trim()}". Phone: ${user.phone}',
                                           type: 'donation_cancelled',
                                           relatedItemId: targetDocId,
                                           createdAt: DateTime.now(),
                                           isRead: false,
                                         );
-                                        await FirestoreService().sendNotification(notification);
+                                        await FirestoreService()
+                                            .sendNotification(notification);
                                       }
 
                                       if (listingId.isNotEmpty) {
-                                        DocumentReference listingRef = FirebaseFirestore.instance.collection('ngo_listings').doc(listingId);
-                                        await FirebaseFirestore.instance.runTransaction((transaction) async {
-                                          DocumentSnapshot listingSnap = await transaction.get(listingRef);
-                                          if (listingSnap.exists) {
-                                            var lData = listingSnap.data() as Map<String, dynamic>;
-                                            int currentFulfilled = (lData['fulfilledQuantity'] as num?)?.toInt() ?? 0;
-                                            int totalNeeded = (lData['quantity'] as num?)?.toInt() ?? 0;
-                                            int newFulfilled = currentFulfilled - donatedQty;
-                                            if (newFulfilled < 0) newFulfilled = 0;
-                                            String newStatus = lData['status'] ?? 'open';
-                                            if (newFulfilled < totalNeeded && newStatus == 'closed') newStatus = 'open';
-                                            transaction.update(listingRef, {'fulfilledQuantity': newFulfilled, 'status': newStatus});
-                                          }
-                                        });
+                                        DocumentReference listingRef =
+                                            FirebaseFirestore.instance
+                                                .collection('ngo_listings')
+                                                .doc(listingId);
+                                        await FirebaseFirestore.instance
+                                            .runTransaction((
+                                              transaction,
+                                            ) async {
+                                              DocumentSnapshot listingSnap =
+                                                  await transaction.get(
+                                                    listingRef,
+                                                  );
+                                              if (listingSnap.exists) {
+                                                var lData =
+                                                    listingSnap.data()
+                                                        as Map<String, dynamic>;
+                                                int currentFulfilled =
+                                                    (lData['fulfilledQuantity']
+                                                            as num?)
+                                                        ?.toInt() ??
+                                                    0;
+                                                int totalNeeded =
+                                                    (lData['quantity'] as num?)
+                                                        ?.toInt() ??
+                                                    0;
+                                                int newFulfilled =
+                                                    currentFulfilled -
+                                                    donatedQty;
+                                                if (newFulfilled < 0)
+                                                  newFulfilled = 0;
+                                                String newStatus =
+                                                    lData['status'] ?? 'open';
+                                                if (newFulfilled <
+                                                        totalNeeded &&
+                                                    newStatus == 'closed')
+                                                  newStatus = 'open';
+                                                transaction.update(listingRef, {
+                                                  'fulfilledQuantity':
+                                                      newFulfilled,
+                                                  'status': newStatus,
+                                                });
+                                              }
+                                            });
                                       }
-                                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Donation cancelled. NGO notified and quantity restored!')));
+                                      if (context.mounted)
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Donation cancelled. NGO notified and quantity restored!',
+                                            ),
+                                          ),
+                                        );
                                     } catch (e) {
-                                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to cancel donation.')));
+                                      if (context.mounted)
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Failed to cancel donation.',
+                                            ),
+                                          ),
+                                        );
                                     }
                                   },
                                 );
@@ -766,29 +1160,56 @@ class ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // BOTTOM SHEET NGO REQUESTS
-  Future<void> _showRecentRequestsSheet(BuildContext context, String ngoId) async {
+  Future<void> _showRecentRequestsSheet(
+    BuildContext context,
+    String ngoId,
+  ) async {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFFFDF7F8),
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+      ),
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.85,
         padding: const EdgeInsets.only(top: 20, left: 16, right: 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)))),
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
             const SizedBox(height: 20),
-            Text("Your Donation Requests", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: themeColor)),
+            Text(
+              "Your Donation Requests",
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: themeColor,
+              ),
+            ),
             const SizedBox(height: 15),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('ngo_listings').where('ngoId', isEqualTo: ngoId).snapshots(),
+                stream: FirebaseFirestore.instance
+                    .collection('ngo_listings')
+                    .where('ngoId', isEqualTo: ngoId)
+                    .snapshots(),
                 builder: (context, snapshot) {
-                  if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
-                  if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: themeColor));
+                  if (snapshot.hasError)
+                    return Center(child: Text("Error: ${snapshot.error}"));
+                  if (snapshot.connectionState == ConnectionState.waiting)
+                    return Center(
+                      child: CircularProgressIndicator(color: themeColor),
+                    );
 
                   var requests = snapshot.data!.docs.toList();
                   requests.sort((a, b) {
@@ -796,75 +1217,181 @@ class ProfileScreenState extends State<ProfileScreen> {
                     var bData = b.data() as Map<String, dynamic>;
                     var aTime = aData['createdAt'];
                     var bTime = bData['createdAt'];
-                    DateTime aDate = aTime is Timestamp ? aTime.toDate() : (aTime is DateTime ? aTime : DateTime.fromMillisecondsSinceEpoch(0));
-                    DateTime bDate = bTime is Timestamp ? bTime.toDate() : (bTime is DateTime ? bTime : DateTime.fromMillisecondsSinceEpoch(0));
+                    DateTime aDate = aTime is Timestamp
+                        ? aTime.toDate()
+                        : (aTime is DateTime
+                              ? aTime
+                              : DateTime.fromMillisecondsSinceEpoch(0));
+                    DateTime bDate = bTime is Timestamp
+                        ? bTime.toDate()
+                        : (bTime is DateTime
+                              ? bTime
+                              : DateTime.fromMillisecondsSinceEpoch(0));
                     return bDate.compareTo(aDate);
                   });
 
-                  if (requests.isEmpty) return const Center(child: Text("You haven't made any requests yet."));
+                  if (requests.isEmpty)
+                    return const Center(
+                      child: Text("You haven't made any requests yet."),
+                    );
 
                   return ListView.builder(
                     physics: const BouncingScrollPhysics(),
                     itemCount: requests.length,
                     itemBuilder: (context, index) {
                       var data = requests[index].data() as Map<String, dynamic>;
-                      String type = (data['type'] ?? 'PRODUCT').toString().toUpperCase();
+                      String type = (data['type'] ?? 'PRODUCT')
+                          .toString()
+                          .toUpperCase();
                       bool isFood = type == 'FOOD';
-                      String itemName = isFood ? (data['foodType'] ?? 'Food') : (data['productName'] ?? 'Product');
-                      int totalQty = int.tryParse(data['quantity']?.toString() ?? '0') ?? 0;
-                      int fulfilledQty = int.tryParse(data['fulfilledQuantity']?.toString() ?? '0') ?? 0;
+                      String itemName = isFood
+                          ? (data['foodType'] ?? 'Food')
+                          : (data['productName'] ?? 'Product');
+                      int totalQty =
+                          int.tryParse(data['quantity']?.toString() ?? '0') ??
+                          0;
+                      int fulfilledQty =
+                          int.tryParse(
+                            data['fulfilledQuantity']?.toString() ?? '0',
+                          ) ??
+                          0;
                       int remainingQty = totalQty - fulfilledQty;
                       if (remainingQty < 0) remainingQty = 0;
                       String unit = data['unit'] ?? '';
-                      double progress = totalQty > 0 ? (fulfilledQty / totalQty) : 0.0;
+                      double progress = totalQty > 0
+                          ? (fulfilledQty / totalQty)
+                          : 0.0;
                       Timestamp? ts = data['createdAt'] as Timestamp?;
-                      String dateText = ts != null ? "${ts.toDate().day}-${ts.toDate().month}-${ts.toDate().year}" : "Unknown Date";
+                      String dateText = ts != null
+                          ? "${ts.toDate().day}-${ts.toDate().month}-${ts.toDate().year}"
+                          : "Unknown Date";
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 16),
                         padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))]),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(itemName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                                Text(
+                                  itemName,
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
-                                  child: Text(type, style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.bold, fontSize: 12)),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade200,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    type,
+                                    style: TextStyle(
+                                      color: Colors.grey.shade700,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 12),
                             if (!isFood) ...[
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text("$fulfilledQty donated out of $totalQty", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13)),
-                                  Text("$remainingQty needed", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                                  Text(
+                                    "$fulfilledQty donated out of $totalQty",
+                                    style: const TextStyle(
+                                      color: Colors.green,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  Text(
+                                    "$remainingQty needed",
+                                    style: TextStyle(
+                                      color: themeColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 8),
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(10),
-                                child: LinearProgressIndicator(value: progress, minHeight: 8, backgroundColor: Colors.grey.shade200, valueColor: AlwaysStoppedAnimation<Color>(themeColor)),
+                                child: LinearProgressIndicator(
+                                  value: progress,
+                                  minHeight: 8,
+                                  backgroundColor: Colors.grey.shade200,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    themeColor,
+                                  ),
+                                ),
                               ),
                             ] else ...[
-                              Text("Quantity Requested: $totalQty $unit", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              Text(
+                                "Quantity Requested: $totalQty $unit",
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
                             ],
                             const SizedBox(height: 16),
                             Row(
                               children: [
-                                Icon(Icons.access_time, size: 14, color: Colors.grey.shade500),
+                                Icon(
+                                  Icons.access_time,
+                                  size: 14,
+                                  color: Colors.grey.shade500,
+                                ),
                                 const SizedBox(width: 4),
-                                Text(dateText, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                                Text(
+                                  dateText,
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontSize: 12,
+                                  ),
+                                ),
                                 const SizedBox(width: 16),
-                                Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade500),
+                                Icon(
+                                  Icons.location_on_outlined,
+                                  size: 14,
+                                  color: Colors.grey.shade500,
+                                ),
                                 const SizedBox(width: 4),
-                                Expanded(child: Text(data['ngoLocation'] ?? '', style: TextStyle(color: Colors.grey.shade600, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                                Expanded(
+                                  child: Text(
+                                    data['ngoLocation'] ?? '',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 12,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                               ],
                             ),
                           ],
@@ -880,27 +1407,49 @@ class ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
-  // BOTTOM SHEET SHARE APP
   Future<void> _shareApp(BuildContext context) async {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+      ),
       builder: (BuildContext sheetContext) {
         return Padding(
           padding: const EdgeInsets.all(20.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text("Share App Via", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: themeColor)),
+              Text(
+                "Share App Via",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: themeColor,
+                ),
+              ),
               const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _buildShareOption(sheetContext, "WhatsApp", Icons.chat_bubble_outline, "whatsapp://send?text=Check out Charitey App: https://charitey.app"),
-                  _buildShareOption(sheetContext, "Facebook", Icons.facebook, "https://www.facebook.com/sharer/sharer.php?u=https://charitey.app"),
-                  _buildShareOption(sheetContext, "Instagram", Icons.camera_alt_outlined, "https://www.instagram.com"),
+                  _buildShareOption(
+                    sheetContext,
+                    "WhatsApp",
+                    Icons.chat_bubble_outline,
+                    "whatsapp://send?text=Check out Charitey App: https://charitey.app",
+                  ),
+                  _buildShareOption(
+                    sheetContext,
+                    "Facebook",
+                    Icons.facebook,
+                    "https://www.facebook.com/sharer/sharer.php?u=https://charitey.app",
+                  ),
+                  _buildShareOption(
+                    sheetContext,
+                    "Instagram",
+                    Icons.camera_alt_outlined,
+                    "https://www.instagram.com",
+                  ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -911,7 +1460,12 @@ class ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildShareOption(BuildContext context, String label, IconData icon, String urlScheme) {
+  Widget _buildShareOption(
+    BuildContext context,
+    String label,
+    IconData icon,
+    String urlScheme,
+  ) {
     return GestureDetector(
       onTap: () async {
         Navigator.pop(context);
@@ -919,20 +1473,29 @@ class ProfileScreenState extends State<ProfileScreen> {
         try {
           await launchUrl(url, mode: LaunchMode.externalApplication);
         } catch (e) {
-          await launchUrl(Uri.parse("https://charitey.app"), mode: LaunchMode.platformDefault);
+          await launchUrl(
+            Uri.parse("https://charitey.app"),
+            mode: LaunchMode.platformDefault,
+          );
         }
       },
       child: Column(
         children: [
-          CircleAvatar(radius: 26, backgroundColor: themeColor.withValues(alpha: 0.1), child: Icon(icon, color: themeColor, size: 26)),
+          CircleAvatar(
+            radius: 26,
+            backgroundColor: themeColor.withValues(alpha: 0.1),
+            child: Icon(icon, color: themeColor, size: 26),
+          ),
           const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+          ),
         ],
       ),
     );
   }
 
-  // VOLUNTEER TASKS BOTTOM SHEET
   Future<void> _showMyTasksSheet(BuildContext context) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUserModel;
@@ -943,7 +1506,9 @@ class ProfileScreenState extends State<ProfileScreen> {
       context: context,
       backgroundColor: const Color(0xFFFDF7F8),
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+      ),
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.85,
         padding: const EdgeInsets.only(top: 20, left: 16, right: 16),
@@ -951,41 +1516,74 @@ class ProfileScreenState extends State<ProfileScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(
-              child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
             ),
             const SizedBox(height: 20),
-            Text("My Delivery Tasks", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: themeColor)),
+            Text(
+              "My Delivery Tasks",
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: themeColor,
+              ),
+            ),
             const SizedBox(height: 15),
             Expanded(
               child: currentUserId.isEmpty
                   ? const Center(child: Text("Unable to load task history."))
                   : StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance.collection('donations').where('assignedVolunteerId', isEqualTo: currentUserId).snapshots(),
+                      stream: FirebaseFirestore.instance
+                          .collection('donations')
+                          .where(
+                            'assignedVolunteerId',
+                            isEqualTo: currentUserId,
+                          )
+                          .snapshots(),
                       builder: (context, snapshot) {
-                        if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
-                        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: themeColor));
+                        if (snapshot.hasError)
+                          return Center(
+                            child: Text("Error: ${snapshot.error}"),
+                          );
+                        if (snapshot.connectionState == ConnectionState.waiting)
+                          return Center(
+                            child: CircularProgressIndicator(color: themeColor),
+                          );
 
                         var tasks = snapshot.data!.docs.toList();
                         tasks.sort((a, b) {
                           var aData = a.data() as Map<String, dynamic>;
                           var bData = b.data() as Map<String, dynamic>;
-                          DateTime aDate = (aData['createdAt'] as Timestamp?)?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0);
-                          DateTime bDate = (bData['createdAt'] as Timestamp?)?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0);
+                          DateTime aDate =
+                              (aData['createdAt'] as Timestamp?)?.toDate() ??
+                              DateTime.fromMillisecondsSinceEpoch(0);
+                          DateTime bDate =
+                              (bData['createdAt'] as Timestamp?)?.toDate() ??
+                              DateTime.fromMillisecondsSinceEpoch(0);
                           return bDate.compareTo(aDate);
                         });
 
                         if (tasks.isEmpty) {
-                          return const Center(child: Text("You haven't accepted any tasks yet."));
+                          return const Center(
+                            child: Text("You haven't accepted any tasks yet."),
+                          );
                         }
 
                         return ListView.builder(
                           physics: const BouncingScrollPhysics(),
                           itemCount: tasks.length,
                           itemBuilder: (context, index) {
-                            var taskData = tasks[index].data() as Map<String, dynamic>;
+                            var taskData =
+                                tasks[index].data() as Map<String, dynamic>;
                             var donationId = tasks[index].id;
                             String status = taskData['status'] ?? 'pending';
-                            
+
                             return VolunteerTaskHistoryCard(
                               donationId: donationId,
                               taskData: taskData,
@@ -1002,11 +1600,10 @@ class ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-} // End of ProfileScreenState
-
+}
 
 // =========================================================================
-// ⚡ VOLUNTEER IMPACT STORY WIDGET
+// VOLUNTEER IMPACT STORY WIDGET
 // =========================================================================
 class VolunteerImpactStoryWidget extends StatefulWidget {
   final String userId;
@@ -1019,7 +1616,8 @@ class VolunteerImpactStoryWidget extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<VolunteerImpactStoryWidget> createState() => _VolunteerImpactStoryWidgetState();
+  State<VolunteerImpactStoryWidget> createState() =>
+      _VolunteerImpactStoryWidgetState();
 }
 
 class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
@@ -1033,16 +1631,62 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
   static const Color _duskyRoseDarkText = Color(0xFF6B2737);
   static const Color _duskyRoseLabelText = Color(0xFF7A3B48);
 
+  int _visitStreak = 0;
+
   @override
   void initState() {
-    super.initState();
-    _chartController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    );
-    _chartAnimation = CurvedAnimation(parent: _chartController, curve: Curves.easeOut);
-    _chartController.forward();
+  super.initState();
+  _chartController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  );
+  _chartAnimation = CurvedAnimation(
+    parent: _chartController,
+    curve: Curves.easeOut,
+  );
+  _chartController.forward();
+  _updateVisitStreak();
+}
+
+Future<void> _updateVisitStreak() async {
+  try {
+    final docRef =
+        FirebaseFirestore.instance.collection('users').doc(widget.userId);
+    final snap = await docRef.get();
+    final now = DateTime.now();
+    final todayKey =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
+    int newStreak = 1;
+
+    if (snap.exists) {
+      final data = snap.data() as Map<String, dynamic>?;
+      final String? lastVisit = data?['lastProfileVisitDate'];
+      final int prevStreak = (data?['profileVisitStreak'] as num?)?.toInt() ?? 0;
+
+      if (lastVisit == todayKey) {
+        // Already counted today — visiting again should NOT increase it
+        if (mounted) setState(() => _visitStreak = prevStreak > 0 ? prevStreak : 1);
+        return;
+      } else if (lastVisit != null) {
+        final lastDate = DateTime.parse(lastVisit);
+        final yesterday =
+            DateTime(now.year, now.month, now.day).subtract(const Duration(days: 1));
+        final lastDateOnly = DateTime(lastDate.year, lastDate.month, lastDate.day);
+        newStreak = (lastDateOnly == yesterday) ? prevStreak + 1 : 1;
+      }
+    }
+
+    await docRef.set({
+      'lastProfileVisitDate': todayKey,
+      'profileVisitStreak': newStreak,
+    }, SetOptions(merge: true));
+
+    if (mounted) setState(() => _visitStreak = newStreak);
+  } catch (_) {
+    // fail silently, keep _visitStreak at 0
   }
+}
 
   @override
   void dispose() {
@@ -1062,9 +1706,18 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
 
     for (int i = 6; i >= 0; i--) {
       DateTime day = now.subtract(Duration(days: i));
-      String label = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][day.weekday - 1];
+      String label = [
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat',
+        'Sun',
+      ][day.weekday - 1];
       dayLabels.add(label);
-      String key = '${day.year}-${day.month}-${day.day}';
+      String key =
+          '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
       dayIndexMap[key] = 6 - i;
     }
 
@@ -1077,13 +1730,14 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
 
       if (status == 'delivery_completed') {
         totalCompleted++;
-      } else if (status != 'cancelled') {
+      } else if (status != 'cancelled' && status != 'completed') {
         totalPending++;
       }
 
       if (ts is Timestamp) {
         DateTime date = ts.toDate();
-        String key = '${date.year}-${date.month}-${date.day}';
+        String key =
+            '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
         int? idx = dayIndexMap[key];
         if (idx != null) {
           acceptedCounts[idx]++;
@@ -1093,11 +1747,11 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
       }
     }
 
-    // Compute streak
     int streak = 0;
     DateTime cursor = DateTime.now();
     for (int i = 0; i < 60; i++) {
-      String key = '${cursor.year}-${cursor.month}-${cursor.day}';
+      String key =
+          '${cursor.year}-${cursor.month.toString().padLeft(2, '0')}-${cursor.day.toString().padLeft(2, '0')}';
       if (streakDays.contains(key)) {
         streak++;
         cursor = cursor.subtract(const Duration(days: 1));
@@ -1106,7 +1760,6 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
       }
     }
 
-    // Personal best index
     int personalBestIndex = -1;
     double maxCompleted = 0;
     for (int i = 0; i < completedCounts.length; i++) {
@@ -1131,26 +1784,43 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
   Map<String, dynamic> _getBadgeInfo(int totalCompleted) {
     if (totalCompleted >= 31) {
       return {
-        'rank': 'Legend', 'emoji': '💎',
-        'min': 31, 'max': null, 'next': null, 'nextEmoji': '',
+        'rank': 'Legend',
+        'emoji': '💎',
+        'min': 31,
+        'max': null,
+        'next': null,
+        'nextEmoji': '',
         'quote': 'You are the backbone of this community. Thank you.',
       };
     } else if (totalCompleted >= 16) {
       return {
-        'rank': 'Champion', 'emoji': '🥇',
-        'min': 16, 'max': 30, 'next': 'Legend', 'nextEmoji': '💎',
-        'quote': 'You\'ve touched over ${totalCompleted * 3} lives. You\'re making real change.',
+        'rank': 'Champion',
+        'emoji': '🥇',
+        'min': 16,
+        'max': 30,
+        'next': 'Legend',
+        'nextEmoji': '💎',
+        'quote':
+            'You\'ve touched over ${totalCompleted * 3} lives. You\'re making real change.',
       };
     } else if (totalCompleted >= 6) {
       return {
-        'rank': 'Supporter', 'emoji': '🥈',
-        'min': 6, 'max': 15, 'next': 'Champion', 'nextEmoji': '🥇',
+        'rank': 'Supporter',
+        'emoji': '🥈',
+        'min': 6,
+        'max': 15,
+        'next': 'Champion',
+        'nextEmoji': '🥇',
         'quote': 'Your support is building a better tomorrow!',
       };
     } else {
       return {
-        'rank': 'Helper', 'emoji': '🥉',
-        'min': 0, 'max': 5, 'next': 'Supporter', 'nextEmoji': '🥈',
+        'rank': 'Helper',
+        'emoji': '🥉',
+        'min': 0,
+        'max': 5,
+        'next': 'Supporter',
+        'nextEmoji': '🥈',
         'quote': 'Every journey starts with one step. Keep going!',
       };
     }
@@ -1169,11 +1839,15 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
         final stats = _computeStats(snapshot.data!.docs);
         final int totalCompleted = stats['totalCompleted'];
         final int totalPending = stats['totalPending'];
-        final int streak = stats['streak'];
+        final int streak = _visitStreak;
         final int livesTouched = stats['livesTouched'];
         final List<String> dayLabels = List<String>.from(stats['dayLabels']);
-        final List<double> acceptedCounts = List<double>.from(stats['acceptedCounts']);
-        final List<double> completedCounts = List<double>.from(stats['completedCounts']);
+        final List<double> acceptedCounts = List<double>.from(
+          stats['acceptedCounts'],
+        );
+        final List<double> completedCounts = List<double>.from(
+          stats['completedCounts'],
+        );
         final int personalBestIndex = stats['personalBestIndex'];
         final badge = _getBadgeInfo(totalCompleted);
 
@@ -1186,18 +1860,21 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
                 color: Colors.black.withValues(alpha: 0.08),
                 blurRadius: 16,
                 offset: const Offset(0, 6),
-              )
+              ),
             ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── HEADER ──────────────────────────────────────────────
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
                 child: Row(
                   children: [
-                    Icon(Icons.bolt_rounded, color: widget.themeColor, size: 22),
+                    Icon(
+                      Icons.bolt_rounded,
+                      color: widget.themeColor,
+                      size: 22,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'YOUR IMPACT STORY',
@@ -1219,17 +1896,32 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
                 ),
               ),
 
-              // ── LAYER 1: STATS STRIP ─────────────────────────────────
               SizedBox(
                 height: 108,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   children: [
-                    _buildStatChip(Icons.local_shipping_rounded, 'Total Delivered', totalCompleted.toString()),
-                    _buildStatChip(Icons.hourglass_top_rounded, 'Pending', totalPending.toString()),
-                    _buildStatChip(Icons.local_fire_department_rounded, 'Streak', '$streak days'),
-                    _buildStatChip(Icons.favorite_rounded, 'Lives Touched', '~$livesTouched people'),
+                    _buildStatChip(
+                      Icons.local_shipping_rounded,
+                      'Total Delivered',
+                      totalCompleted.toString(),
+                    ),
+                    _buildStatChip(
+                      Icons.hourglass_top_rounded,
+                      'Pending',
+                      totalPending.toString(),
+                    ),
+                    _buildStatChip(
+                      Icons.local_fire_department_rounded,
+                      'Streak',
+                      '$streak days',
+                    ),
+                    _buildStatChip(
+                      Icons.favorite_rounded,
+                      'Lives Touched',
+                      '~$livesTouched people',
+                    ),
                   ],
                 ),
               ),
@@ -1237,12 +1929,15 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
               const SizedBox(height: 8),
               Divider(color: Colors.grey.shade100, thickness: 1, height: 1),
 
-              // ── LAYER 2: ANIMATED CHART ──────────────────────────────
-              _buildChartSection(dayLabels, acceptedCounts, completedCounts, personalBestIndex),
+              _buildChartSection(
+                dayLabels,
+                acceptedCounts,
+                completedCounts,
+                personalBestIndex,
+              ),
 
               Divider(color: Colors.grey.shade100, thickness: 1, height: 1),
 
-              // ── LAYER 3: RANK & BADGE ────────────────────────────────
               _buildBadgeSection(totalCompleted, badge),
 
               const SizedBox(height: 20),
@@ -1268,7 +1963,10 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.6),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: _duskyRose.withValues(alpha: 0.25),
@@ -1286,7 +1984,727 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
         borderRadius: BorderRadius.circular(16),
         child: Stack(
           children: [
-            // subtle diagonal shine streak
+            Positioned(
+              top: -20,
+              right: -20,
+              child: Transform.rotate(
+                angle: 0.6,
+                child: Container(
+                  width: 60,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.white.withValues(alpha: 0.45),
+                        Colors.white.withValues(alpha: 0.0),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, size: 16, color: _duskyRoseDarkText),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: _duskyRoseDarkText,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: _duskyRoseLabelText,
+                    height: 1.3,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  Widget _buildChartSection(
+    List<String> labels,
+    List<double> accepted,
+    List<double> completed,
+    int personalBestIndex,
+  ) {
+    double maxVal = 0;
+    for (var v in [...accepted, ...completed]) {
+      if (v > maxVal) maxVal = v;
+    }
+    if (maxVal == 0) maxVal = 5;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.show_chart, size: 15, color: widget.themeColor),
+              const SizedBox(width: 6),
+              Text(
+                'Activity (Last 7 Days)',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                width: 12,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: widget.themeColor.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Accepted',
+                style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                width: 12,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: widget.themeColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+             const SizedBox(width: 4),
+              Text(
+                'Delivered',
+                style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: _selectedDayIndex != null
+                ? Container(
+                    key: ValueKey(_selectedDayIndex),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: widget.themeColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: widget.themeColor.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.touch_app_rounded,
+                          size: 14,
+                          color: widget.themeColor,
+                        ),
+                        const SizedBox(width: 6),
+Text(
+                          '${labels[_selectedDayIndex!]}: '
+                          '${completed[_selectedDayIndex!].toInt()} delivered, '
+                          '${accepted[_selectedDayIndex!].toInt()} accepted',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: widget.themeColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : const SizedBox(key: ValueKey('empty'), height: 0),
+          ),
+
+          GestureDetector(
+            onTapDown: (details) {
+              final RenderBox box = context.findRenderObject() as RenderBox;
+              double chartWidth = box.size.width - 32;
+              double sectionWidth = chartWidth / 7;
+              int idx = (details.localPosition.dx / sectionWidth).floor().clamp(
+                0,
+                6,
+              );
+              setState(() {
+                _selectedDayIndex = _selectedDayIndex == idx ? null : idx;
+              });
+            },
+            child: AnimatedBuilder(
+              animation: _chartAnimation,
+              builder: (context, _) {
+                return CustomPaint(
+                  size: const Size(double.infinity, 150),
+                  painter: _ImpactChartPainter(
+                    accepted: accepted,
+                    completed: completed,
+                    labels: labels,
+                    themeColor: widget.themeColor,
+                    animationValue: _chartAnimation.value,
+                    maxVal: maxVal,
+                    personalBestIndex: personalBestIndex,
+                    selectedIndex: _selectedDayIndex,
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBadgeSection(int totalCompleted, Map<String, dynamic> badge) {
+    final bool isLegend = badge['next'] == null;
+    final int min = badge['min'] as int;
+    final int? max = badge['max'] as int?;
+    final double progress = isLegend
+        ? 1.0
+        : ((totalCompleted - min) / ((max! - min))).clamp(0.0, 1.0);
+    final int toNext = isLegend
+        ? 0
+        : ((max ?? 0) - totalCompleted + 1).clamp(0, 999);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: widget.themeColor.withValues(alpha: 0.10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: widget.themeColor.withValues(alpha: 0.25),
+                      blurRadius: 16,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Text(
+                    badge['emoji'],
+                    style: const TextStyle(fontSize: 32),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          badge['rank'],
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: widget.themeColor,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: widget.themeColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '$totalCompleted deliveries',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: widget.themeColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 8,
+                        backgroundColor: Colors.grey.shade200,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          widget.themeColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    if (!isLegend)
+                      Text(
+                        '$toNext more to become ${badge['next']} ${badge['nextEmoji']}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      )
+                    else
+                      Text(
+                        'Highest rank achieved! 🎉',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: widget.themeColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  widget.themeColor.withValues(alpha: 0.08),
+                  widget.themeColor.withValues(alpha: 0.02),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: widget.themeColor.withValues(alpha: 0.15),
+              ),
+            ),
+            child: Text(
+              '"${badge['quote']}"',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey.shade700,
+                fontStyle: FontStyle.italic,
+                height: 1.6,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// DONOR IMPACT STORY WIDGET (PENDING REMOVED)
+// =========================================================================
+class DonorImpactStoryWidget extends StatefulWidget {
+  final String userId;
+  final Color themeColor;
+
+  const DonorImpactStoryWidget({
+    Key? key,
+    required this.userId,
+    required this.themeColor,
+  }) : super(key: key);
+
+  @override
+  State<DonorImpactStoryWidget> createState() => _DonorImpactStoryWidgetState();
+}
+
+class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _chartController;
+  late Animation<double> _chartAnimation;
+  int? _selectedDayIndex;
+
+  static const Color _duskyRose = Color(0xFFB76E79);
+  static const Color _duskyRoseLight = Color(0xFFE8B4BC);
+  static const Color _duskyRoseDarkText = Color(0xFF6B2737);
+  static const Color _duskyRoseLabelText = Color(0xFF7A3B48);
+
+  int _visitStreak = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _chartController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    _chartAnimation = CurvedAnimation(
+      parent: _chartController,
+      curve: Curves.easeOut,
+    );
+    _chartController.forward();
+    _updateVisitStreak();
+  }
+
+  Future<void> _updateVisitStreak() async {
+    try {
+      final docRef =
+          FirebaseFirestore.instance.collection('users').doc(widget.userId);
+      final snap = await docRef.get();
+      final now = DateTime.now();
+      final todayKey =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
+      int newStreak = 1;
+
+      if (snap.exists) {
+        final data = snap.data() as Map<String, dynamic>?;
+        final String? lastVisit = data?['lastProfileVisitDate'];
+        final int prevStreak =
+            (data?['profileVisitStreak'] as num?)?.toInt() ?? 0;
+
+        if (lastVisit == todayKey) {
+          if (mounted) {
+            setState(() => _visitStreak = prevStreak > 0 ? prevStreak : 1);
+          }
+          return;
+        } else if (lastVisit != null) {
+          final lastDate = DateTime.parse(lastVisit);
+          final yesterday = DateTime(now.year, now.month, now.day)
+              .subtract(const Duration(days: 1));
+          final lastDateOnly =
+              DateTime(lastDate.year, lastDate.month, lastDate.day);
+          newStreak = (lastDateOnly == yesterday) ? prevStreak + 1 : 1;
+        }
+      }
+
+      await docRef.set({
+        'lastProfileVisitDate': todayKey,
+        'profileVisitStreak': newStreak,
+      }, SetOptions(merge: true));
+
+      if (mounted) setState(() => _visitStreak = newStreak);
+    } catch (_) {
+      // fail silently, keep _visitStreak at 0
+    }
+  }
+
+  @override
+  void dispose() {
+    _chartController.dispose();
+    super.dispose();
+  }
+
+  Map<String, dynamic> _computeStats(List<QueryDocumentSnapshot> docs) {
+    int totalDonations = 0;
+    int totalPending = 0;
+
+    DateTime now = DateTime.now();
+    List<String> dayLabels = [];
+    List<double> donatedCounts = List.filled(7, 0);
+    List<double> fulfilledCounts = List.filled(7, 0);
+    Map<String, int> dayIndexMap = {};
+
+    for (int i = 6; i >= 0; i--) {
+      DateTime day = now.subtract(Duration(days: i));
+      String label = [
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat',
+        'Sun',
+      ][day.weekday - 1];
+      dayLabels.add(label);
+      String key =
+          '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+      dayIndexMap[key] = 6 - i;
+    }
+
+    Set<String> streakDays = {};
+
+    for (var doc in docs) {
+      var data = doc.data() as Map<String, dynamic>;
+      String status = (data['status'] ?? '').toString().trim().toLowerCase();
+      var ts = data['createdAt'];
+
+      totalDonations++;
+
+      if (status != 'cancelled') {
+        totalPending++;
+      }
+
+      if (ts is Timestamp) {
+        DateTime date = ts.toDate();
+        String key =
+            '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+        int? idx = dayIndexMap[key];
+        if (idx != null) {
+          donatedCounts[idx]++;
+          if (status == 'delivery_completed') fulfilledCounts[idx]++;
+        }
+        if (status == 'delivery_completed') streakDays.add(key);
+      }
+    }
+
+    int streak = 0;
+    DateTime cursor = DateTime.now();
+    for (int i = 0; i < 60; i++) {
+      String key =
+          '${cursor.year}-${cursor.month.toString().padLeft(2, '0')}-${cursor.day.toString().padLeft(2, '0')}';
+      if (streakDays.contains(key)) {
+        streak++;
+        cursor = cursor.subtract(const Duration(days: 1));
+      } else {
+        break;
+      }
+    }
+
+    int personalBestIndex = -1;
+    double maxFulfilled = 0;
+    for (int i = 0; i < fulfilledCounts.length; i++) {
+      if (fulfilledCounts[i] > maxFulfilled) {
+        maxFulfilled = fulfilledCounts[i];
+        personalBestIndex = i;
+      }
+    }
+
+    return {
+      'totalDonations': totalDonations,
+      'totalPending': totalPending,
+      'streak': streak,
+      'livesTouched': totalDonations * 3,
+      'dayLabels': dayLabels,
+      'donatedCounts': donatedCounts,
+      'fulfilledCounts': fulfilledCounts,
+      'personalBestIndex': personalBestIndex,
+    };
+  }
+
+  Map<String, dynamic> _getBadgeInfo(int totalDonations) {
+    if (totalDonations >= 31) {
+      return {
+        'rank': 'Legend',
+        'emoji': '💎',
+        'min': 31,
+        'max': null,
+        'next': null,
+        'nextEmoji': '',
+        'quote': 'You are the backbone of this community. Thank you.',
+      };
+    } else if (totalDonations >= 16) {
+      return {
+        'rank': 'Champion',
+        'emoji': '🥇',
+        'min': 16,
+        'max': 30,
+        'next': 'Legend',
+        'nextEmoji': '💎',
+        'quote':
+            'You\'ve touched over ${totalDonations * 3} lives. You\'re making real change.',
+      };
+    } else if (totalDonations >= 6) {
+      return {
+        'rank': 'Supporter',
+        'emoji': '🥈',
+        'min': 6,
+        'max': 15,
+        'next': 'Champion',
+        'nextEmoji': '🥇',
+        'quote': 'Your generosity is building a better tomorrow!',
+      };
+    } else {
+      return {
+        'rank': 'Helper',
+        'emoji': '🥉',
+        'min': 0,
+        'max': 5,
+        'next': 'Supporter',
+        'nextEmoji': '🥈',
+        'quote': 'Every journey starts with one step. Keep going!',
+      };
+    }
+  }
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('donations')
+          .where('donorId', isEqualTo: widget.userId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox.shrink();
+
+        final stats = _computeStats(snapshot.data!.docs);
+        final int totalDonations = stats['totalDonations'];
+        final int streak = _visitStreak;
+        final int livesTouched = stats['livesTouched'];
+        final List<String> dayLabels = List<String>.from(stats['dayLabels']);
+        final List<double> donatedCounts = List<double>.from(
+          stats['donatedCounts'],
+        );
+        final List<double> fulfilledCounts = List<double>.from(
+          stats['fulfilledCounts'],
+        );
+        final int personalBestIndex = stats['personalBestIndex'];
+        final badge = _getBadgeInfo(totalDonations);
+
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.bolt_rounded,
+                      color: widget.themeColor,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'YOUR DONOR IMPACT',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: widget.themeColor,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 20, bottom: 16),
+                child: Text(
+                  'Last 7 days  •  All Time',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                ),
+              ),
+
+              SizedBox(
+                height: 108,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    _buildStatChip(
+                      Icons.volunteer_activism_rounded,
+                      'Total Donations',
+                      totalDonations.toString(),
+                    ),
+                    _buildStatChip(
+                      Icons.local_fire_department_rounded,
+                      'Streak',
+                      '$streak days',
+                    ),
+                    _buildStatChip(
+                      Icons.favorite_rounded,
+                      'Lives Touched',
+                      '~$livesTouched people',
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 8),
+              Divider(color: Colors.grey.shade100, thickness: 1, height: 1),
+
+              _buildChartSection(
+                dayLabels,
+                donatedCounts,
+                fulfilledCounts,
+                personalBestIndex,
+              ),
+
+              Divider(color: Colors.grey.shade100, thickness: 1, height: 1),
+
+              _buildBadgeSection(totalDonations, badge),
+
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatChip(IconData icon, String label, String value) {
+    return Container(
+      width: 126,
+      margin: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            _duskyRoseLight.withValues(alpha: 0.9),
+            _duskyRoseLight.withValues(alpha: 0.55),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.6),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: _duskyRose.withValues(alpha: 0.25),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: Colors.white.withValues(alpha: 0.6),
+            blurRadius: 2,
+            offset: const Offset(-1, -1),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          children: [
             Positioned(
               top: -20,
               right: -20,
@@ -1348,12 +2766,12 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
 
   Widget _buildChartSection(
     List<String> labels,
-    List<double> accepted,
-    List<double> completed,
+    List<double> donated,
+    List<double> fulfilled,
     int personalBestIndex,
   ) {
     double maxVal = 0;
-    for (var v in [...accepted, ...completed]) {
+    for (var v in [...donated, ...fulfilled]) {
       if (v > maxVal) maxVal = v;
     }
     if (maxVal == 0) maxVal = 5;
@@ -1363,7 +2781,6 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Legend row
           Row(
             children: [
               Icon(Icons.show_chart, size: 15, color: widget.themeColor),
@@ -1386,7 +2803,10 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
                 ),
               ),
               const SizedBox(width: 4),
-              Text('Accepted', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+              Text(
+                'Donated',
+                style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+              ),
               const SizedBox(width: 10),
               Container(
                 width: 12,
@@ -1397,52 +2817,64 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
                 ),
               ),
               const SizedBox(width: 4),
-              Text('Completed', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+              Text(
+                'Fulfilled',
+                style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+              ),
             ],
           ),
           const SizedBox(height: 10),
 
-          // Tap-to-see tooltip
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 200),
             child: _selectedDayIndex != null
                 ? Container(
                     key: ValueKey(_selectedDayIndex),
                     margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
                     decoration: BoxDecoration(
                       color: widget.themeColor.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: widget.themeColor.withValues(alpha: 0.25)),
+                      border: Border.all(
+                        color: widget.themeColor.withValues(alpha: 0.25),
+                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.touch_app_rounded, size: 14, color: widget.themeColor),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${labels[_selectedDayIndex!]}: '
-                          '${completed[_selectedDayIndex!].toInt()} completed, '
-                          '${accepted[_selectedDayIndex!].toInt()} accepted',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: widget.themeColor,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        Icon(
+                          Icons.touch_app_rounded,
+                          size: 14,
+                          color: widget.themeColor,
                         ),
+                        const SizedBox(width: 6),
+Text(
+  '${labels[_selectedDayIndex!]}: '
+  '${donated[_selectedDayIndex!].toInt()} donated',
+  style: TextStyle(
+    fontSize: 12,
+    color: widget.themeColor,
+    fontWeight: FontWeight.w600,
+  ),
+),
                       ],
                     ),
                   )
                 : const SizedBox(key: ValueKey('empty'), height: 0),
           ),
 
-          // Chart
           GestureDetector(
             onTapDown: (details) {
               final RenderBox box = context.findRenderObject() as RenderBox;
               double chartWidth = box.size.width - 32;
               double sectionWidth = chartWidth / 7;
-              int idx = (details.localPosition.dx / sectionWidth).floor().clamp(0, 6);
+              int idx = (details.localPosition.dx / sectionWidth).floor().clamp(
+                0,
+                6,
+              );
               setState(() {
                 _selectedDayIndex = _selectedDayIndex == idx ? null : idx;
               });
@@ -1453,8 +2885,8 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
                 return CustomPaint(
                   size: const Size(double.infinity, 150),
                   painter: _ImpactChartPainter(
-                    accepted: accepted,
-                    completed: completed,
+                    accepted: donated,
+                    completed: fulfilled,
                     labels: labels,
                     themeColor: widget.themeColor,
                     animationValue: _chartAnimation.value,
@@ -1471,28 +2903,25 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  // BADGE SECTION — UNCHANGED, LEFT EXACTLY AS ORIGINAL
-  // ═══════════════════════════════════════════════════════════════════
-  Widget _buildBadgeSection(int totalCompleted, Map<String, dynamic> badge) {
+  Widget _buildBadgeSection(int totalDonations, Map<String, dynamic> badge) {
     final bool isLegend = badge['next'] == null;
     final int min = badge['min'] as int;
     final int? max = badge['max'] as int?;
     final double progress = isLegend
         ? 1.0
-        : ((totalCompleted - min) / ((max! - min))).clamp(0.0, 1.0);
-    final int toNext = isLegend ? 0 : ((max ?? 0) - totalCompleted + 1).clamp(0, 999);
+        : ((totalDonations - min) / ((max! - min))).clamp(0.0, 1.0);
+    final int toNext = isLegend
+        ? 0
+        : ((max ?? 0) - totalDonations + 1).clamp(0, 999);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Badge row
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Glowing badge icon
               Container(
                 width: 60,
                 height: 60,
@@ -1508,7 +2937,10 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
                   ],
                 ),
                 child: Center(
-                  child: Text(badge['emoji'], style: const TextStyle(fontSize: 32)),
+                  child: Text(
+                    badge['emoji'],
+                    style: const TextStyle(fontSize: 32),
+                  ),
                 ),
               ),
               const SizedBox(width: 16),
@@ -1528,13 +2960,16 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
                         ),
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: widget.themeColor.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            '$totalCompleted deliveries',
+                            '$totalDonations donations',
                             style: TextStyle(
                               fontSize: 11,
                               color: widget.themeColor,
@@ -1551,14 +2986,19 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
                         value: progress,
                         minHeight: 8,
                         backgroundColor: Colors.grey.shade200,
-                        valueColor: AlwaysStoppedAnimation<Color>(widget.themeColor),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          widget.themeColor,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 6),
                     if (!isLegend)
                       Text(
                         '$toNext more to become ${badge['next']} ${badge['nextEmoji']}',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
                       )
                     else
                       Text(
@@ -1577,7 +3017,6 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
 
           const SizedBox(height: 16),
 
-          // ── LAYER 4: Motivational quote ──────────────────────────────
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
@@ -1589,7 +3028,9 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
                 ],
               ),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: widget.themeColor.withValues(alpha: 0.15)),
+              border: Border.all(
+                color: widget.themeColor.withValues(alpha: 0.15),
+              ),
             ),
             child: Text(
               '"${badge['quote']}"',
@@ -1608,9 +3049,8 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
   }
 }
 
-
 // =========================================================================
-// 📈 IMPACT CHART PAINTER
+// IMPACT CHART PAINTER
 // =========================================================================
 class _ImpactChartPainter extends CustomPainter {
   final List<double> accepted;
@@ -1647,9 +3087,11 @@ class _ImpactChartPainter extends CustomPainter {
     return Offset(x, y);
   }
 
-  // Endpoint of a (possibly partially revealed) path — used to close the fill area
   Offset _pathEndpoint(Path path, Size size) {
-    Offset last = Offset(_padLeft, _padTop + (size.height - _padTop - _padBottom));
+    Offset last = Offset(
+      _padLeft,
+      _padTop + (size.height - _padTop - _padBottom),
+    );
     for (final metric in path.computeMetrics()) {
       final tangent = metric.getTangentForOffset(metric.length);
       if (tangent != null) last = tangent.position;
@@ -1657,7 +3099,6 @@ class _ImpactChartPainter extends CustomPainter {
     return last;
   }
 
-  // Smooth Catmull-Rom → cubic bezier curve through the data points
   Path _buildSmoothPath(List<double> data, Size size) {
     final path = Path();
     final int n = data.length;
@@ -1670,14 +3111,19 @@ class _ImpactChartPainter extends CustomPainter {
       final p2 = pts[i + 1];
       final p3 = (i + 2 < pts.length) ? pts[i + 2] : p2;
 
-      final cp1 = Offset(p1.dx + (p2.dx - p0.dx) / 6, p1.dy + (p2.dy - p0.dy) / 6);
-      final cp2 = Offset(p2.dx - (p3.dx - p1.dx) / 6, p2.dy - (p3.dy - p1.dy) / 6);
+      final cp1 = Offset(
+        p1.dx + (p2.dx - p0.dx) / 6,
+        p1.dy + (p2.dy - p0.dy) / 6,
+      );
+      final cp2 = Offset(
+        p2.dx - (p3.dx - p1.dx) / 6,
+        p2.dy - (p3.dy - p1.dy) / 6,
+      );
       path.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, p2.dx, p2.dy);
     }
     return path;
   }
 
-  // Reveals a fraction `t` (0..1) of a path based on its measured arc length
   Path _revealPath(Path full, double t) {
     if (t >= 1) return full;
     if (t <= 0) return Path();
@@ -1695,16 +3141,18 @@ class _ImpactChartPainter extends CustomPainter {
 
     final double chartH = size.height - _padTop - _padBottom;
 
-    // ── Grid lines ────────────────────────────────────────────────────
     final Paint gridPaint = Paint()
       ..color = Colors.grey.withValues(alpha: 0.12)
       ..strokeWidth = 1;
     for (int i = 0; i <= 4; i++) {
       double y = _padTop + (i / 4) * chartH;
-      canvas.drawLine(Offset(_padLeft, y), Offset(size.width - _padRight, y), gridPaint);
+      canvas.drawLine(
+        Offset(_padLeft, y),
+        Offset(size.width - _padRight, y),
+        gridPaint,
+      );
     }
 
-    // ── Selected-day vertical highlight ──────────────────────────────
     if (selectedIndex != null && selectedIndex! < n) {
       Offset selPt = _pt(selectedIndex!, completed, size);
       final Paint selPaint = Paint()
@@ -1717,13 +3165,14 @@ class _ImpactChartPainter extends CustomPainter {
       );
     }
 
-    // ── Build smooth curves & reveal by animation progress ─────────────
     final Path fullAcceptedPath = _buildSmoothPath(accepted, size);
     final Path fullCompletedPath = _buildSmoothPath(completed, size);
     final Path animAcceptedPath = _revealPath(fullAcceptedPath, animationValue);
-    final Path animCompletedPath = _revealPath(fullCompletedPath, animationValue);
+    final Path animCompletedPath = _revealPath(
+      fullCompletedPath,
+      animationValue,
+    );
 
-    // ── Filled area under the completed curve ───────────────────────────
     if (animationValue > 0 && n >= 2) {
       final Path fillPath = Path.from(animCompletedPath);
       final Offset endPt = _pathEndpoint(animCompletedPath, size);
@@ -1746,7 +3195,6 @@ class _ImpactChartPainter extends CustomPainter {
       );
     }
 
-    // ── Accepted curve (lighter) ────────────────────────────────────────
     canvas.drawPath(
       animAcceptedPath,
       Paint()
@@ -1757,7 +3205,6 @@ class _ImpactChartPainter extends CustomPainter {
         ..style = PaintingStyle.stroke,
     );
 
-    // ── Completed curve — soft glow layer, then bold line ───────────────
     canvas.drawPath(
       animCompletedPath,
       Paint()
@@ -1778,7 +3225,6 @@ class _ImpactChartPainter extends CustomPainter {
         ..style = PaintingStyle.stroke,
     );
 
-    // ── Dots, labels, personal-best marker ──────────────────────────────
     double progress = animationValue * (n - 1);
     int visible = progress.ceil().clamp(0, n - 1);
 
@@ -1787,26 +3233,26 @@ class _ImpactChartPainter extends CustomPainter {
       bool isSel = selectedIndex == i;
       bool isPB = personalBestIndex == i && completed[i] > 0;
 
-      // Outer glow if selected
       if (isSel) {
-        canvas.drawCircle(pt, 9, Paint()..color = themeColor.withValues(alpha: 0.18));
+        canvas.drawCircle(
+          pt,
+          9,
+          Paint()..color = themeColor.withValues(alpha: 0.18),
+        );
       }
-      // White ring
       canvas.drawCircle(pt, 5, Paint()..color = Colors.white);
-      // Colored border
       canvas.drawCircle(
-        pt, 5,
+        pt,
+        5,
         Paint()
           ..color = themeColor
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2,
       );
-      // Filled centre if has data
       if (completed[i] > 0) {
         canvas.drawCircle(pt, 3, Paint()..color = themeColor);
       }
 
-      // Personal-best marker (professional star icon, not emoji)
       if (isPB) {
         final tp = TextPainter(
           text: TextSpan(
@@ -1822,8 +3268,6 @@ class _ImpactChartPainter extends CustomPainter {
         )..layout();
         tp.paint(canvas, Offset(pt.dx - tp.width / 2, pt.dy - 28));
       }
-
-      // Day label
       final lp = TextPainter(
         text: TextSpan(
           text: labels[i],
@@ -1844,7 +3288,8 @@ class _ImpactChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ImpactChartPainter old) =>
-      old.animationValue != animationValue || old.selectedIndex != selectedIndex;
+      old.animationValue != animationValue ||
+      old.selectedIndex != selectedIndex;
 }
 
 // =========================================================================
@@ -1865,32 +3310,52 @@ class VolunteerTaskHistoryCard extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<VolunteerTaskHistoryCard> createState() => _VolunteerTaskHistoryCardState();
+  State<VolunteerTaskHistoryCard> createState() =>
+      _VolunteerTaskHistoryCardState();
 }
 
 class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
   final GlobalKey _shareKey = GlobalKey();
 
-  Future<void> _shareImpactCard(BuildContext context, String ngoName, String itemInfo) async {
-    showDialog(context: context, barrierDismissible: false, builder: (context) => Center(child: CircularProgressIndicator(color: widget.themeColor)));
+  Future<void> _shareImpactCard(
+    BuildContext context,
+    String ngoName,
+    String itemInfo,
+  ) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) =>
+          Center(child: CircularProgressIndicator(color: widget.themeColor)),
+    );
     try {
       await Future.delayed(const Duration(milliseconds: 150));
-      RenderRepaintBoundary boundary = _shareKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      RenderRepaintBoundary boundary =
+          _shareKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      ByteData? byteData = await image.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
       Uint8List pngBytes = byteData!.buffer.asUint8List();
       if (context.mounted) Navigator.pop(context);
 
-      String shareMessage = "I just completed a delivery of $itemInfo to $ngoName through Charitey!\n\n"
+      String shareMessage =
+          "I just completed a delivery of $itemInfo to $ngoName through Charitey!\n\n"
           "Join me in helping families in need. Download Charitey and make an impact today!\n\n"
           "#Charitey #Volunteer #SocialImpact";
 
-      final xFile = XFile.fromData(pngBytes, mimeType: 'image/png', name: 'charitey_volunteer_impact.png');
+      final xFile = XFile.fromData(
+        pngBytes,
+        mimeType: 'image/png',
+        name: 'charitey_volunteer_impact.png',
+      );
       await Share.shareXFiles([xFile], text: shareMessage);
     } catch (e) {
       if (context.mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to share: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to share: $e')));
       }
     }
   }
@@ -1898,15 +3363,25 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
   @override
   Widget build(BuildContext context) {
     bool isCompleted = widget.status == 'delivery_completed';
-    String itemName = widget.taskData['items'] ?? widget.taskData['itemName'] ?? 'Items';
+    String itemName =
+        widget.taskData['items'] ?? widget.taskData['itemName'] ?? 'Items';
     String ngoName = widget.taskData['ngoName'] ?? 'NGO Partner';
-    String ngoLocation = widget.taskData['ngoLocation'] ?? 'Location not provided';
+    String ngoLocation =
+        widget.taskData['ngoLocation'] ?? 'Location not provided';
     String donorName = widget.taskData['donorName'] ?? 'Donor';
-    String donorLocation = widget.taskData['donorLocation'] ?? 'Location not provided';
-    String rawQty = widget.taskData['quantity']?.toString() ?? widget.taskData['qty']?.toString() ?? widget.taskData['donatedAmount']?.toString() ?? '';
+    String donorLocation =
+        widget.taskData['donorLocation'] ?? 'Location not provided';
+    String rawQty =
+        widget.taskData['quantity']?.toString() ??
+        widget.taskData['qty']?.toString() ??
+        widget.taskData['donatedAmount']?.toString() ??
+        '';
 
     return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection('ngo_listings').doc(widget.taskData['listingId']).get(),
+      future: FirebaseFirestore.instance
+          .collection('ngo_listings')
+          .doc(widget.taskData['listingId'])
+          .get(),
       builder: (context, snapshot) {
         String unit = '';
         if (snapshot.hasData && snapshot.data!.exists) {
@@ -1917,8 +3392,11 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
           } else {
             itemName = listingData['productName'] ?? itemName;
           }
-          if (ngoName == 'NGO Partner' && listingData.containsKey('ngoName')) ngoName = listingData['ngoName'];
-          if (ngoLocation == 'Location not provided' && listingData.containsKey('ngoLocation')) ngoLocation = listingData['ngoLocation'];
+          if (ngoName == 'NGO Partner' && listingData.containsKey('ngoName'))
+            ngoName = listingData['ngoName'];
+          if (ngoLocation == 'Location not provided' &&
+              listingData.containsKey('ngoLocation'))
+            ngoLocation = listingData['ngoLocation'];
         }
 
         String itemInfo = "$rawQty $unit $itemName".trim();
@@ -1947,7 +3425,13 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1958,22 +3442,36 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                       Expanded(
                         child: Text(
                           "Delivery: $itemName",
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
-                          color: isCompleted ? Colors.green.shade50 : Colors.orange.shade50,
+                          color: isCompleted
+                              ? Colors.green.shade50
+                              : Colors.orange.shade50,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: isCompleted ? Colors.green.shade200 : Colors.orange.shade200),
+                          border: Border.all(
+                            color: isCompleted
+                                ? Colors.green.shade200
+                                : Colors.orange.shade200,
+                          ),
                         ),
                         child: Text(
                           isCompleted ? "Completed" : "Pending",
                           style: TextStyle(
-                            color: isCompleted ? Colors.green.shade700 : Colors.orange.shade700,
+                            color: isCompleted
+                                ? Colors.green.shade700
+                                : Colors.orange.shade700,
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
                           ),
@@ -1984,9 +3482,19 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Icon(Icons.local_shipping_outlined, size: 16, color: Colors.grey.shade500),
+                      Icon(
+                        Icons.local_shipping_outlined,
+                        size: 16,
+                        color: Colors.grey.shade500,
+                      ),
                       const SizedBox(width: 8),
-                      Text("Delivery Item: $itemInfo", style: TextStyle(color: Colors.grey.shade800, fontWeight: FontWeight.w600)),
+                      Text(
+                        "Delivery Item: $itemInfo",
+                        style: TextStyle(
+                          color: Colors.grey.shade800,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                   const Padding(
@@ -2000,22 +3508,62 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text("PICKUP FROM", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: widget.themeColor, letterSpacing: 0.5)),
+                            Text(
+                              "PICKUP FROM",
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: widget.themeColor,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
                             const SizedBox(height: 6),
                             Row(
                               children: [
-                                Icon(Icons.person_outline, size: 14, color: Colors.grey.shade500),
+                                Icon(
+                                  Icons.person_outline,
+                                  size: 14,
+                                  color: Colors.grey.shade500,
+                                ),
                                 const SizedBox(width: 4),
-                                Expanded(child: Text(donorName, style: TextStyle(fontSize: 13, color: Colors.grey.shade800, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                                Expanded(
+                                  child: Text(
+                                    donorName,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey.shade800,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 4),
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Padding(padding: const EdgeInsets.only(top: 2), child: Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade500)),
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Icon(
+                                    Icons.location_on_outlined,
+                                    size: 14,
+                                    color: Colors.grey.shade500,
+                                  ),
+                                ),
                                 const SizedBox(width: 4),
-                                Expanded(child: Text(donorLocation, style: TextStyle(fontSize: 12, color: Colors.grey.shade600), maxLines: 2, overflow: TextOverflow.ellipsis)),
+                                Expanded(
+                                  child: Text(
+                                    donorLocation,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                               ],
                             ),
                           ],
@@ -2026,22 +3574,62 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text("DELIVER TO (NGO)", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: widget.themeColor, letterSpacing: 0.5)),
+                            Text(
+                              "DELIVER TO (NGO)",
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: widget.themeColor,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
                             const SizedBox(height: 6),
                             Row(
                               children: [
-                                Icon(Icons.account_balance_outlined, size: 14, color: Colors.grey.shade500),
+                                Icon(
+                                  Icons.account_balance_outlined,
+                                  size: 14,
+                                  color: Colors.grey.shade500,
+                                ),
                                 const SizedBox(width: 4),
-                                Expanded(child: Text(ngoName, style: TextStyle(fontSize: 13, color: Colors.grey.shade800, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                                Expanded(
+                                  child: Text(
+                                    ngoName,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey.shade800,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 4),
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Padding(padding: const EdgeInsets.only(top: 2), child: Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade500)),
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Icon(
+                                    Icons.location_on_outlined,
+                                    size: 14,
+                                    color: Colors.grey.shade500,
+                                  ),
+                                ),
                                 const SizedBox(width: 4),
-                                Expanded(child: Text(ngoLocation, style: TextStyle(fontSize: 12, color: Colors.grey.shade600), maxLines: 2, overflow: TextOverflow.ellipsis)),
+                                Expanded(
+                                  child: Text(
+                                    ngoLocation,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                               ],
                             ),
                           ],
@@ -2050,49 +3638,96 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                     ],
                   ),
                   const SizedBox(height: 16),
+                  // 👇 NEW: Mark as Completed Button with Popup (Profile Screen) 👇
                   if (!isCompleted)
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: () async {
-                          await FirebaseFirestore.instance.collection('donations').doc(widget.donationId).update({'status': 'delivery_completed'});
+                           // 👇 1. Show Confirmation Dialog 👇
+                           bool confirm = await showDialog(
+                             context: context,
+                             builder: (ctx) => AlertDialog(
+                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                               title: Row(
+                                 children: [
+                                   Icon(Icons.check_circle_outline, color: Colors.green.shade600, size: 24),
+                                   const SizedBox(width: 8),
+                                   Text("Confirm Delivery", style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold, fontSize: 20)),
+                                 ],
+                               ),
+                               content: const Text(
+                                 "Have you successfully delivered the item(s) from the donor to the NGO?\n\nPlease only confirm if the handover is fully complete.",
+                                 style: TextStyle(height: 1.5, fontSize: 15, color: Colors.black87),
+                               ),
+                               actions: [
+                                 TextButton(
+                                   onPressed: () => Navigator.pop(ctx, false),
+                                   child: Text("Cancel", style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                                 ),
+                                 ElevatedButton(
+                                   onPressed: () => Navigator.pop(ctx, true),
+                                   style: ElevatedButton.styleFrom(
+                                     backgroundColor: Colors.green.shade600,
+                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                   ),
+                                   child: const Text("Yes, Completed", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                 ),
+                               ],
+                             ),
+                           ) ?? false;
 
-                          final authProvider = Provider.of<AuthProvider>(context, listen: false);
-                          final currentUserId = authProvider.currentFirebaseUser?.uid;
-                          final currentUserName = authProvider.currentUserModel?.name ?? 'Volunteer';
+                           // If they clicked cancel, stop here!
+                           if (!confirm) return; 
 
-                          if (currentUserId != null) {
-                            await FirebaseFirestore.instance.collection('users').doc(currentUserId).set({
-                              'deliveriesCompleted': FieldValue.increment(1)
-                            }, SetOptions(merge: true));
-                          }
+                           // 👇 2. Proceed with existing completion logic 👇
+                           await FirebaseFirestore.instance.collection('donations').doc(widget.donationId).update({
+                              'status': 'delivery_completed'
+                           });
+                           
+                           final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                           final currentUserId = authProvider.currentFirebaseUser?.uid;
+                           final currentUserName = authProvider.currentUserModel?.name ?? 'Volunteer';
 
-                          String taskDonorId = widget.taskData['donorId'] ?? '';
-                          String taskListingId = widget.taskData['listingId'] ?? '';
+                           if (currentUserId != null) {
+                             await FirebaseFirestore.instance.collection('users').doc(currentUserId).set({
+                               'deliveriesCompleted': FieldValue.increment(1)
+                             }, SetOptions(merge: true));
+                           }
 
-                          if (taskDonorId.isNotEmpty && taskListingId.isNotEmpty) {
-                            var requestQuery = await FirebaseFirestore.instance
-                                .collection('volunteer_requests')
-                                .where('donorId', isEqualTo: taskDonorId)
-                                .where('listingId', isEqualTo: taskListingId)
-                                .limit(1)
-                                .get();
+                           String taskDonorId = widget.taskData['donorId'] ?? '';
+                           String taskListingId = widget.taskData['listingId'] ?? '';
+                           
+                           if (taskDonorId.isNotEmpty && taskListingId.isNotEmpty) {
+                             var requestQuery = await FirebaseFirestore.instance
+                                 .collection('volunteer_requests')
+                                 .where('donorId', isEqualTo: taskDonorId)
+                                 .where('listingId', isEqualTo: taskListingId)
+                                 .limit(1)
+                                 .get();
 
-                            if (requestQuery.docs.isNotEmpty) {
-                              await FirebaseFirestore.instance
-                                  .collection('volunteer_requests')
-                                  .doc(requestQuery.docs.first.id)
-                                  .update({
-                                'status': 'completed',
-                                'assignedVolunteer': currentUserName,
-                              });
-                            }
-                          }
+                             if (requestQuery.docs.isNotEmpty) {
+                               await FirebaseFirestore.instance
+                                   .collection('volunteer_requests')
+                                   .doc(requestQuery.docs.first.id)
+                                   .update({
+                                     'status': 'completed', 
+                                     'assignedVolunteer': currentUserName, 
+                                   });
+                             }
+                           }
+                           
+                           if (context.mounted) {
+                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                               content: Text('Delivery marked as completed!'),
+                               backgroundColor: Colors.green,
+                             ));
+                           }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: widget.themeColor,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 12)
                         ),
                         child: const Text("Mark Delivery as Completed", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                       ),
@@ -2101,12 +3736,27 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
-                        onPressed: () => _shareImpactCard(context, ngoName, itemInfo),
-                        icon: Icon(Icons.share, size: 18, color: widget.themeColor),
-                        label: Text("Share Impact", style: TextStyle(color: widget.themeColor, fontWeight: FontWeight.bold)),
+                        onPressed: () =>
+                            _shareImpactCard(context, ngoName, itemInfo),
+                        icon: Icon(
+                          Icons.share,
+                          size: 18,
+                          color: widget.themeColor,
+                        ),
+                        label: Text(
+                          "Share Impact",
+                          style: TextStyle(
+                            color: widget.themeColor,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: widget.themeColor.withValues(alpha: 0.5)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          side: BorderSide(
+                            color: widget.themeColor.withValues(alpha: 0.5),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
@@ -2120,7 +3770,6 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
     );
   }
 }
-
 
 // =========================================================================
 // VOLUNTEER SHARE TEMPLATE
@@ -2136,7 +3785,6 @@ class VolunteerShareTemplate extends StatelessWidget {
     required this.itemInfo,
     required this.themeColor,
   }) : super(key: key);
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -2145,7 +3793,11 @@ class VolunteerShareTemplate extends StatelessWidget {
       decoration: const BoxDecoration(color: Color(0xFFFDF7F8)),
       child: Container(
         padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 20)]),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 20)],
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -2155,29 +3807,80 @@ class VolunteerShareTemplate extends StatelessWidget {
               children: [
                 Icon(Icons.volunteer_activism, color: themeColor, size: 28),
                 const SizedBox(width: 10),
-                Text("CHARITEY", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 22, letterSpacing: 1.5)),
+                Text(
+                  "CHARITEY",
+                  style: TextStyle(
+                    color: themeColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                    letterSpacing: 1.5,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 25),
-            Text("I delivered", style: TextStyle(color: Colors.grey.shade600, fontSize: 16)),
+            Text(
+              "I delivered",
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+            ),
             const SizedBox(height: 5),
-            Text(itemInfo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: Colors.black87), textAlign: TextAlign.center),
+            Text(
+              itemInfo,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 24,
+                color: Colors.black87,
+              ),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 25),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-              decoration: BoxDecoration(color: themeColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                color: themeColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Column(
                 children: [
-                  Text("Safely dropped off to", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text(
+                    "Safely dropped off to",
+                    style: TextStyle(
+                      color: themeColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
                   const SizedBox(height: 5),
-                  Text(ngoName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20), textAlign: TextAlign.center),
+                  Text(
+                    ngoName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 25),
-            Text("Join me as a volunteer and make an impact.", style: TextStyle(color: Colors.grey.shade700, fontSize: 15, fontStyle: FontStyle.italic), textAlign: TextAlign.center),
+            Text(
+              "Join me as a volunteer and make an impact.",
+              style: TextStyle(
+                color: Colors.grey.shade700,
+                fontSize: 15,
+                fontStyle: FontStyle.italic,
+              ),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 20),
-            Text("#ChariteyVolunteer", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 16)),
+            Text(
+              "#ChariteyVolunteer",
+              style: TextStyle(
+                color: themeColor,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
           ],
         ),
       ),
@@ -2185,9 +3888,8 @@ class VolunteerShareTemplate extends StatelessWidget {
   }
 }
 
-
 // =========================================================================
-// ENHANCED DONATION HISTORY CARD (FOR DONORS)
+// ENHANCED DONATION HISTORY CARD
 // =========================================================================
 class EnhancedDonationHistoryCard extends StatefulWidget {
   final String ngoName;
@@ -2224,50 +3926,73 @@ class EnhancedDonationHistoryCard extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<EnhancedDonationHistoryCard> createState() => EnhancedDonationHistoryCardState();
+  State<EnhancedDonationHistoryCard> createState() =>
+      EnhancedDonationHistoryCardState();
 }
 
-class EnhancedDonationHistoryCardState extends State<EnhancedDonationHistoryCard> {
+class EnhancedDonationHistoryCardState
+    extends State<EnhancedDonationHistoryCard> {
   final GlobalKey _shareKey = GlobalKey();
 
   Future<void> _shareDonationCard(BuildContext context) async {
-    showDialog(context: context, barrierDismissible: false, builder: (context) => Center(child: CircularProgressIndicator(color: widget.themeColor)));
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) =>
+          Center(child: CircularProgressIndicator(color: widget.themeColor)),
+    );
     try {
       await Future.delayed(const Duration(milliseconds: 150));
-      RenderRepaintBoundary boundary = _shareKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      RenderRepaintBoundary boundary =
+          _shareKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      ByteData? byteData = await image.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
       Uint8List pngBytes = byteData!.buffer.asUint8List();
       if (context.mounted) Navigator.pop(context);
 
       String formattedQty = widget.displayDonatedQty;
-      if (!formattedQty.toLowerCase().contains(RegExp(r'[a-z]')) && widget.unit.isNotEmpty) {
+      if (!formattedQty.toLowerCase().contains(RegExp(r'[a-z]')) &&
+          widget.unit.isNotEmpty) {
         formattedQty = '$formattedQty ${widget.unit}';
       }
 
-      String shareMessage = "I just donated $formattedQty of ${widget.itemName} to ${widget.ngoName} through Charitey!\n\n";
+      String shareMessage =
+          "I just donated $formattedQty of ${widget.itemName} to ${widget.ngoName} through Charitey!\n\n";
       if (widget.remainingQty > 0 && widget.type.toUpperCase() != 'FOOD') {
-        shareMessage += "They still need ${widget.remainingQty} ${widget.unit}. Every contribution helps change lives.\n\n";
+        shareMessage +=
+            "They still need ${widget.remainingQty} ${widget.unit}. Every contribution helps change lives.\n\n";
       }
-      shareMessage += "Join me in helping families in need. Download Charitey and make an impact today!\n\n#Charitey #Donate #SocialImpact";
+      shareMessage +=
+          "Join me in helping families in need. Download Charitey and make an impact today!\n\n#Charitey #Donate #SocialImpact";
 
-      final xFile = XFile.fromData(pngBytes, mimeType: 'image/png', name: 'charitey_impact.png');
+      final xFile = XFile.fromData(
+        pngBytes,
+        mimeType: 'image/png',
+        name: 'charitey_impact.png',
+      );
       await Share.shareXFiles([xFile], text: shareMessage);
     } catch (e) {
       if (context.mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to share card')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Failed to share card')));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    double progress = widget.totalQty > 0 ? (widget.fulfilledQty / widget.totalQty) : 0.0;
+    double progress = widget.totalQty > 0
+        ? (widget.fulfilledQty / widget.totalQty)
+        : 0.0;
     bool isFood = widget.type.toUpperCase() == 'FOOD';
     String formattedQty = widget.isCancelled ? "0" : widget.displayDonatedQty;
 
-    if (!formattedQty.toLowerCase().contains(RegExp(r'[a-z]')) && widget.unit.isNotEmpty) {
+    if (!formattedQty.toLowerCase().contains(RegExp(r'[a-z]')) &&
+        widget.unit.isNotEmpty) {
       formattedQty = '$formattedQty ${widget.unit}';
     }
 
@@ -2298,7 +4023,17 @@ class EnhancedDonationHistoryCardState extends State<EnhancedDonationHistoryCard
         Container(
           margin: const EdgeInsets.only(bottom: 16),
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))]),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2307,19 +4042,43 @@ class EnhancedDonationHistoryCardState extends State<EnhancedDonationHistoryCard
                   CircleAvatar(
                     radius: 20,
                     backgroundColor: widget.themeColor.withValues(alpha: 0.1),
-                    child: Text(widget.ngoName.isNotEmpty ? widget.ngoName[0].toUpperCase() : 'N', style: TextStyle(color: widget.themeColor, fontWeight: FontWeight.bold)),
+                    child: Text(
+                      widget.ngoName.isNotEmpty
+                          ? widget.ngoName[0].toUpperCase()
+                          : 'N',
+                      style: TextStyle(
+                        color: widget.themeColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(widget.ngoName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text(
+                          widget.ngoName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
                         Row(
                           children: [
-                            const Icon(Icons.verified, color: Colors.green, size: 14),
+                            const Icon(
+                              Icons.verified,
+                              color: Colors.green,
+                              size: 14,
+                            ),
                             const SizedBox(width: 4),
-                            Text("Verified Organization", style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                            Text(
+                              "Verified Organization",
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 12,
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -2328,26 +4087,62 @@ class EnhancedDonationHistoryCardState extends State<EnhancedDonationHistoryCard
                 ],
               ),
               const SizedBox(height: 16),
-              Text(widget.itemName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              Text(
+                widget.itemName,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 12),
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(color: widget.themeColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: widget.themeColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                     child: Row(
                       children: [
-                        Icon(Icons.volunteer_activism, size: 16, color: widget.themeColor),
+                        Icon(
+                          Icons.volunteer_activism,
+                          size: 16,
+                          color: widget.themeColor,
+                        ),
                         const SizedBox(width: 6),
-                        Text("You donated $formattedQty", style: TextStyle(color: widget.themeColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                        Text(
+                          "You donated $formattedQty",
+                          style: TextStyle(
+                            color: widget.themeColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
-                    child: Text(widget.type, style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.bold, fontSize: 13)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      widget.type,
+                      style: TextStyle(
+                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -2356,22 +4151,50 @@ class EnhancedDonationHistoryCardState extends State<EnhancedDonationHistoryCard
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text("${widget.fulfilledQty} collected out of ${widget.totalQty}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13)),
-                    Text("${widget.remainingQty} needed", style: TextStyle(color: widget.themeColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                    Text(
+                      "${widget.fulfilledQty} collected out of ${widget.totalQty}",
+                      style: const TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    Text(
+                      "${widget.remainingQty} needed",
+                      style: TextStyle(
+                        color: widget.themeColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(10),
-                  child: LinearProgressIndicator(value: progress, minHeight: 8, backgroundColor: Colors.grey.shade200, valueColor: AlwaysStoppedAnimation<Color>(widget.themeColor)),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 8,
+                    backgroundColor: Colors.grey.shade200,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      widget.themeColor,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 16),
               ],
               Row(
                 children: [
-                  Icon(Icons.access_time, size: 14, color: Colors.grey.shade500),
+                  Icon(
+                    Icons.access_time,
+                    size: 14,
+                    color: Colors.grey.shade500,
+                  ),
                   const SizedBox(width: 4),
-                  Text(widget.dateText, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                  Text(
+                    widget.dateText,
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -2380,21 +4203,62 @@ class EnhancedDonationHistoryCardState extends State<EnhancedDonationHistoryCard
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   if (widget.isCancelled)
-                    const Text('Cancelled by you', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13))
+                    const Text(
+                      'Cancelled by you',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    )
                   else if (widget.canCancel)
                     TextButton(
                       onPressed: widget.onCancel,
-                      style: TextButton.styleFrom(backgroundColor: Colors.red.shade50, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6)),
-                      child: Text('Cancel Request', style: TextStyle(color: Colors.red.shade400, fontWeight: FontWeight.bold)),
+                      style: TextButton.styleFrom(
+                        backgroundColor: Colors.red.shade50,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                      ),
+                      child: Text(
+                        'Cancel Request',
+                        style: TextStyle(
+                          color: Colors.red.shade400,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     )
                   else
-                    TextButton(onPressed: null, child: Text('24h Expired', style: TextStyle(color: Colors.grey.shade400))),
+                    TextButton(
+                      onPressed: null,
+                      child: Text(
+                        '24h Expired',
+                        style: TextStyle(color: Colors.grey.shade400),
+                      ),
+                    ),
                   if (!widget.isCancelled)
                     ElevatedButton.icon(
                       onPressed: () => _shareDonationCard(context),
-                      icon: const Icon(Icons.share, size: 18, color: Colors.white),
-                      label: const Text("Share Impact", style: TextStyle(color: Colors.white)),
-                      style: ElevatedButton.styleFrom(backgroundColor: widget.themeColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), elevation: 0),
+                      icon: const Icon(
+                        Icons.share,
+                        size: 18,
+                        color: Colors.white,
+                      ),
+                      label: const Text(
+                        "Share Impact",
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: widget.themeColor,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 0,
+                      ),
                     ),
                 ],
               ),
@@ -2406,9 +4270,8 @@ class EnhancedDonationHistoryCardState extends State<EnhancedDonationHistoryCard
   }
 }
 
-
 // =========================================================================
-// DONATION SHARE TEMPLATE (FOR DONORS)
+// DONATION SHARE TEMPLATE
 // =========================================================================
 class DonationShareTemplate extends StatelessWidget {
   final String ngoName;
@@ -2445,7 +4308,11 @@ class DonationShareTemplate extends StatelessWidget {
       decoration: const BoxDecoration(color: Color(0xFFFDF7F8)),
       child: Container(
         padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 20)]),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 20)],
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -2455,16 +4322,33 @@ class DonationShareTemplate extends StatelessWidget {
               children: [
                 Icon(Icons.volunteer_activism, color: themeColor, size: 28),
                 const SizedBox(width: 10),
-                Text("CHARITEY", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 22, letterSpacing: 1.5)),
+                Text(
+                  "CHARITEY",
+                  style: TextStyle(
+                    color: themeColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                    letterSpacing: 1.5,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 25),
-            Text("I supported", style: TextStyle(color: Colors.grey.shade600, fontSize: 16)),
+            Text(
+              "I supported",
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+            ),
             const SizedBox(height: 5),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(ngoName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                Text(
+                  ngoName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                  ),
+                ),
                 const SizedBox(width: 5),
                 const Icon(Icons.verified, color: Colors.green, size: 18),
               ],
@@ -2472,42 +4356,99 @@ class DonationShareTemplate extends StatelessWidget {
             const SizedBox(height: 25),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-              decoration: BoxDecoration(color: themeColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                color: themeColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Column(
                 children: [
-                  Text("I Donated", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text(
+                    "I Donated",
+                    style: TextStyle(
+                      color: themeColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
                   const SizedBox(height: 5),
-                  Text("$formattedDonatedQty of $itemName", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24), textAlign: TextAlign.center),
+                  Text(
+                    "$formattedDonatedQty of $itemName",
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 24,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 25),
             if (!isFood) ...[
               if (remainingQty > 0) ...[
-                Text("Still Needed: $remainingQty $unit", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.redAccent)),
+                Text(
+                  "Still Needed: $remainingQty $unit",
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: Colors.redAccent,
+                  ),
+                ),
                 const SizedBox(height: 10),
-                ClipRRect(borderRadius: BorderRadius.circular(10), child: LinearProgressIndicator(value: progress, minHeight: 12, backgroundColor: Colors.grey.shade200, valueColor: AlwaysStoppedAnimation<Color>(themeColor))),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 12,
+                    backgroundColor: Colors.grey.shade200,
+                    valueColor: AlwaysStoppedAnimation<Color>(themeColor),
+                  ),
+                ),
                 const SizedBox(height: 8),
-                Text("$fulfilledQty / $totalQty collected", style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
+                Text(
+                  "$fulfilledQty / $totalQty collected",
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                ),
               ] else ...[
-                const Text("Goal Fully Reached!", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.green)),
-              ]
+                const Text(
+                  "Goal Fully Reached!",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: Colors.green,
+                  ),
+                ),
+              ],
             ] else ...[
-              Text("Providing essential food relief.", style: TextStyle(color: Colors.grey.shade700, fontSize: 16, fontStyle: FontStyle.italic)),
+              Text(
+                "Providing essential food relief.",
+                style: TextStyle(
+                  color: Colors.grey.shade700,
+                  fontSize: 16,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
             ],
             const SizedBox(height: 30),
-            const Text("Every donation changes lives.", style: TextStyle(fontStyle: FontStyle.italic, fontSize: 16)),
+            const Text(
+              "Every donation changes lives.",
+              style: TextStyle(fontStyle: FontStyle.italic, fontSize: 16),
+            ),
             const SizedBox(height: 5),
-            Text("Join me and support families in need.", style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
+            Text(
+              "Join me and support families in need.",
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+            ),
             const SizedBox(height: 20),
-            Text("#Charitey", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold)),
+            Text(
+              "#Charitey",
+              style: TextStyle(color: themeColor, fontWeight: FontWeight.bold),
+            ),
           ],
         ),
       ),
     );
   }
 }
-
 
 // =========================================================================
 // FULL SCREEN IMAGE VIEWER
@@ -2530,8 +4471,14 @@ class FullScreenImageViewer extends StatelessWidget {
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
-        leading: IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context)),
-        title: Text(name, style: const TextStyle(color: Colors.white, fontSize: 16)),
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          name,
+          style: const TextStyle(color: Colors.white, fontSize: 16),
+        ),
       ),
       body: Center(
         child: InteractiveViewer(

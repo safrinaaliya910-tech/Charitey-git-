@@ -103,8 +103,153 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     }
   }
 
-  // 👇 NEW: This safely pre-filters all tasks before drawing them so the Empty State works! 👇
-  Future<List<Widget>> _generateFilteredCards(List<QueryDocumentSnapshot> donations, String myUserId) async {
+// 👇 NEW: Confirmation Dialog before accepting 👇
+  Future<void> _confirmAndAcceptTask(BuildContext context, String donationId, String volunteerId, String donorId, String ngoId, String itemName) async {
+    bool confirm = await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.local_shipping_rounded, color: themeColor, size: 24),
+            const SizedBox(width: 8),
+            Text("Confirm Pickup", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 20)),
+          ],
+        ),
+        content: const Text(
+          "Are you ready to deliver?\n\nYou must deliver on time. If there is any delay, please inform the NGO and Donor properly through the chat.",
+          style: TextStyle(height: 1.5, fontSize: 15, color: Colors.black87),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text("Cancel", style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: themeColor,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text("Yes, I'm Ready", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    ) ?? false;
+
+    // If they clicked "Yes", trigger your existing accept task logic!
+    if (confirm) {
+      await _acceptTask(donationId, volunteerId, donorId, ngoId, itemName);
+    }
+  }
+  // =========================================================================
+  // 👇 NEW: LAZY EXPIRATION AND URGENT ALERT LOGIC 👇
+  // =========================================================================
+
+  // Handles tasks that nobody accepted in time
+  Future<void> _handleExpiredTask(String donationId, String donorId, String ngoId, String itemName) async {
+    try {
+      // 1. Mark the donation as expired so it disappears from all lists
+      await FirebaseFirestore.instance.collection('donations').doc(donationId).update({
+        'status': 'volunteer_not_found',
+      });
+      
+      // 2. Notify the NGO
+      if (ngoId.isNotEmpty) {
+        String notifIdNgo = FirebaseFirestore.instance.collection('notifications').doc().id;
+        await FirebaseFirestore.instance.collection('notifications').doc(notifIdNgo).set({
+          'id': notifIdNgo,
+          'receiverId': ngoId,
+          'senderId': 'system',
+          'senderName': 'System Alert',
+          'type': 'volunteer_expired',
+          'title': 'No Volunteer Found',
+          'message': 'Unfortunately, no volunteer accepted the pickup for $itemName in time. Please re-request or arrange private transport.',
+          'relatedItemId': donationId,
+          'createdAt': FieldValue.serverTimestamp(),
+          'isRead': false,
+        });
+      }
+
+      // 3. Notify the Donor
+      if (donorId.isNotEmpty) {
+        String notifIdDonor = FirebaseFirestore.instance.collection('notifications').doc().id;
+        await FirebaseFirestore.instance.collection('notifications').doc(notifIdDonor).set({
+          'id': notifIdDonor,
+          'receiverId': donorId,
+          'senderId': 'system',
+          'senderName': 'System Alert',
+          'type': 'volunteer_expired',
+          'title': 'Pickup Expired',
+          'message': 'No volunteer was available to pick up $itemName before the required time. Please consider redonating or dropping it off.',
+          'relatedItemId': donationId,
+          'createdAt': FieldValue.serverTimestamp(),
+          'isRead': false,
+        });
+      }
+      
+      // 4. Update the Admin Panel Database
+      var requestQuery = await FirebaseFirestore.instance
+          .collection('volunteer_requests')
+          .where('donorId', isEqualTo: donorId)
+          .where('status', isEqualTo: 'pending')
+          .limit(1)
+          .get();
+
+      if (requestQuery.docs.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('volunteer_requests')
+            .doc(requestQuery.docs.first.id)
+            .update({
+              'status': 'expired', 
+            });
+      }
+    } catch (e) {
+      debugPrint("Error handling expired task: $e");
+    }
+  }
+
+  // Sends a broadcast alert 24 hours before expiry
+  Future<void> _triggerUrgentVolunteerNotification(String donationId, String itemName, String location) async {
+    try {
+      // 1. Immediately flag it so other volunteers don't trigger duplicate alerts
+      await FirebaseFirestore.instance.collection('donations').doc(donationId).update({
+        'urgentNotified': true,
+      });
+
+      // 2. Fetch all registered volunteers
+      var volunteersSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'volunteer')
+          .get();
+      
+      // 3. Send them all an urgent notification via a Firebase Batch Write
+      WriteBatch batch = FirebaseFirestore.instance.batch();
+      
+      for (var volDoc in volunteersSnap.docs) {
+        String volId = volDoc.id;
+        String notifId = FirebaseFirestore.instance.collection('notifications').doc().id;
+        
+        batch.set(FirebaseFirestore.instance.collection('notifications').doc(notifId), {
+          'id': notifId,
+          'receiverId': volId,
+          'senderId': 'system',
+          'senderName': 'Urgent Alert',
+          'type': 'urgent_task',
+          'title': 'Urgent: Volunteer Needed! 🚨',
+          'message': 'A donation of $itemName in $location needs pickup within 24 hours! Accept the task now and make an impact.',
+          'relatedItemId': donationId,
+          'createdAt': FieldValue.serverTimestamp(),
+          'isRead': false,
+        });
+      }
+      
+      await batch.commit();
+    } catch (e) {
+      debugPrint("Error triggering urgent notification: $e");
+    }
+  }
+ Future<List<Widget>> _generateFilteredCards(List<QueryDocumentSnapshot> donations, String myUserId) async {
     List<Widget> cardList = [];
     
     for (var donationDoc in donations) {
@@ -124,9 +269,9 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       
       bool isAcceptedByMe = (status == 'delivery_accepted' && assignedVolunteerId == myUserId);
       
-      // Tab filter
+      // 👇 Tab filter - FIXED: Now strictly hides 'volunteer_not_found' tasks 👇
       if (showAvailable) {
-        if (status == 'delivery_accepted') continue; 
+        if (status != 'pending') continue; 
       } else {
         if (!isAcceptedByMe) continue; 
       }
@@ -144,13 +289,41 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       
       String type = listingData['type'] ?? 'food';
       String itemName = type == 'food' ? (listingData['foodType'] ?? "Food") : (listingData['productName'] ?? "Product");
-      String quantityVal = listingData['quantity']?.toString() ?? '';
+
+      // ==========================================================
+      // 👇 NEW: EXPIRY & URGENT NOTIFICATION LOGIC 👇
+      // ==========================================================
+      Timestamp? liveUntilTs = listingData['liveUntil'] as Timestamp?;
+      DateTime liveUntil = liveUntilTs != null ? liveUntilTs.toDate() : DateTime.now().add(const Duration(days: 365));
+      DateTime now = DateTime.now();
+
+      if (status == 'pending') {
+        if (now.isAfter(liveUntil)) {
+          // ❌ TASK HAS EXPIRED: Run cleanup and skip building the card
+          _handleExpiredTask(donationId, donorId, listingData['ngold'] ?? listingData['ngoId'] ?? '', itemName);
+          continue; 
+        } else {
+          // 🚨 URGENT NOTIFICATION: Less than 24 hours remaining
+          bool urgentNotified = donationData['urgentNotified'] == true;
+          if (!urgentNotified && liveUntil.difference(now).inHours <= 24) {
+            _triggerUrgentVolunteerNotification(donationId, itemName, listingData['ngoLocation'] ?? 'your area');
+          }
+        }
+      }
+      // ==========================================================
+      
+      // Pulling the exact donated amount directly from the Donation Document
+      String rawDonatedQty = donationData['donatedQuantity']?.toString() ?? 
+                             donationData['quantity']?.toString() ?? 
+                             donationData['donatedAmount']?.toString() ?? '';
+                             
       String unitVal = listingData['unit']?.toString() ?? '';
-      String quantity = quantityVal.isEmpty ? '1 Item' : '$quantityVal $unitVal';
+      String quantity = rawDonatedQty.isEmpty ? '1 Item' : '$rawDonatedQty $unitVal'.trim();
+
       String availability = listingData['availability'] ?? 'Time not specified';
       String ngoName = listingData['ngoName'] ?? 'Unknown NGO';
       String ngoLocation = listingData['ngoLocation'] ?? 'Location unavailable';
-      String ngoId = listingData['ngoId'] ?? '';
+      String ngoId = listingData['ngoId'] ?? listingData['ngold'] ?? '';
       
       // Fetch NGO Phone
       String ngoPhone = 'Phone unavailable';
@@ -163,6 +336,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       cardList.add(
         _buildDeliveryCard(
           donationId: donationId,
+          listingId: listingId, 
           itemName: itemName,
           quantity: quantity,
           availability: availability,
@@ -306,8 +480,9 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     );
   }
 
-  Widget _buildDeliveryCard({
+ Widget _buildDeliveryCard({
     required String donationId,
+    required String listingId, 
     required String itemName,
     required String quantity,
     required String availability,
@@ -323,15 +498,30 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     required bool isAcceptedByMe,
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 18), // Slightly more breathing room
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        // 👇 Premium gradient background fading into a faint dusky rose 👇
+        gradient: LinearGradient(
+          colors: [
+            Colors.white,
+            themeColor.withValues(alpha: 0.04), // Faint dusky rose tint
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20), // Rounder edges look more modern
+        // 👇 Crisp, neat border to frame the card 👇
+        border: Border.all(
+          color: themeColor.withValues(alpha: 0.2), 
+          width: 1.5,
+        ),
         boxShadow: [
+          // 👇 Soft glowing shadow using the theme color instead of harsh black 👇
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10, 
-            offset: const Offset(0, 4),
+            color: themeColor.withValues(alpha: 0.12),
+            blurRadius: 16,
+            spreadRadius: 2,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -457,7 +647,8 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () => _acceptTask(donationId, myId, donorId, ngoId, itemName),
+                  // 👇 Hooks into the new Confirmation Dialog 👇
+                  onPressed: () => _confirmAndAcceptTask(context, donationId, myId, donorId, ngoId, itemName),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: themeColor,
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -473,54 +664,154 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
             else
               Column(
                 children: [
+                 // 👇 NEW: Mark as Completed Button with Popup (Dashboard) 👇
                   SizedBox(
                     width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ChatScreen(otherUserId: donorId, otherUserName: donorName),
-                          ),
-                        );
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                         // 👇 1. Show Confirmation Dialog 👇
+                         bool confirm = await showDialog(
+                           context: context,
+                           builder: (ctx) => AlertDialog(
+                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                             title: Row(
+                               children: [
+                                 Icon(Icons.check_circle_outline, color: Colors.green.shade600, size: 24),
+                                 const SizedBox(width: 8),
+                                 Text("Confirm Delivery", style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold, fontSize: 20)),
+                               ],
+                             ),
+                             content: const Text(
+                               "Have you successfully delivered the item(s) from the donor to the NGO?\n\nPlease only confirm if the handover is fully complete. If there is a delay, use the chat to inform them.",
+                               style: TextStyle(height: 1.5, fontSize: 15, color: Colors.black87),
+                             ),
+                             actions: [
+                               TextButton(
+                                 onPressed: () => Navigator.pop(ctx, false),
+                                 child: Text("Cancel", style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                               ),
+                               ElevatedButton(
+                                 onPressed: () => Navigator.pop(ctx, true),
+                                 style: ElevatedButton.styleFrom(
+                                   backgroundColor: Colors.green.shade600,
+                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                 ),
+                                 child: const Text("Yes, Completed", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                               ),
+                             ],
+                           ),
+                         ) ?? false;
+
+                         // If they clicked cancel, stop here!
+                         if (!confirm) return; 
+
+                         // 👇 2. Proceed with existing completion logic 👇
+                         await FirebaseFirestore.instance.collection('donations').doc(donationId).update({
+                            'status': 'delivery_completed'
+                         });
+                         
+                         final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                         final currentUserId = authProvider.currentFirebaseUser?.uid;
+                         final currentUserName = authProvider.currentUserModel?.name ?? 'Volunteer';
+
+                         if (currentUserId != null) {
+                           await FirebaseFirestore.instance.collection('users').doc(currentUserId).set({
+                             'deliveriesCompleted': FieldValue.increment(1)
+                           }, SetOptions(merge: true));
+                         }
+
+                         if (donorId.isNotEmpty && listingId.isNotEmpty) {
+                           var requestQuery = await FirebaseFirestore.instance
+                               .collection('volunteer_requests')
+                               .where('donorId', isEqualTo: donorId)
+                               .where('listingId', isEqualTo: listingId)
+                               .limit(1)
+                               .get();
+
+                           if (requestQuery.docs.isNotEmpty) {
+                             await FirebaseFirestore.instance
+                                 .collection('volunteer_requests')
+                                 .doc(requestQuery.docs.first.id)
+                                 .update({
+                                   'status': 'completed', 
+                                   'assignedVolunteer': currentUserName, 
+                                 });
+                           }
+                         }
+
+                         if (context.mounted) {
+                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                             content: Text('Delivery marked as completed!'),
+                             backgroundColor: Colors.green,
+                           ));
+                         }
                       },
-                      icon: Icon(Icons.chat_bubble_outline_rounded, color: themeColor, size: 20),
-                      label: Text(
-                        "Chat with Donor", 
-                        style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 15),
+                      icon: const Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
+                      label: const Text(
+                        "Mark Delivery as Completed",
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
                       ),
-                      style: OutlinedButton.styleFrom(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade600, 
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: BorderSide(color: themeColor.withValues(alpha: 0.5), width: 1.5),
-                        backgroundColor: themeColor.withValues(alpha: 0.05),
+                        elevation: 0,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                   ),
                   const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ChatScreen(otherUserId: ngoId, otherUserName: ngoName),
+                  
+                  // 👇 NEW: Chat Buttons Side-By-Side (Bottom) 👇
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ChatScreen(otherUserId: donorId, otherUserName: donorName),
+                              ),
+                            );
+                          },
+                          icon: Icon(Icons.chat_bubble_outline_rounded, color: themeColor, size: 16),
+                          label: Text(
+                            "Donor", 
+                            style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 14),
                           ),
-                        );
-                      },
-                      icon: Icon(Icons.chat_bubble_outline_rounded, color: Colors.blueGrey.shade700, size: 20),
-                      label: Text(
-                        "Chat with NGO", 
-                        style: TextStyle(color: Colors.blueGrey.shade700, fontWeight: FontWeight.bold, fontSize: 15),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            side: BorderSide(color: themeColor.withValues(alpha: 0.5), width: 1.5),
+                            backgroundColor: themeColor.withValues(alpha: 0.05),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
                       ),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: BorderSide(color: Colors.blueGrey.shade300, width: 1.5),
-                        backgroundColor: Colors.blueGrey.shade50,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ChatScreen(otherUserId: ngoId, otherUserName: ngoName),
+                              ),
+                            );
+                          },
+                          icon: Icon(Icons.chat_bubble_outline_rounded, color: Colors.blueGrey.shade700, size: 16),
+                          label: Text(
+                            "NGO", 
+                            style: TextStyle(color: Colors.blueGrey.shade700, fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            side: BorderSide(color: Colors.blueGrey.shade300, width: 1.5),
+                            backgroundColor: Colors.blueGrey.shade50,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ],
               )
@@ -529,7 +820,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       ),
     );
   }
-
   Widget _buildDetailRow(IconData icon, String text) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,

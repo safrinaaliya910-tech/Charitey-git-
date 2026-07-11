@@ -56,6 +56,41 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     return 4; // Donors: Image, Name, Phone, Location
   }
 
+  // 👇 FORMAT VALIDATORS FOR LICENSE IDs — TAMIL NADU LAUNCH 👇
+  bool _isValidNGOLicense(String value) {
+    // Tamil Nadu NGO Darpan Format: TN/YYYY/NNNNNNN
+    final cleaned = value.trim().toUpperCase();
+    final regex = RegExp(r'^TN\/(19|20)\d{2}\/\d{7}$');
+    return regex.hasMatch(cleaned);
+  }
+
+  bool _isValidDrivingLicense(String value) {
+    // Tamil Nadu DL Format: TN + RTO(2 digits) + Year(4 digits) + 7-digit Unique No.
+    // Accepts optional spaces/hyphens, normalizes before checking.
+    final cleaned = value.trim().toUpperCase().replaceAll(
+      RegExp(r'[\s\-]'),
+      '',
+    );
+    final regex = RegExp(r'^TN\d{2}(19|20)\d{2}\d{7}$');
+    return regex.hasMatch(cleaned);
+  }
+
+  bool _isValidRegistrationNo(String value) {
+    // Travel agency registration numbers vary — loose sanity check for now.
+    final cleaned = value.trim().toUpperCase();
+    final regex = RegExp(r'^[A-Z0-9\/\-]{5,20}$');
+    return regex.hasMatch(cleaned);
+  }
+
+  bool get _isLicenseFormatValid {
+    String value = licenseController.text.trim();
+    if (value.isEmpty) return false;
+    if (widget.role == 'ngo') return _isValidNGOLicense(value);
+    if (widget.role == 'volunteer') return _isValidDrivingLicense(value);
+    if (widget.role == 'travel_agency') return _isValidRegistrationNo(value);
+    return value.isNotEmpty;
+  }
+
   // 👇 UPDATED: Validation logic for the newly ordered pages 👇
   bool get _isCurrentPageValid {
     bool isValid = true;
@@ -72,7 +107,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       isValid = addressController.text.trim().isNotEmpty;
     } else if (_currentPage == 4) {
       // License validation only applies to roles with 5 pages
-      isValid = licenseController.text.trim().isNotEmpty;
+      isValid = _isLicenseFormatValid;
     }
 
     if (_currentPage == _totalPages - 1) {
@@ -805,12 +840,12 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   Widget _buildAddressStep() {
     return _buildStepContainer(
       title: "Location",
-      subtitle: "What is your city or base of operations?",
+      subtitle: "Which city in Tamil Nadu are you based in?",
       icon: Icons.location_on_rounded,
       child: _buildTextField(
         controller: addressController,
         label: "City / Area",
-        hint: "Enter city name",
+        hint: "e.g. Chennai, Coimbatore, Madurai",
         icon: Icons.home_outlined,
       ),
     );
@@ -822,15 +857,47 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
         : (widget.role == "travel_agency"
               ? "Registration No."
               : "NGO License ID");
+
+    String hint = widget.role == "volunteer"
+        ? "e.g. TN0120211234567"
+        : (widget.role == "travel_agency"
+              ? "e.g. TA-2021-4521"
+              : "e.g. TN/2015/0123456");
+
+    String formatHelp = widget.role == "volunteer"
+        ? "Tamil Nadu format: TN + RTO No. + Year + 7-digit No. (e.g. TN0120211234567)"
+        : (widget.role == "travel_agency"
+              ? "Enter your official business registration number."
+              : "Tamil Nadu NGO Darpan format: TN/Year/7-digit No. (e.g. TN/2015/0123456)");
+
+    bool showError =
+        licenseController.text.trim().isNotEmpty && !_isLicenseFormatValid;
+
     return _buildStepContainer(
       title: "Verification",
-      subtitle: "Please provide your $label for trust and verification",
+      subtitle:
+          "Please provide your $label for trust and verification",
       icon: Icons.verified_user_rounded,
-      child: _buildTextField(
-        controller: licenseController,
-        label: label,
-        hint: "Enter $label",
-        icon: Icons.credit_card_outlined,
+      child: Column(
+        children: [
+          _buildTextField(
+            controller: licenseController,
+            label: label,
+            hint: hint,
+            icon: Icons.credit_card_outlined,
+          ),
+         if (showError) ...[
+            const SizedBox(height: 6),
+            Text(
+              "Invalid ${widget.role == 'volunteer' ? 'Driving License' : (widget.role == 'travel_agency' ? 'Registration Number' : 'NGO License')} ID",
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.red.shade400,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

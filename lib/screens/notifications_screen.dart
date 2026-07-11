@@ -264,7 +264,131 @@ class NotificationsScreen extends StatelessWidget {
       }
     );
   }
-
+// 👇 NEW: Clean popup just for Urgent Tasks 👇
+  void _showUrgentTaskDetails(BuildContext context, NotificationModel notif, Color themeColor) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.campaign_rounded, color: Colors.red.shade600, size: 28),
+              const SizedBox(width: 10),
+              const Text(
+                "Urgent Alert", 
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)
+              )
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Text(
+                  notif.message, // This automatically contains the item and location details!
+                  style: TextStyle(color: Colors.red.shade900, fontSize: 15, height: 1.4, fontWeight: FontWeight.w500),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context); // Close the popup
+                    // Navigates directly to the Tasks Tab (Index 2) on the Home Screen
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(builder: (context) => const HomeScreen(initialIndex: 2)),
+                      (Route<dynamic> route) => false,
+                    );
+                  },
+                  icon: const Icon(Icons.local_shipping_rounded, color: Colors.white, size: 20),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: themeColor,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                  label: const Text(
+                    "Check Tasks Page", 
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)
+                  ),
+                ),
+              )
+            ],
+          ),
+        );
+      }
+    );
+  }
+  // 👇 NEW: Clean popup just for Expired Volunteer Tasks 👇
+  void _showVolunteerExpiredDetails(BuildContext context, NotificationModel notif, Color themeColor) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.timer_off_rounded, color: Colors.orange.shade700, size: 28),
+              const SizedBox(width: 10),
+              const Text(
+                "Pickup Expired", 
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)
+              )
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Text(
+                  notif.message, // Shows the exact message without sender details
+                  style: TextStyle(color: Colors.orange.shade900, fontSize: 15, height: 1.4, fontWeight: FontWeight.w500),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context), // Just closes the popup
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: themeColor,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    "Understood", 
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)
+                  ),
+                ),
+              )
+            ],
+          ),
+        );
+      }
+    );
+  }
   void _showDonorCancellationDetails(BuildContext context, NotificationModel notification, Color themeColor) {
     showModalBottomSheet(
       context: context,
@@ -460,6 +584,8 @@ class NotificationsScreen extends StatelessWidget {
               bool isExpiration = notif.type == 'expired_request';
               // 👇 NEW CHECKER 👇
               bool isVolunteerAccepted = notif.type == 'volunteer_accepted';
+              bool isUrgentTask = notif.type == 'urgent_task';
+              bool isVolunteerExpired = notif.type == 'volunteer_expired' || notif.type == 'volunteer expired';
 
               return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -504,24 +630,30 @@ class NotificationsScreen extends StatelessWidget {
                     width: 10, height: 10,
                     decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
                   ),
-                  onTap: () {
-                    if (!notif.isRead) {
-                      firestoreService.markNotificationAsRead(notif.id);
-                    }
-                    if (isTag) {
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(builder: (context) => HomeScreen(initialIndex: 1, targetPostId: notif.relatedItemId)),
-                        (Route<dynamic> route) => false,
-                      );
-                    } else if (isCancellation) {
-                      _showDonorCancellationDetails(context, notif, themeColor);
-                    } else if (isExpiration) {
-                      _showExpirationDetails(context, notif); 
-                    } else {
-                      _showRichDetailsPopup(context, notif, themeColor, isDonationOffer, isVolunteerAccepted);
-                    }
-                  },
+                 onTap: () {
+                if (!notif.isRead) {
+                  firestoreService.markNotificationAsRead(notif.id);
+                }
+                
+                if (isTag) {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (context) => HomeScreen(initialIndex: 1, targetPostId: notif.relatedItemId)),
+                    (Route<dynamic> route) => false,
+                  );
+                } else if (isCancellation) {
+                  _showDonorCancellationDetails(context, notif, themeColor);
+                } else if (isExpiration) {
+                  _showExpirationDetails(context, notif);
+                } else if (isUrgentTask) {
+                  _showUrgentTaskDetails(context, notif, themeColor);
+                } else if (isVolunteerExpired) {
+                  // 👇 ROUTES EXPIRED TASKS TO THE NEW CLEAN POPUP 👇
+                  _showVolunteerExpiredDetails(context, notif, themeColor);
+                } else {
+                  _showRichDetailsPopup(context, notif, themeColor, isDonationOffer, isVolunteerAccepted);
+                }
+              },
                 ),
               );
             }
