@@ -83,6 +83,40 @@ class _DonationPageState extends State<DonationPage> {
     _donationQuantityController.dispose();
     super.dispose();
   }
+  // 👇 NEW: validates that the address has pincode, city, and country
+  String? _validateAddress(String input) {
+    final text = input.trim();
+
+    if (text.isEmpty) {
+      return 'Please enter your pickup address';
+    }
+
+    // Expecting a format like: "12 Mill Road, Coimbatore, India, 641001"
+    final pincodeRegex = RegExp(r'\b\d{6}\b');
+    final hasPincode = pincodeRegex.hasMatch(text);
+
+    if (!hasPincode) {
+      return 'Please include your 6-digit pincode (e.g., 641001)';
+    }
+
+    // Split by commas and drop empty parts and the pincode part itself,
+    // leaving only the descriptive text parts (street/area, city, country)
+    final textParts = text
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty && !RegExp(r'^\d{6}$').hasMatch(e))
+        .toList();
+
+    if (textParts.length < 2) {
+      return 'Please Type your Full Address with City and Country';
+    }
+
+    if (textParts.length < 3) {
+      return 'Please Type Full Address with City and Country';
+    }
+
+    return null; // valid
+  }
 
   Future<void> donate() async {
     if (!_isConfirmed) {
@@ -105,10 +139,26 @@ class _DonationPageState extends State<DonationPage> {
     String location = _locationController.text.trim();
     String phone = _phoneController.text.trim();
     int inputDonatedAmount = remainingNeeded;
-    if (name.isEmpty || location.isEmpty || phone.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Please fill all fields')));
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your full name')),
+      );
+      return;
+    }
+
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your contact phone number')),
+      );
+      return;
+    }
+
+    // 👇 NEW: strict address validation (address, city, country, pincode)
+    final addressError = _validateAddress(location);
+    if (addressError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(addressError)),
+      );
       return;
     }
     if (widget.listing.type == 'product') {
@@ -830,9 +880,16 @@ class _DonationPageState extends State<DonationPage> {
                           ),
                           const SizedBox(height: 12),
                           _buildInputField(
-                            hint: 'Exact Pickup Location',
+                            hint: 'Area, City, Country, Pincode',
                             icon: Icons.location_on_outlined,
                             controller: _locationController,
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.only(top: 6, left: 4),
+                            child: Text(
+                              'e.g., 12 Mill Road, Coimbatore, India, 641001',
+                              style: TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
                           ),
                           const SizedBox(height: 12),
                           _buildInputField(
