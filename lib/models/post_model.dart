@@ -1,3 +1,4 @@
+//post_model.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class PostModel {
@@ -11,6 +12,7 @@ class PostModel {
   final String image;
   final String description;
   final int likes;
+  final List<String> likedBy;   // ADD THIS
   final DateTime createdAt;
 
   PostModel({
@@ -24,6 +26,7 @@ class PostModel {
     required this.image,
     required this.description,
     this.likes = 0,
+    this.likedBy = const [],   // ADD THIS
     required this.createdAt,
   });
 
@@ -39,6 +42,7 @@ class PostModel {
       'image': image,
       'description': description,
       'likes': likes,
+      'likedBy': likedBy,   // ADD THIS
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }
@@ -55,6 +59,7 @@ class PostModel {
       image: map['image'] ?? '',
       description: map['description'] ?? '',
       likes: map['likes'] ?? 0,
+      likedBy: List<String>.from(map['likedBy'] ?? []),   // ADD THIS
       createdAt: (map['createdAt'] as Timestamp).toDate(),
     );
   }

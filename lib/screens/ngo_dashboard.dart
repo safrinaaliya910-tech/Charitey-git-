@@ -204,6 +204,7 @@ class NgoDashboardState extends State<NgoDashboard>
                                     )
                                   : const BoxDecoration(),
                               child: PostCardWidget(
+                                key: ValueKey(post.postId),   // ADD THIS
                                 post: post,
                                 ngoName: ngoName,
                                 currentUserId: user.uid,
@@ -384,12 +385,40 @@ class _PostCardWidgetState extends State<PostCardWidget> {
   bool _isLiked = false;
   bool _isSharing = false;
 
+
+  @override
+  void initState() {
+    super.initState();
+    _isLiked = widget.post.likedBy.contains(widget.currentUserId);   // ADD THIS
+  }
+
+@override
+  void didUpdateWidget(covariant PostCardWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _isLiked = widget.post.likedBy.contains(widget.currentUserId);   // ADD THIS
+  }
+
   void _toggleLike() {
-    setState(() => _isLiked = !_isLiked);
-    FirebaseFirestore.instance
+    final bool wasLiked = _isLiked;
+    setState(() => _isLiked = !wasLiked);
+
+    final postRef = FirebaseFirestore.instance
         .collection('posts')
-        .doc(widget.post.postId)
-        .update({'likes': FieldValue.increment(_isLiked ? 1 : -1)});
+        .doc(widget.post.postId);
+
+    if (wasLiked) {
+      // Unliking
+      postRef.update({
+        'likes': FieldValue.increment(-1),
+        'likedBy': FieldValue.arrayRemove([widget.currentUserId]),
+      });
+    } else {
+      // Liking
+      postRef.update({
+        'likes': FieldValue.increment(1),
+        'likedBy': FieldValue.arrayUnion([widget.currentUserId]),
+      });
+    }
   }
 
   Future<void> _sharePost() async {

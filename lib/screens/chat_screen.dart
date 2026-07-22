@@ -3,28 +3,28 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:ui';
 import '../models/message_model.dart';
-import '../services/chat_service.dart'; 
+import '../services/chat_service.dart';
 import '../providers/auth_provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:typed_data'; 
+import 'dart:typed_data';
 import 'camera_capture_screen.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter/services.dart'; 
+import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:http/http.dart' as http;
-import 'dart:async'; 
-import 'dart:io'; 
-import 'package:path_provider/path_provider.dart'; 
-import 'package:gal/gal.dart'; 
-import 'package:mime/mime.dart'; 
-import 'video_viewer_screen.dart'; 
-import 'media_preview_screen.dart'; 
+import 'dart:async';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:gal/gal.dart';
+import 'package:mime/mime.dart';
+import 'video_viewer_screen.dart';
+import 'media_preview_screen.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-import '../services/location_service.dart'; 
+import '../services/location_service.dart';
 import 'location_picker_screen.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -51,39 +51,67 @@ class ChatScreenState extends State<ChatScreen> {
   final ImagePicker _picker = ImagePicker();
 
   bool _isUploading = false;
-  bool _hasScrolledToBottomOnce = false; 
+  bool _hasScrolledToBottomOnce = false;
   MessageModel? _replyingTo;
 
   bool _isBlockedByMe = false;
-  bool _amIBlockedByThem = false; 
+  bool _amIBlockedByThem = false;
 
-  StreamSubscription<bool>? _blockedByMeSub; 
-  StreamSubscription<bool>? _blockedThemSub; 
+  StreamSubscription<bool>? _blockedByMeSub;
+  StreamSubscription<bool>? _blockedThemSub;
+
+  String? _otherUsername;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _listenToBlockStatus(); 
+      _listenToBlockStatus();
       _markAsRead();
     });
+    _fetchOtherUsername();
+  }
+
+  Future<void> _fetchOtherUsername() async {
+    try {
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.otherUserId)
+          .get();
+
+      if (userDoc.exists && userDoc.data() != null) {
+        var data = userDoc.data() as Map<String, dynamic>;
+        String? username = data['username'];
+        if (mounted && username != null && username.trim().isNotEmpty) {
+          setState(() => _otherUsername = username.trim());
+        }
+      }
+    } catch (e) {
+      // silently ignore, username is optional display info
+    }
   }
 
   void _listenToBlockStatus() {
-    final user = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
+    final user =
+        Provider.of<AuthProvider>(context, listen: false).currentUserModel;
     if (user == null) return;
 
-    _blockedByMeSub = _chatService.isBlockedByMe(user.uid, widget.otherUserId).listen((blocked) {
+    _blockedByMeSub = _chatService
+        .isBlockedByMe(user.uid, widget.otherUserId)
+        .listen((blocked) {
       if (mounted) setState(() => _isBlockedByMe = blocked);
     });
 
-    _blockedThemSub = _chatService.amIBlockedByThem(user.uid, widget.otherUserId).listen((blocked) {
+    _blockedThemSub = _chatService
+        .amIBlockedByThem(user.uid, widget.otherUserId)
+        .listen((blocked) {
       if (mounted) setState(() => _amIBlockedByThem = blocked);
     });
   }
 
   void _markAsRead() {
-    final user = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
+    final user =
+        Provider.of<AuthProvider>(context, listen: false).currentUserModel;
     if (user == null) return;
     _chatService.markMessagesAsRead(user.uid, widget.otherUserId);
   }
@@ -103,10 +131,11 @@ class ChatScreenState extends State<ChatScreen> {
   }
 
   void _sendMessage() async {
-    final user = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
+    final user =
+        Provider.of<AuthProvider>(context, listen: false).currentUserModel;
     if (user == null || _messageController.text.trim().isEmpty) return;
 
-    if (_isBlockedByMe || _amIBlockedByThem) { 
+    if (_isBlockedByMe || _amIBlockedByThem) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('You cannot send messages in this chat.')),
       );
@@ -116,8 +145,8 @@ class ChatScreenState extends State<ChatScreen> {
     String message = _messageController.text.trim();
     _messageController.clear();
 
-    final replyMsg = _replyingTo; 
-    setState(() => _replyingTo = null); 
+    final replyMsg = _replyingTo;
+    setState(() => _replyingTo = null);
 
     try {
       await _chatService.sendMessage(
@@ -132,43 +161,51 @@ class ChatScreenState extends State<ChatScreen> {
         replyToId: replyMsg?.messageId,
         replyToMessage: replyMsg == null
             ? null
-            : (replyMsg.message.startsWith('[LOCATION]') ? '📍 Shared Location' : (replyMsg.type == 'text'
-                ? replyMsg.message
-                : replyMsg.type == 'image'
-                    ? '📷 Photo'
-                    : replyMsg.type == 'video'
-                        ? '🎥 Video'
-                        : '📄 ${replyMsg.fileName}')),
-        replyToSenderName: replyMsg?.senderId == user.uid ? 'You' : widget.otherUserName,
+            : (replyMsg.message.startsWith('[LOCATION]')
+                ? '📍 Shared Location'
+                : (replyMsg.type == 'text'
+                    ? replyMsg.message
+                    : replyMsg.type == 'image'
+                        ? '📷 Photo'
+                        : replyMsg.type == 'video'
+                            ? '🎥 Video'
+                            : '📄 ${replyMsg.fileName}')),
+        replyToSenderName:
+            replyMsg?.senderId == user.uid ? 'You' : widget.otherUserName,
         replyToType: replyMsg?.type,
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
 
   Future<void> _sendLiveLocationMessage() async {
-    final user = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
+    final user =
+        Provider.of<AuthProvider>(context, listen: false).currentUserModel;
     if (user == null) return;
 
     setState(() => _isUploading = true);
 
     try {
       final position = await LocationHelperService.determinePosition(context);
-      if (position == null) return; 
+      if (position == null) return;
 
       _processCustomLocationSubmission(position.latitude, position.longitude);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to share live location: $e')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to share live location: $e')));
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
   }
 
   Future<void> _processCustomLocationSubmission(double lat, double lng) async {
-    final user = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
+    final user =
+        Provider.of<AuthProvider>(context, listen: false).currentUserModel;
     if (user == null) return;
 
     String locationMessage = "[LOCATION]$lat,$lng";
@@ -180,21 +217,24 @@ class ChatScreenState extends State<ChatScreen> {
       user.name,
       widget.otherUserId,
       widget.otherUserName,
-      locationMessage, 
+      locationMessage,
       senderPhone: user.phone,
       senderLocation: user.location,
       senderRole: user.role,
       replyToId: replyMsg?.messageId,
       replyToMessage: replyMsg == null
           ? null
-          : (replyMsg.message.startsWith('[LOCATION]') ? '📍 Shared Location' : (replyMsg.type == 'text'
-              ? replyMsg.message
-              : replyMsg.type == 'image'
-                  ? '📷 Photo'
-                  : replyMsg.type == 'video'
-                      ? '🎥 Video'
-                      : '📄 ${replyMsg.fileName}')),
-      replyToSenderName: replyMsg?.senderId == user.uid ? 'You' : widget.otherUserName,
+          : (replyMsg.message.startsWith('[LOCATION]')
+              ? '📍 Shared Location'
+              : (replyMsg.type == 'text'
+                  ? replyMsg.message
+                  : replyMsg.type == 'image'
+                      ? '📷 Photo'
+                      : replyMsg.type == 'video'
+                          ? '🎥 Video'
+                          : '📄 ${replyMsg.fileName}')),
+      replyToSenderName:
+          replyMsg?.senderId == user.uid ? 'You' : widget.otherUserName,
       replyToType: replyMsg?.type,
     );
   }
@@ -215,22 +255,28 @@ class ChatScreenState extends State<ChatScreen> {
                 Navigator.pop(sheetContext);
                 final CaptureResult? result = await Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const CameraCaptureScreen()),
+                  MaterialPageRoute(
+                      builder: (_) => const CameraCaptureScreen()),
                 );
                 if (result == null) return;
 
                 final caption = await Navigator.push<String?>(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => MediaPreviewScreen(bytes: result.bytes, type: result.type, fileName: result.fileName),
+                    builder: (context) => MediaPreviewScreen(
+                        bytes: result.bytes,
+                        type: result.type,
+                        fileName: result.fileName),
                   ),
                 );
-                if (caption == null) return; 
+                if (caption == null) return;
 
                 if (result.type == 'image') {
-                  await _sendImageBytes(result.bytes, result.fileName, caption: caption);
+                  await _sendImageBytes(result.bytes, result.fileName,
+                      caption: caption);
                 } else {
-                  await _sendVideoBytes(result.bytes, result.fileName, caption: caption);
+                  await _sendVideoBytes(result.bytes, result.fileName,
+                      caption: caption);
                 }
               },
             ),
@@ -257,10 +303,12 @@ class ChatScreenState extends State<ChatScreen> {
                 Navigator.pop(sheetContext);
                 final LatLng? picked = await Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const LocationPickerScreen()),
+                  MaterialPageRoute(
+                      builder: (context) => const LocationPickerScreen()),
                 );
                 if (picked != null) {
-                  _processCustomLocationSubmission(picked.latitude, picked.longitude);
+                  _processCustomLocationSubmission(
+                      picked.latitude, picked.longitude);
                 }
               },
             ),
@@ -271,21 +319,28 @@ class ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _pickAndSendImage(ImageSource source) async {
-    final XFile? picked = await _picker.pickImage(source: source, imageQuality: 70);
+    final XFile? picked =
+        await _picker.pickImage(source: source, imageQuality: 70);
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
-    final fileName = picked.name.isNotEmpty ? picked.name : 'photo_${DateTime.now().millisecondsSinceEpoch}.jpg';
-    
+    final fileName = picked.name.isNotEmpty
+        ? picked.name
+        : 'photo_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
     final caption = await Navigator.push<String?>(
       context,
-      MaterialPageRoute(builder: (context) => MediaPreviewScreen(bytes: bytes, type: 'image', fileName: fileName)),
+      MaterialPageRoute(
+          builder: (context) => MediaPreviewScreen(
+              bytes: bytes, type: 'image', fileName: fileName)),
     );
-    if (caption == null) return; 
+    if (caption == null) return;
     await _sendImageBytes(bytes, fileName, caption: caption);
   }
 
-  Future<void> _sendImageBytes(Uint8List bytes, String fileName, {String? caption}) async { 
-    final user = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
+  Future<void> _sendImageBytes(Uint8List bytes, String fileName,
+      {String? caption}) async {
+    final user =
+        Provider.of<AuthProvider>(context, listen: false).currentUserModel;
     if (user == null) return;
     final replyMsg = _replyingTo;
     setState(() {
@@ -309,25 +364,32 @@ class ChatScreenState extends State<ChatScreen> {
         replyToId: replyMsg?.messageId,
         replyToMessage: replyMsg == null
             ? null
-            : (replyMsg.message.startsWith('[LOCATION]') ? '📍 Shared Location' : (replyMsg.type == 'text'
-                ? replyMsg.message
-                : replyMsg.type == 'image'
-                    ? '📷 Photo'
-                    : replyMsg.type == 'video'
-                        ? '🎥 Video'
-                        : '📄 ${replyMsg.fileName}')),
-        replyToSenderName: replyMsg?.senderId == user.uid ? 'You' : widget.otherUserName,
+            : (replyMsg.message.startsWith('[LOCATION]')
+                ? '📍 Shared Location'
+                : (replyMsg.type == 'text'
+                    ? replyMsg.message
+                    : replyMsg.type == 'image'
+                        ? '📷 Photo'
+                        : replyMsg.type == 'video'
+                            ? '🎥 Video'
+                            : '📄 ${replyMsg.fileName}')),
+        replyToSenderName:
+            replyMsg?.senderId == user.uid ? 'You' : widget.otherUserName,
         replyToType: replyMsg?.type,
       );
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to send image: $e')));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed to send image: $e')));
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
   }
 
-  Future<void> _sendVideoBytes(Uint8List bytes, String fileName, {String? caption}) async {
-    final user = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
+  Future<void> _sendVideoBytes(Uint8List bytes, String fileName,
+      {String? caption}) async {
+    final user =
+        Provider.of<AuthProvider>(context, listen: false).currentUserModel;
     if (user == null) return;
     final replyMsg = _replyingTo;
     setState(() {
@@ -344,25 +406,30 @@ class ChatScreenState extends State<ChatScreen> {
         receiverId: widget.otherUserId,
         receiverName: widget.otherUserName,
         type: 'video',
-        caption: caption, 
+        caption: caption,
         senderPhone: user.phone,
         senderLocation: user.location,
         senderRole: user.role,
         replyToId: replyMsg?.messageId,
         replyToMessage: replyMsg == null
             ? null
-            : (replyMsg.message.startsWith('[LOCATION]') ? '📍 Shared Location' : (replyMsg.type == 'text'
-                ? replyMsg.message
-                : replyMsg.type == 'image'
-                    ? '📷 Photo'
-                    : replyMsg.type == 'video'
-                        ? '🎥 Video'
-                        : '📄 ${replyMsg.fileName}')),
-        replyToSenderName: replyMsg?.senderId == user.uid ? 'You' : widget.otherUserName,
+            : (replyMsg.message.startsWith('[LOCATION]')
+                ? '📍 Shared Location'
+                : (replyMsg.type == 'text'
+                    ? replyMsg.message
+                    : replyMsg.type == 'image'
+                        ? '📷 Photo'
+                        : replyMsg.type == 'video'
+                            ? '🎥 Video'
+                            : '📄 ${replyMsg.fileName}')),
+        replyToSenderName:
+            replyMsg?.senderId == user.uid ? 'You' : widget.otherUserName,
         replyToType: replyMsg?.type,
       );
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to send video: $e')));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed to send video: $e')));
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
@@ -402,14 +469,16 @@ class ChatScreenState extends State<ChatScreen> {
           } else {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Could not open the phone dialer.')),
+                const SnackBar(
+                    content: Text('Could not open the phone dialer.')),
               );
             }
           }
         } else {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Phone number not available for this user.')),
+              const SnackBar(
+                  content: Text('Phone number not available for this user.')),
             );
           }
         }
@@ -424,7 +493,8 @@ class ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _toggleBlock() async {
-    final user = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
+    final user =
+        Provider.of<AuthProvider>(context, listen: false).currentUserModel;
     if (user == null) return;
 
     final bool isCurrentlyBlocked = _isBlockedByMe;
@@ -446,12 +516,14 @@ class ChatScreenState extends State<ChatScreen> {
               if (!isCurrentlyBlocked) ...[
                 const SizedBox(height: 12),
                 InkWell(
-                  onTap: () => setDialogState(() => confirmChecked = !confirmChecked),
+                  onTap: () =>
+                      setDialogState(() => confirmChecked = !confirmChecked),
                   child: Row(
                     children: [
                       Checkbox(
                         value: confirmChecked,
-                        onChanged: (val) => setDialogState(() => confirmChecked = val ?? false),
+                        onChanged: (val) =>
+                            setDialogState(() => confirmChecked = val ?? false),
                         activeColor: themeColor,
                       ),
                       Expanded(
@@ -492,17 +564,23 @@ class ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _confirmClearChat() async {
-    final user = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
+    final user =
+        Provider.of<AuthProvider>(context, listen: false).currentUserModel;
     if (user == null) return;
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Clear Chat?'),
-        content: const Text('This will remove all messages from your view. This cannot be undone.'),
+        content: const Text(
+            'This will remove all messages from your view. This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm Clear Chat')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Confirm Clear Chat')),
         ],
       ),
     );
@@ -514,7 +592,8 @@ class ChatScreenState extends State<ChatScreen> {
 
   void _copyText(String text) {
     Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied to clipboard')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Copied to clipboard')));
   }
 
   Future<void> _downloadFile(String url, String? fileName, String type) async {
@@ -528,32 +607,40 @@ class ChatScreenState extends State<ChatScreen> {
       }
 
       final response = await http.get(Uri.parse(url));
-      if (response.statusCode != 200) throw Exception('Server returned ${response.statusCode}');
+      if (response.statusCode != 200)
+        throw Exception('Server returned ${response.statusCode}');
 
       final bytes = response.bodyBytes;
-      final safeName = fileName ?? 'file_${DateTime.now().millisecondsSinceEpoch}';
+      final safeName =
+          fileName ?? 'file_${DateTime.now().millisecondsSinceEpoch}';
 
       if (type == 'image') {
         await Gal.putImageBytes(bytes, name: safeName);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Image saved to gallery')));
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Image saved to gallery')));
       } else if (type == 'video') {
         final tempDir = await getTemporaryDirectory();
         final tempFile = File('${tempDir.path}/$safeName');
         await tempFile.writeAsBytes(bytes);
         await Gal.putVideo(tempFile.path);
         await tempFile.delete();
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video saved to gallery')));
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Video saved to gallery')));
       } else {
         final dir = await getApplicationDocumentsDirectory();
         final file = File('${dir.path}/$safeName');
         await file.writeAsBytes(bytes);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Saved: ${file.path}')));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('Saved: ${file.path}')));
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Download failed: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Download failed: $e')));
       }
     }
   }
@@ -569,7 +656,8 @@ class ChatScreenState extends State<ChatScreen> {
       await Share.shareXFiles([xFile]);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to share: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed to share: $e')));
       }
     }
   }
@@ -579,14 +667,17 @@ class ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _deleteForMe(MessageModel message) async {
-    final user = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
+    final user =
+        Provider.of<AuthProvider>(context, listen: false).currentUserModel;
     if (user == null) return;
     final chatRoomId = _chatService.getChatRoomId(user.uid, widget.otherUserId);
-    await _chatService.deleteMessageForMe(chatRoomId, message.messageId, user.uid);
+    await _chatService.deleteMessageForMe(
+        chatRoomId, message.messageId, user.uid);
   }
 
   Future<void> _deleteForEveryone(MessageModel message) async {
-    final user = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
+    final user =
+        Provider.of<AuthProvider>(context, listen: false).currentUserModel;
     if (user == null) return;
     final chatRoomId = _chatService.getChatRoomId(user.uid, widget.otherUserId);
     await _chatService.deleteMessageForEveryone(chatRoomId, message.messageId);
@@ -598,7 +689,8 @@ class ChatScreenState extends State<ChatScreen> {
 
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => SafeArea(
         child: Wrap(
           children: [
@@ -619,13 +711,17 @@ class ChatScreenState extends State<ChatScreen> {
                   _copyText(message.message);
                 },
               ),
-            if (message.type == 'image' || message.type == 'document' || message.type == 'video') ...[
+            if (message.type == 'image' ||
+                message.type == 'document' ||
+                message.type == 'video') ...[
               ListTile(
                 leading: const Icon(Icons.download),
                 title: const Text('Download'),
                 onTap: () {
                   Navigator.pop(context);
-                  if (message.mediaUrl != null) _downloadFile(message.mediaUrl!, message.fileName, message.type);
+                  if (message.mediaUrl != null)
+                    _downloadFile(
+                        message.mediaUrl!, message.fileName, message.type);
                 },
               ),
               ListTile(
@@ -633,7 +729,8 @@ class ChatScreenState extends State<ChatScreen> {
                 title: const Text('Share / Forward'),
                 onTap: () {
                   Navigator.pop(context);
-                  if (message.mediaUrl != null) _shareMedia(message.mediaUrl!, message.fileName);
+                  if (message.mediaUrl != null)
+                    _shareMedia(message.mediaUrl!, message.fileName);
                 },
               ),
             ],
@@ -648,7 +745,8 @@ class ChatScreenState extends State<ChatScreen> {
             if (isMe)
               ListTile(
                 leading: const Icon(Icons.delete_forever, color: Colors.red),
-                title: const Text('Delete for everyone', style: TextStyle(color: Colors.red)),
+                title: const Text('Delete for everyone',
+                    style: TextStyle(color: Colors.red)),
                 onTap: () {
                   Navigator.pop(context);
                   _deleteForEveryone(message);
@@ -677,7 +775,8 @@ class ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUserModel;
-    if (user == null) return const Scaffold(body: Center(child: Text('User not logged in')));
+    if (user == null)
+      return const Scaffold(body: Center(child: Text('User not logged in')));
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -698,20 +797,24 @@ class ChatScreenState extends State<ChatScreen> {
               _buildGlassAppBar(),
               Expanded(
                 child: StreamBuilder<List<MessageModel>>(
-                  stream: _chatService.getMessages(user.uid, widget.otherUserId),
+                  stream:
+                      _chatService.getMessages(user.uid, widget.otherUserId),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Center(child: CircularProgressIndicator(color: themeColor));
+                      return Center(
+                          child: CircularProgressIndicator(color: themeColor));
                     }
                     List<MessageModel> messages = snapshot.data ?? [];
 
                     if (messages.isNotEmpty) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) => _markAsRead());
+                      WidgetsBinding.instance
+                          .addPostFrameCallback((_) => _markAsRead());
                     }
 
                     if (!_hasScrolledToBottomOnce) {
                       _hasScrolledToBottomOnce = true;
-                      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+                      WidgetsBinding.instance
+                          .addPostFrameCallback((_) => _scrollToBottom());
                     }
 
                     return ListView.builder(
@@ -741,13 +844,15 @@ class ChatScreenState extends State<ChatScreen> {
 
   Widget _buildReplyPreview() {
     final r = _replyingTo!;
-    final previewText = r.message.startsWith('[LOCATION]') ? '📍 Shared Location' : (r.type == 'text'
-        ? r.message
-        : r.type == 'image'
-            ? '📷 Photo'
-            : r.type == 'video'
-                ? '🎥 Video'
-                : '📄 ${r.fileName}');
+    final previewText = r.message.startsWith('[LOCATION]')
+        ? '📍 Shared Location'
+        : (r.type == 'text'
+            ? r.message
+            : r.type == 'image'
+                ? '📷 Photo'
+                : r.type == 'video'
+                    ? '🎥 Video'
+                    : '📄 ${r.fileName}');
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -757,7 +862,10 @@ class ChatScreenState extends State<ChatScreen> {
           Container(width: 4, height: 36, color: themeColor),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(previewText, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+            child: Text(previewText,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13)),
           ),
           IconButton(
             icon: const Icon(Icons.close, size: 18),
@@ -773,6 +881,7 @@ class ChatScreenState extends State<ChatScreen> {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: AppBar(
+          toolbarHeight: _otherUsername != null ? 68 : kToolbarHeight,
           backgroundColor: Colors.white.withOpacity(0.7),
           elevation: 0,
           leading: IconButton(
@@ -784,22 +893,43 @@ class ChatScreenState extends State<ChatScreen> {
               CircleAvatar(
                 backgroundColor: themeColor.withOpacity(0.1),
                 radius: 18,
-                backgroundImage: (widget.otherUserProfileImage != null && widget.otherUserProfileImage!.isNotEmpty)
+                backgroundImage: (widget.otherUserProfileImage != null &&
+                        widget.otherUserProfileImage!.isNotEmpty)
                     ? NetworkImage(widget.otherUserProfileImage!)
                     : null,
-                child: (widget.otherUserProfileImage == null || widget.otherUserProfileImage!.isEmpty)
+                child: (widget.otherUserProfileImage == null ||
+                        widget.otherUserProfileImage!.isEmpty)
                     ? Text(
                         widget.otherUserName[0].toUpperCase(),
-                        style: TextStyle(color: themeColor, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            color: themeColor, fontWeight: FontWeight.bold),
                       )
                     : null,
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  widget.otherUserName,
-                  style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w900, fontSize: 18),
-                  overflow: TextOverflow.ellipsis,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.otherUserName,
+                      style: const TextStyle(
+                          color: Colors.black87,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (_otherUsername != null)
+                      Text(
+                        '@$_otherUsername',
+                        style: TextStyle(
+                            color: themeColor,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
                 ),
               ),
             ],
@@ -839,7 +969,7 @@ class ChatScreenState extends State<ChatScreen> {
     final bool isImage = message.type == 'image';
     final bool isDocument = message.type == 'document';
     final bool isVideo = message.type == 'video';
-    
+
     final bool isLocation = message.message.startsWith('[LOCATION]');
 
     return Align(
@@ -861,7 +991,10 @@ class ChatScreenState extends State<ChatScreen> {
               bottomRight: isMe ? Radius.zero : const Radius.circular(20),
             ),
             boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+              BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4)),
             ],
           ),
           child: Column(
@@ -874,7 +1007,9 @@ class ChatScreenState extends State<ChatScreen> {
                   decoration: BoxDecoration(
                     color: (isMe ? Colors.white : themeColor).withOpacity(0.12),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border(left: BorderSide(color: isMe ? Colors.white : themeColor, width: 3)),
+                    border: Border(
+                        left: BorderSide(
+                            color: isMe ? Colors.white : themeColor, width: 3)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -891,12 +1026,13 @@ class ChatScreenState extends State<ChatScreen> {
                         message.replyToMessage ?? '',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 12, color: isMe ? Colors.white70 : Colors.black54),
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: isMe ? Colors.white70 : Colors.black54),
                       ),
                     ],
                   ),
                 ),
-              
               if (message.isDeletedForEveryone)
                 Text(
                   'This message was deleted',
@@ -906,38 +1042,40 @@ class ChatScreenState extends State<ChatScreen> {
                     color: isMe ? Colors.white70 : Colors.black45,
                   ),
                 )
-              
               else if (isLocation)
                 GestureDetector(
                   onTap: () {
-                    final coordinates = message.message.replaceFirst('[LOCATION]', '');
+                    final coordinates =
+                        message.message.replaceFirst('[LOCATION]', '');
                     LocationHelperService.openGoogleMaps(coordinates);
                   },
                   child: Container(
                     width: 200,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: isMe ? Colors.white.withOpacity(0.2) : themeColor.withOpacity(0.1),
+                      color: isMe
+                          ? Colors.white.withOpacity(0.2)
+                          : themeColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Column(
                       children: [
-                        Icon(Icons.location_on, size: 42, color: isMe ? Colors.white : themeColor),
+                        Icon(Icons.location_on,
+                            size: 42, color: isMe ? Colors.white : themeColor),
                         const SizedBox(height: 8),
-                        Text(
-                          "📍 Shared Location", 
-                          style: TextStyle(fontWeight: FontWeight.bold, color: isMe ? Colors.white : Colors.black87)
-                        ),
+                        Text("📍 Shared Location",
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isMe ? Colors.white : Colors.black87)),
                         const SizedBox(height: 4),
-                        Text(
-                          "Tap to open in Google Maps", 
-                          style: TextStyle(fontSize: 11, color: isMe ? Colors.white70 : Colors.black54)
-                        ),
+                        Text("Tap to open in Google Maps",
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: isMe ? Colors.white70 : Colors.black54)),
                       ],
                     ),
                   ),
                 )
-              
               else if (isImage && message.mediaUrl != null)
                 GestureDetector(
                   onTap: () => _openFullImage(message.mediaUrl!),
@@ -949,9 +1087,15 @@ class ChatScreenState extends State<ChatScreen> {
                       fit: BoxFit.cover,
                       loadingBuilder: (context, child, progress) {
                         if (progress == null) return child;
-                        return const SizedBox(width: 200, height: 200, child: Center(child: CircularProgressIndicator()));
+                        return const SizedBox(
+                            width: 200,
+                            height: 200,
+                            child: Center(child: CircularProgressIndicator()));
                       },
-                      errorBuilder: (context, error, stack) => const SizedBox(width: 200, height: 120, child: Center(child: Icon(Icons.broken_image))),
+                      errorBuilder: (context, error, stack) => const SizedBox(
+                          width: 200,
+                          height: 120,
+                          child: Center(child: Icon(Icons.broken_image))),
                     ),
                   ),
                 )
@@ -959,7 +1103,9 @@ class ChatScreenState extends State<ChatScreen> {
                 GestureDetector(
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => VideoViewerScreen(url: message.mediaUrl!)),
+                    MaterialPageRoute(
+                        builder: (context) =>
+                            VideoViewerScreen(url: message.mediaUrl!)),
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(14),
@@ -968,7 +1114,8 @@ class ChatScreenState extends State<ChatScreen> {
                       height: 160,
                       color: Colors.black87,
                       child: const Center(
-                        child: Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: 48),
+                        child: Icon(Icons.play_circle_fill_rounded,
+                            color: Colors.white, size: 48),
                       ),
                     ),
                   ),
@@ -977,11 +1124,14 @@ class ChatScreenState extends State<ChatScreen> {
                 InkWell(
                   onTap: () async {
                     final uri = Uri.parse(message.mediaUrl!);
-                    if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    if (await canLaunchUrl(uri))
+                      await launchUrl(uri,
+                          mode: LaunchMode.externalApplication);
                   },
                   child: Row(
                     children: [
-                      Icon(Icons.insert_drive_file, color: isMe ? Colors.white : themeColor),
+                      Icon(Icons.insert_drive_file,
+                          color: isMe ? Colors.white : themeColor),
                       const SizedBox(width: 8),
                       Flexible(
                         child: Text(
@@ -1006,13 +1156,12 @@ class ChatScreenState extends State<ChatScreen> {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                
               if (message.type != 'text' &&
                   message.message.isNotEmpty &&
                   message.message != '[Image]' &&
                   message.message != '[Video]' &&
                   !message.message.startsWith('[Document]') &&
-                  !isLocation) 
+                  !isLocation)
                 Padding(
                   padding: const EdgeInsets.only(top: 6, left: 4, right: 4),
                   child: Text(
@@ -1023,7 +1172,6 @@ class ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
                 ),
-                
               Padding(
                 padding: const EdgeInsets.only(top: 4.0),
                 child: Row(
@@ -1033,15 +1181,23 @@ class ChatScreenState extends State<ChatScreen> {
                       _formatTime(message.timestamp),
                       style: TextStyle(
                         fontSize: 11,
-                        color: isMe ? Colors.white70 : (isImage || isVideo || isLocation ? Colors.black54 : Colors.black45),
+                        color: isMe
+                            ? Colors.white70
+                            : (isImage || isVideo || isLocation
+                                ? Colors.black54
+                                : Colors.black45),
                       ),
                     ),
                     if (isMe) ...[
                       const SizedBox(width: 4),
                       Icon(
-                        message.delivered ? Icons.done_all_rounded : Icons.done_rounded,
+                        message.delivered
+                            ? Icons.done_all_rounded
+                            : Icons.done_rounded,
                         size: 15,
-                        color: message.read ? Colors.lightBlueAccent : Colors.white70,
+                        color: message.read
+                            ? Colors.lightBlueAccent
+                            : Colors.white70,
                       ),
                     ],
                   ],
@@ -1073,7 +1229,12 @@ class ChatScreenState extends State<ChatScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, -5))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: const Offset(0, -5))
+        ],
       ),
       child: Row(
         children: [
@@ -1088,8 +1249,11 @@ class ChatScreenState extends State<ChatScreen> {
                 hintText: 'Type your message...',
                 filled: true,
                 fillColor: Colors.grey.shade100,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(30),
+                    borderSide: BorderSide.none),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               ),
             ),
           ),
@@ -1097,7 +1261,10 @@ class ChatScreenState extends State<ChatScreen> {
           _isUploading
               ? const Padding(
                   padding: EdgeInsets.all(12),
-                  child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+                  child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
                 )
               : FloatingActionButton(
                   backgroundColor: themeColor,
@@ -1130,12 +1297,12 @@ class _SwipeToReplyWrapperState extends State<_SwipeToReplyWrapper> {
   void _handleDragUpdate(DragUpdateDetails details) {
     setState(() {
       _dragExtent += details.delta.dx;
-      if (_dragExtent < 0) _dragExtent = 0; 
+      if (_dragExtent < 0) _dragExtent = 0;
       if (_dragExtent > _maxDrag) _dragExtent = _maxDrag;
-      
+
       if (_dragExtent >= _triggerDrag && !_triggered) {
         _triggered = true;
-        HapticFeedback.lightImpact(); 
+        HapticFeedback.lightImpact();
       } else if (_dragExtent < _triggerDrag) {
         _triggered = false;
       }
@@ -1169,7 +1336,9 @@ class _SwipeToReplyWrapperState extends State<_SwipeToReplyWrapper> {
             ),
           ),
           AnimatedContainer(
-            duration: _dragExtent == 0 ? const Duration(milliseconds: 200) : Duration.zero,
+            duration: _dragExtent == 0
+                ? const Duration(milliseconds: 200)
+                : Duration.zero,
             curve: Curves.easeOut,
             transform: Matrix4.translationValues(_dragExtent, 0, 0),
             child: widget.child,

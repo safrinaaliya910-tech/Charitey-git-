@@ -16,10 +16,19 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   final TextEditingController _searchController = TextEditingController();
 
   LatLng _selectedLatLng = const LatLng(11.0168, 76.9558); // Coimbatore Default
+
+  // Only controls the INITIAL device-location fetch, which gates whether
+  // GoogleMap is mounted at all (it needs a real starting position first).
   bool _isLoading = true;
+
+  // 👇 NEW: separate flag just for "a search is in flight" UI (spinner in the
+  // search button). This does NOT gate the GoogleMap widget anymore, so the
+  // map/_mapController stays alive across searches.
+  bool _isSearching = false;
+
   String _currentAddressText = "Move or tap map to select location";
 
-  // 👇 NEW: tracks which search call is the "latest" one, so stale
+  // Tracks which search call is the "latest" one, so stale
   // results/errors from a duplicate call can be safely ignored.
   int _searchRequestId = 0;
 
@@ -57,33 +66,34 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     final query = _searchController.text.trim();
     if (query.isEmpty) return;
 
-    // 👇 NEW: if a search is already running, ignore this duplicate trigger
-    // (this is what was causing the false "Location not found" error while
-    // the map was actually moving correctly from the first call)
-    if (_isLoading) return;
+    // 👇 CHANGED: guard on _isSearching (not _isLoading), so this only blocks
+    // duplicate search taps — it no longer interacts with the map's mount state.
+    if (_isSearching) return;
 
     FocusScope.of(context).unfocus();
 
-    // 👇 NEW: give this specific call a unique token
     final int requestId = ++_searchRequestId;
-    setState(() => _isLoading = true);
+    setState(() => _isSearching = true); // 👈 CHANGED
 
     try {
       List<Location> locations = await locationFromAddress(query);
 
-      // 👇 NEW: if a newer search has started since this one began, drop this result
+      // If a newer search has started since this one began, drop this result.
       if (requestId != _searchRequestId) return;
 
       if (locations.isNotEmpty) {
         final target = LatLng(locations.first.latitude, locations.first.longitude);
         setState(() {
           _selectedLatLng = target;
-          _isLoading = false;
+          _isSearching = false; // 👈 CHANGED
         });
+        // GoogleMap/_mapController is never unmounted during a search now,
+        // so this always targets a live, valid controller — no more stray
+        // exception here that used to fall into catch() below.
         _mapController.animateCamera(CameraUpdate.newLatLngZoom(target, 17));
         _getAddressFromCoordinates(target);
       } else {
-        setState(() => _isLoading = false);
+        setState(() => _isSearching = false); // 👈 CHANGED
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Location not found. Try a clearer address or pincode.")),
@@ -91,11 +101,11 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         }
       }
     } catch (e) {
-      // 👇 NEW: if a newer search has started since this one began, this is a
-      // stale error from a superseded call — ignore it silently
+      // If a newer search has started since this one began, this is a
+      // stale error from a superseded call — ignore it silently.
       if (requestId != _searchRequestId) return;
 
-      setState(() => _isLoading = false);
+      setState(() => _isSearching = false); // 👈 CHANGED
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Location not found. Try a clearer address or pincode.")),
@@ -132,7 +142,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       ),
       body: Stack(
         children: [
-          // Base Map
+          // Base Map — gated ONLY on _isLoading (the initial device-location
+          // fetch). It is NOT gated on _isSearching anymore, so it stays
+          // mounted (and _mapController stays valid) across every search.
           if (!_isLoading)
             GoogleMap(
               initialCameraPosition: CameraPosition(target: _selectedLatLng, zoom: 16),
@@ -140,7 +152,6 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
               myLocationEnabled: true,
               myLocationButtonEnabled: false,
               mapToolbarEnabled: false,
-              // 👇 THIS IS THE FIX FOR YOUR CLICKS! 👇
               onTap: (LatLng tappedPoint) {
                 // When you tap, the camera smoothly flies to your finger
                 _mapController.animateCamera(CameraUpdate.newLatLng(tappedPoint));
@@ -189,16 +200,15 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                   border: InputBorder.none,
                   prefixIcon: const Icon(Icons.search_rounded, color: Colors.grey),
                   suffixIcon: IconButton(
-                    // 👇 NEW: disable the button visually while a search is in flight,
-                    // as extra protection against accidental double taps
-                    icon: _isLoading
+                    // 👇 CHANGED: driven by _isSearching now
+                    icon: _isSearching
                         ? const SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF7D444C)),
                           )
                         : const Icon(Icons.send_rounded, color: Color(0xFF7D444C)),
-                    onPressed: _isLoading ? null : _searchAndMoveToAddress,
+                    onPressed: _isSearching ? null : _searchAndMoveToAddress, // 👈 CHANGED
                   ),
                   contentPadding: const EdgeInsets.symmetric(vertical: 15),
                 ),
@@ -255,6 +265,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             ),
           ),
 
+          // Full-screen spinner ONLY for the initial map mount (_isLoading).
+          // Search now shows its own inline spinner in the search button
+          // instead of hiding the whole map.
           if (_isLoading)
             const Center(child: CircularProgressIndicator(color: Color(0xFF7D444C))),
         ],

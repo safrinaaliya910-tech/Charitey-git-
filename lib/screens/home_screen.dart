@@ -204,40 +204,42 @@ class HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: false,
+        titleSpacing: 0, // 👈 CRUCIAL: Removes default alignment padding and snaps layout to the left
         title: Row(
           children: [
+            const SizedBox(width: 16), // 👈 Provides a clean, standardized margin from the screen edge
             Container(
-              height: 40,
-              width: 40,
+              height: 42, // 👈 Kept compact so the background circle stays normal
+              width: 42,  // 👈 Kept compact so the background circle stays normal
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
+                color: Colors.white,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
                   ),
                 ],
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: Image.asset(
-                  'assets/dove_icon.png',
-                  height: 40,
-                  width: 40,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      height: 40,
-                      width: 40,
-                      color: Colors.grey.shade200,
-                      child: const Icon(Icons.broken_image, size: 20),
-                    );
-                  },
+                borderRadius: BorderRadius.circular(21),
+                child: Transform.scale(
+                  scale: 1.3, // 👈 Upscales ONLY the bird icon inside the asset to fill the circle
+                  child: Image.asset(
+                    'assets/dove_icons.png',
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: Colors.grey.shade200,
+                        child: const Icon(Icons.broken_image, size: 18),
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8), // 👈 Snaps the text close right next to the bird icon
             const Text(
               "CHARITEY",
               style: TextStyle(
@@ -245,6 +247,7 @@ class HomeScreenState extends State<HomeScreen> {
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1.2,
+                fontFamily: 'serif', // 👈 Added this line to change the font
               ),
             ),
           ],
