@@ -244,6 +244,8 @@ class AuthProvider with ChangeNotifier {
     String? location,
     String? profileImage,
     String? license,
+    String? profession,
+    String? upiId, // 👈 Successfully added here
   }) async {
     if (_currentUserModel == null) return false;
 
@@ -256,6 +258,8 @@ class AuthProvider with ChangeNotifier {
       if (location != null) data['location'] = location;
       if (profileImage != null) data['profileImage'] = profileImage;
       if (license != null) data['license'] = license;
+      if (profession != null) data['profession'] = profession;
+      if (upiId != null) data['upiId'] = upiId;  // 👈 Successfully added here
 
       if (data.isNotEmpty) {
         final uid = _currentUserModel!.uid;

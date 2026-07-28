@@ -95,7 +95,7 @@ class _NgoLoginScreenState extends State<NgoLoginScreen>
       // Show the specific reason (e.g. "linked to Google") when available,
       // otherwise fall back to the generic NGO message.
       final message = authProvider.lastError ??
-          'Invalid credentials or this account is not registered as an NGO.';
+          'Invalid credentials or this account is not registered as an Receiver.';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
       );
@@ -189,7 +189,7 @@ class _NgoLoginScreenState extends State<NgoLoginScreen>
                   children: [
                     // Title
                     const Text(
-                      'NGO Login',
+                      'Receiver Login',
                       style: TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.bold,
@@ -209,7 +209,7 @@ class _NgoLoginScreenState extends State<NgoLoginScreen>
 
                     // Email Field
                     _buildInputField(
-                      hint: 'NGO E-mail ID',
+                      hint: 'E-mail ID',
                       icon: Icons.email_outlined,
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,

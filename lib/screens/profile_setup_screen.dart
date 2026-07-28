@@ -29,6 +29,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   final TextEditingController addressController = TextEditingController();
   final TextEditingController licenseController = TextEditingController();
 
+  // Controllers & State for Volunteer Profession Step
+  final TextEditingController professionController = TextEditingController();
+  String? _selectedProfessionType;
+
+  // 👇 NEW: Controller for Volunteer UPI ID Step 👇
+  final TextEditingController upiController = TextEditingController();
+
   File? _selectedImage;
   Uint8List? _selectedImageBytes;
   bool _isCheckingUsername = false;
@@ -43,30 +50,29 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     phoneController.dispose();
     addressController.dispose();
     licenseController.dispose();
+    professionController.dispose();
+    upiController.dispose(); // 👇 Disposed UPI controller
     super.dispose();
   }
 
-  // 👇 UPDATED: Calculated total pages accurately for the new Location requirement 👇
+  // 👇 Volunteers now have 7 pages (Image, Name, Profession, Phone, UPI ID, Location, License) 👇
   int get _totalPages {
-    if (widget.role == "ngo" ||
-        widget.role == "travel_agency" ||
-        widget.role == "volunteer") {
+    if (widget.role == "volunteer") {
+      return 7; 
+    }
+    if (widget.role == "ngo" || widget.role == "travel_agency") {
       return 5; // Image, Name, Phone, Location, License
     }
     return 4; // Donors: Image, Name, Phone, Location
   }
 
-  // 👇 FORMAT VALIDATORS FOR LICENSE IDs — TAMIL NADU LAUNCH 👇
   bool _isValidNGOLicense(String value) {
-    // Tamil Nadu NGO Darpan Format: TN/YYYY/NNNNNNN
     final cleaned = value.trim().toUpperCase();
     final regex = RegExp(r'^TN\/(19|20)\d{2}\/\d{7}$');
     return regex.hasMatch(cleaned);
   }
 
   bool _isValidDrivingLicense(String value) {
-    // Tamil Nadu DL Format: TN + RTO(2 digits) + Year(4 digits) + 7-digit Unique No.
-    // Accepts optional spaces/hyphens, normalizes before checking.
     final cleaned = value.trim().toUpperCase().replaceAll(
       RegExp(r'[\s\-]'),
       '',
@@ -76,10 +82,16 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   }
 
   bool _isValidRegistrationNo(String value) {
-    // Travel agency registration numbers vary — loose sanity check for now.
     final cleaned = value.trim().toUpperCase();
     final regex = RegExp(r'^[A-Z0-9\/\-]{5,20}$');
     return regex.hasMatch(cleaned);
+  }
+
+  // 👇 UPI ID Format Validation (e.g., name@upi, 9876543210@paytm) 👇
+  bool get _isUpiFormatValid {
+    String value = upiController.text.trim().toLowerCase();
+    final upiRegex = RegExp(r'^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$');
+    return upiRegex.hasMatch(value);
   }
 
   bool get _isLicenseFormatValid {
@@ -91,23 +103,42 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     return value.isNotEmpty;
   }
 
-  // 👇 UPDATED: Validation logic for the newly ordered pages 👇
+  // 👇 Dynamic Validation with new UPI Page Index 👇
   bool get _isCurrentPageValid {
     bool isValid = true;
+
     if (_currentPage == 0) {
       isValid = true;
     } else if (_currentPage == 1) {
-      isValid =
-          nameController.text.trim().isNotEmpty &&
+      isValid = nameController.text.trim().isNotEmpty &&
           usernameController.text.trim().isNotEmpty;
-    } else if (_currentPage == 2) {
-      isValid = phoneController.text.trim().length == 10;
-    } else if (_currentPage == 3) {
-      // Address validation now applies to ALL roles at Step 3
-      isValid = addressController.text.trim().isNotEmpty;
-    } else if (_currentPage == 4) {
-      // License validation only applies to roles with 5 pages
-      isValid = _isLicenseFormatValid;
+    } else if (widget.role == 'volunteer') {
+      if (_currentPage == 2) {
+        if (_selectedProfessionType == 'Student') {
+          isValid = true;
+        } else if (_selectedProfessionType == 'Professional') {
+          isValid = professionController.text.trim().isNotEmpty;
+        } else {
+          isValid = false;
+        }
+      } else if (_currentPage == 3) {
+        isValid = phoneController.text.trim().length == 10;
+      } else if (_currentPage == 4) {
+        isValid = _isUpiFormatValid; // 👇 Validates UPI ID page
+      } else if (_currentPage == 5) {
+        isValid = addressController.text.trim().isNotEmpty;
+      } else if (_currentPage == 6) {
+        isValid = _isLicenseFormatValid;
+      }
+    } else {
+      // Standard page indexes for NGOs, Donors, Travel Agencies
+      if (_currentPage == 2) {
+        isValid = phoneController.text.trim().length == 10;
+      } else if (_currentPage == 3) {
+        isValid = addressController.text.trim().isNotEmpty;
+      } else if (_currentPage == 4) {
+        isValid = _isLicenseFormatValid;
+      }
     }
 
     if (_currentPage == _totalPages - 1) {
@@ -120,7 +151,104 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     setState(() {});
   }
 
+  // 👇 Confirmation Dialog for UPI ID 👇
+  Future<bool> _showUpiConfirmationDialog(String upiId) async {
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) {
+            return Dialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              elevation: 10,
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: themeColor.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.account_balance_wallet_rounded,
+                          color: themeColor, size: 36),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      "Confirm Payment UPI ID",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        color: Color(0xFF2D3142),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    RichText(
+                      textAlign: TextAlign.center,
+                      text: TextSpan(
+                        style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.4),
+                        children: [
+                          const TextSpan(text: "All donor delivery fee payments will be sent directly to:\n\n"),
+                          TextSpan(
+                            text: upiId,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: themeColor,
+                            ),
+                          ),
+                          const TextSpan(text: "\n\nPlease ensure this address is active and accurate."),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: Text(
+                              "Edit ID",
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: themeColor,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text("Confirm"),
+                          ),
+                        ),
+                      ],
+                    )
+                  ],
+                ),
+              ),
+            );
+          },
+        ) ??
+        false;
+  }
+
   Future<void> _nextPage() async {
+    // Username Check
     if (_currentPage == 1) {
       String desiredUsername = usernameController.text.trim().toLowerCase();
       bool hasLetter = RegExp(r'[a-z]').hasMatch(desiredUsername);
@@ -171,6 +299,12 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       setState(() => _isCheckingUsername = false);
     }
 
+    // 👇 Prompt Volunteer Confirmation on the UPI step 👇
+    if (widget.role == 'volunteer' && _currentPage == 4) {
+      bool confirmed = await _showUpiConfirmationDialog(upiController.text.trim().toLowerCase());
+      if (!confirmed) return; // Stay on page if user clicks "Edit ID"
+    }
+
     if (_currentPage < _totalPages - 1) {
       FocusScope.of(context).unfocus();
       _pageController.nextPage(
@@ -203,7 +337,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     } else if (widget.role == 'travel_agency') {
       return "Travel Agency Terms & Conditions:\n\n1. Timeliness: You agree to transport donations safely and timely to the designated NGO locations.\n\n2. Vehicle Information: You must provide accurate vehicle, driver, and tracking details to ensure transparency.\n\n3. No Hidden Fees: You agree to not charge extra fees outside the initial platform agreement.\n\n4. Goods Handling: You are responsible for handling all donated items with extreme care to prevent damage or spoilage during transit.\n\n$generalTerms";
     } else if (widget.role == 'volunteer') {
-      return "Volunteer Terms & Conditions:\n\n1. You will complete assigned pickups and deliveries responsibly.\n\n2. You will handle donated items carefully and safely.\n\n3. You will not request money, gifts, or personal benefits.\n\n4. You will maintain professional and respectful behaviour.\n\n5. You will protect the privacy of donors and NGOs.\n\n6. You will report accidents, delays, or issues immediately.\n\n7. You will follow Charitey's safety guidelines and platform policies.\n\n8. Misconduct or repeated cancellations may result in suspension.\n\n$generalTerms";
+      return "Volunteer Terms & Conditions:\n\n1. You will complete assigned pickups and deliveries responsibly.\n\n2. You will handle donated items carefully and safely.\n\n3. Delivery fees paid directly by donors must match the pre-calculated platform rate.\n\n4. You will maintain professional and respectful behaviour.\n\n5. You will protect the privacy of donors and NGOs.\n\n6. You will report accidents, delays, or issues immediately.\n\n7. You will follow Charitey's safety guidelines and platform policies.\n\n8. Misconduct or repeated cancellations may result in suspension.\n\n$generalTerms";
     }
     return generalTerms;
   }
@@ -521,8 +655,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                             ),
                             onPressed:
                                 (_isCurrentPageValid && !_isCheckingUsername)
-                                ? _nextPage
-                                : null,
+                                    ? _nextPage
+                                    : null,
                             child: _isCheckingUsername
                                 ? const SizedBox(
                                     height: 20,
@@ -557,20 +691,30 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   String _getButtonText() {
     if (_currentPage == 0 &&
         _selectedImage == null &&
-        _selectedImageBytes == null)
-      return "SKIP PHOTO";
+        _selectedImageBytes == null) return "SKIP PHOTO";
     if (_currentPage == _totalPages - 1) return "COMPLETE SETUP";
     return "CONTINUE";
   }
 
-  // 👇 UPDATED: Every role now gets the address step dynamically added 👇
   List<Widget> _buildPages() {
     List<Widget> pages = [
       _buildImageStep(),
       _buildNameStep(),
-      _buildPhoneStep(),
-      _buildAddressStep(), // ALL ROLES NOW GET LOCATION
     ];
+
+    if (widget.role == "volunteer") {
+      pages.add(_buildProfessionStep());
+    }
+
+    pages.add(_buildPhoneStep());
+
+    // 👇 Insert UPI Step ONLY for Volunteers 👇
+    if (widget.role == "volunteer") {
+      pages.add(_buildUpiStep());
+    }
+
+    pages.add(_buildAddressStep());
+
     if (widget.role == "ngo" ||
         widget.role == "travel_agency" ||
         widget.role == "volunteer") {
@@ -820,6 +964,87 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     );
   }
 
+  Widget _buildProfessionStep() {
+    return _buildStepContainer(
+      title: "Your Profession",
+      subtitle: "Help us understand your background better",
+      icon: Icons.work_outline_rounded,
+      child: Column(
+        children: [
+          _buildProfessionOption("Student", Icons.school_rounded),
+          const SizedBox(height: 12),
+          _buildProfessionOption("Professional", Icons.business_center_rounded),
+          
+          AnimatedSize(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            child: _selectedProfessionType == 'Professional'
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: _buildTextField(
+                      controller: professionController,
+                      label: "Specific Profession",
+                      hint: "e.g. Software Engineer, Teacher",
+                      icon: Icons.work_rounded,
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfessionOption(String type, IconData icon) {
+    bool isSelected = _selectedProfessionType == type;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedProfessionType = type;
+          if (type == 'Student') {
+            professionController.clear();
+          }
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+        decoration: BoxDecoration(
+          color: isSelected ? themeColor.withOpacity(0.1) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? themeColor : Colors.grey.shade300,
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: isSelected ? [] : [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            )
+          ],
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: isSelected ? themeColor : Colors.grey.shade500),
+            const SizedBox(width: 16),
+            Text(
+              type,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                color: isSelected ? themeColor : Colors.black87,
+              ),
+            ),
+            const Spacer(),
+            if (isSelected)
+              Icon(Icons.check_circle_rounded, color: themeColor),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildPhoneStep() {
     return _buildStepContainer(
       title: "Phone Number",
@@ -833,6 +1058,64 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
         keyboardType: TextInputType.phone,
         maxLength: 10,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      ),
+    );
+  }
+
+  // 👇 NEW: Step 5 Widget for Volunteer UPI ID Setup 👇
+  Widget _buildUpiStep() {
+    bool showError = upiController.text.trim().isNotEmpty && !_isUpiFormatValid;
+
+    return _buildStepContainer(
+      title: "UPI ID for Payments",
+      subtitle: "Enter your active UPI ID to receive delivery payments directly from donors (GPay, PhonePe, Paytm)",
+      icon: Icons.account_balance_wallet_rounded,
+      child: Column(
+        children: [
+          _buildTextField(
+            controller: upiController,
+            label: "UPI VPA ID",
+            hint: "e.g. mobile@paytm or name@oksbi",
+            icon: Icons.qr_code_rounded,
+            keyboardType: TextInputType.emailAddress,
+          ),
+          if (showError) ...[
+            const SizedBox(height: 6),
+            Text(
+              "Invalid UPI ID format. Include your handle with '@' (e.g. user@ybl)",
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.red.shade400,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.amber.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline_rounded, color: Colors.amber.shade800, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    "You will receive 100% of donor delivery fees directly into this account.",
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.amber.shade900,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        ],
       ),
     );
   }
@@ -864,12 +1147,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
               ? "e.g. TA-2021-4521"
               : "e.g. TN/2015/0123456");
 
-    String formatHelp = widget.role == "volunteer"
-        ? "Tamil Nadu format: TN + RTO No. + Year + 7-digit No. (e.g. TN0120211234567)"
-        : (widget.role == "travel_agency"
-              ? "Enter your official business registration number."
-              : "Tamil Nadu NGO Darpan format: TN/Year/7-digit No. (e.g. TN/2015/0123456)");
-
     bool showError =
         licenseController.text.trim().isNotEmpty && !_isLicenseFormatValid;
 
@@ -886,7 +1163,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
             hint: hint,
             icon: Icons.credit_card_outlined,
           ),
-         if (showError) ...[
+          if (showError) ...[
             const SizedBox(height: 6),
             Text(
               "Invalid ${widget.role == 'volunteer' ? 'Driving License' : (widget.role == 'travel_agency' ? 'Registration Number' : 'NGO License')} ID",
@@ -902,11 +1179,19 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     );
   }
 
-  // 👇 UPDATED: Location saves to database securely regardless of the user's role 👇
   void _saveProfile() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     String finalUsername = usernameController.text.trim().toLowerCase();
     String? profileImageUrl;
+
+    String? finalProfession;
+    if (widget.role == 'volunteer') {
+      if (_selectedProfessionType == 'Student') {
+        finalProfession = 'Student';
+      } else if (_selectedProfessionType == 'Professional') {
+        finalProfession = professionController.text.trim();
+      }
+    }
 
     if (_selectedImage != null || _selectedImageBytes != null) {
       profileImageUrl = await StorageService().uploadImage(
@@ -930,6 +1215,12 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
           ? licenseController.text.trim()
           : null,
       profileImage: profileImageUrl,
+      profession: finalProfession,
+      
+      // 👇 Pass upiId to your AuthProvider / Firestore UserModel 👇
+      upiId: widget.role == 'volunteer' && upiController.text.trim().isNotEmpty
+          ? upiController.text.trim().toLowerCase()
+          : null,
     );
 
     if (mounted) {

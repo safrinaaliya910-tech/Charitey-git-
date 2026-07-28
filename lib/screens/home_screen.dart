@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart'; 
 
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
@@ -18,7 +19,9 @@ import 'hero_page.dart';
 import 'notifications_screen.dart';
 import 'chat_screen.dart';
 import 'travel_agency_dashboard.dart';
-import 'volunteer_dashboard.dart'; // <-- Make sure this is imported!
+import 'volunteer_dashboard.dart'; 
+import 'rating_dialog.dart'; 
+import 'volunteer_payment_screen.dart'; // 👇 ADD THIS// 👇 FIX: ADDED THIS MISSING IMPORT!
 
 // ==========================================
 // 1. HOME SCREEN
@@ -36,6 +39,9 @@ class HomeScreen extends StatefulWidget {
 class HomeScreenState extends State<HomeScreen> {
   late int _currentIndex;
   String? targetPostId;
+  
+  // 👇 Tracks if payment lock dialog is currently shown to prevent duplicate popups
+  bool _isPaymentLockShown = false;
 
   @override
   void initState() {
@@ -47,12 +53,44 @@ class HomeScreenState extends State<HomeScreen> {
         context,
         listen: false,
       ).currentUserModel;
-      if (user != null && user.role == 'ngo') {
-        FirestoreService().cleanUpExpiredRequests(user.uid);
+      if (user != null) {
+        if (user.role == 'ngo') {
+          FirestoreService().cleanUpExpiredRequests(user.uid);
+        }
+        // 👇 Start listening for pending delivery fee payments if user is a donor 👇
+        if (user.role == 'donor') {
+          _listenForPendingPayments(user.uid);
+        }
       }
     });
   }
 
+ void _listenForPendingPayments(String donorUid) {
+    FirebaseFirestore.instance
+        .collection('donations')
+        .where('donorId', isEqualTo: donorUid)
+        .where('status', isEqualTo: 'completed_awaiting_payment')
+        .snapshots()
+        .listen((snapshot) {
+      if (snapshot.docs.isNotEmpty && !_isPaymentLockShown && mounted) {
+        setState(() => _isPaymentLockShown = true); // Mark as shown
+        String donationId = snapshot.docs.first.id;
+        
+        // Push the new standalone payment screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => VolunteerPaymentScreen(donationId: donationId),
+          ),
+        ).then((_) {
+          // When they finish and it pops back, reset the flag
+          if (mounted) setState(() => _isPaymentLockShown = false);
+        });
+      }
+    });
+  }
+
+ 
   void switchTab(int index, {String? postId}) {
     setState(() {
       _currentIndex = index;
@@ -240,16 +278,16 @@ class HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(width: 8), // 👈 Snaps the text close right next to the bird icon
-            const Text(
-              "CHARITEY",
-              style: TextStyle(
-                color: Color(0xFF7D444C),
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.2,
-                fontFamily: 'serif', // 👈 Added this line to change the font
-              ),
+          const Text(
+            "Fourth Idly",
+            style: TextStyle(
+              color: Color(0xFF6F313E), // Premium dark burgundy to match the hero image
+              fontSize: 22,             // Increased size for a better logo presence
+              fontWeight: FontWeight.w900, // Heavy, bold weight for the whole text
+              letterSpacing: 0.5,
+              fontFamily: 'serif', 
             ),
+          ),
           ],
         ),
         actions: [
@@ -380,7 +418,7 @@ class HomeScreenState extends State<HomeScreen> {
                     ),
                     SizedBox(width: 12),
                     Text(
-                      'About Charitey',
+                      'About Fouth Idly',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         color: Colors.black87,
@@ -987,7 +1025,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         children: [
           _buildQuestionWithOptions(
             1,
-            "Q1. How would you rate your overall experience with Charitey?",
+            "Q1. How would you rate your overall experience with Fouth Idly?",
             [
               '⭐☆☆☆☆ 1 Star',
               '⭐⭐☆☆☆ 2 Stars',
@@ -998,12 +1036,12 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           ),
           _buildQuestionWithOptions(
             2,
-            "Q2. How easy was it to use the Charitey app?",
+            "Q2. How easy was it to use the Fouth Idly app?",
             ['Very Easy', 'Easy', 'Somewhat Difficult', 'Difficult'],
           ),
           _buildQuestionWithOptions(
             3,
-            "Q3. How satisfied are you with the services provided by Charitey?",
+            "Q3. How satisfied are you with the services provided by Fourth Idly?",
             [
               'Very Satisfied',
               'Satisfied',
@@ -1013,12 +1051,12 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           ),
           _buildQuestionWithOptions(
             4,
-            "Q4. How helpful was Charitey in meeting your needs?",
+            "Q4. How helpful was Fourth Idly in meeting your needs?",
             ['Very Helpful', 'Helpful', 'Slightly Helpful', 'Not Helpful'],
           ),
           _buildQuestionWithOptions(
             5,
-            "Q5. How likely are you to recommend Charitey to your friends or family?",
+            "Q5. How likely are you to recommend Fourth Idly to your friends or family?",
             ['Definitely', 'Probably', 'Maybe', 'No'],
           ),
           const SizedBox(height: 20),
@@ -1351,7 +1389,7 @@ class ContactUsScreen extends StatelessWidget {
       ),
       body: Center(
         child: Text(
-          "Contact Support: support@charitey.com\nPhone: +91 9876543210",
+          "Contact Support: support@fouthidly.com\nPhone: +91 xxxxxxxxxx",
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 16, height: 1.5),
         ),

@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class DonationModel {
   final String donationId;
   final String listingId;
-  final String ngoId; // FIXED TYPO
+  final String ngoId; 
   final String donorId;
   final String donorName;
   final String donorPhone;
@@ -11,9 +11,14 @@ class DonationModel {
   final String status;
   final DateTime createdAt;
   final int donatedQuantity;
-  // NEW: Mapped from Firebase
+  
   final String? cancelReason;
   final DateTime? cancelledAt;
+
+  // 👇 NEW: Delivery Math & Location Fields for Volunteers 👇
+  final double? deliveryFee;
+  final double? donorLat;
+  final double? donorLng;
 
   DonationModel({
     required this.donationId,
@@ -28,6 +33,9 @@ class DonationModel {
     required this.donatedQuantity,
     this.cancelReason,
     this.cancelledAt,
+    this.deliveryFee, // <-- NEW
+    this.donorLat,    // <-- NEW
+    this.donorLng,    // <-- NEW
   });
 
   Map<String, dynamic> toMap() {
@@ -44,6 +52,9 @@ class DonationModel {
       'donatedQuantity': donatedQuantity,
       'cancelReason': cancelReason,
       'cancelledAt': cancelledAt != null ? Timestamp.fromDate(cancelledAt!) : null,
+      'deliveryFee': deliveryFee, // <-- NEW
+      'donorLat': donorLat,       // <-- NEW
+      'donorLng': donorLng,       // <-- NEW
     };
   }
 
@@ -61,6 +72,11 @@ class DonationModel {
       createdAt: (map['createdAt'] as Timestamp).toDate(),
       cancelReason: map['cancelReason'],
       cancelledAt: (map['cancelledAt'] as Timestamp?)?.toDate(),
+      
+      // 👇 NEW: Safe parsing for doubles from Firestore 👇
+      deliveryFee: (map['deliveryFee'] as num?)?.toDouble(),
+      donorLat: (map['donorLat'] as num?)?.toDouble(),
+      donorLng: (map['donorLng'] as num?)?.toDouble(),
     );
   }
 }

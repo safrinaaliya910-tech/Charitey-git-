@@ -47,7 +47,7 @@ class _BaseRegisterScreenState extends State<BaseRegisterScreen> with SingleTick
     switch (widget.role) {
       case 'ngo':
         return {
-          'title': 'Create NGO Account',
+          'title': 'Create Receiver Account',
           'subtitle': 'We\'re here to help you get support.',
           'nameHint': 'Enter NGO name',
           'nameIcon': Icons.domain_rounded,
@@ -56,13 +56,13 @@ class _BaseRegisterScreenState extends State<BaseRegisterScreen> with SingleTick
         return {
           'title': 'Create Agency Account',
           'subtitle': 'Join our logistics network to help out.',
-          'nameHint': 'Enter Agency name',
+          'nameHint': 'Enter name',
           'nameIcon': Icons.local_shipping_outlined,
         };
       // 👇 NEW: VOLUNTEER CONFIG 👇
       case 'volunteer':
         return {
-          'title': 'Become a Volunteer',
+          'title': 'Become a Kindness Champion',
           'subtitle': 'Help transport donations and make an impact.',
           'nameHint': 'Enter full name',
           'nameIcon': Icons.directions_car_rounded,

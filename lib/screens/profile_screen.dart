@@ -56,7 +56,7 @@ class ProfileScreenState extends State<ProfileScreen> {
           );
         }
 
-       String name = currentUser.name;
+        String name = currentUser.name;
         String username = currentUser.username;
         String email = currentUser.email;
         String phone = currentUser.phone;
@@ -64,6 +64,10 @@ class ProfileScreenState extends State<ProfileScreen> {
         String profileImage = currentUser.profileImage;
         String license = currentUser.license;
         String role = currentUser.role.toString().trim().toLowerCase();
+
+        // Universal rating data
+        double averageRating = currentUser.averageRating;
+        int totalReviews = currentUser.totalReviews;
 
         if (isVisiting &&
             userSnapshot.hasData &&
@@ -77,6 +81,10 @@ class ProfileScreenState extends State<ProfileScreen> {
           location = data['location'] ?? '';
           profileImage = data['profileImage'] ?? '';
           role = (data['role'] ?? 'user').toString().trim().toLowerCase();
+
+          // Pull the visited user's rating
+          averageRating = (data['averageRating'] as num?)?.toDouble() ?? 0.0;
+          totalReviews = (data['totalReviews'] as num?)?.toInt() ?? 0;
         }
 
         return Container(
@@ -96,7 +104,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                   height: 240,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [themeColor, themeColor.withValues(alpha: 0.7)],
+                      colors: [themeColor, themeColor.withOpacity(0.7)],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                     ),
@@ -119,7 +127,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                             borderRadius: BorderRadius.circular(24),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.12),
+                                color: Colors.black.withOpacity(0.12),
                                 blurRadius: 20,
                                 offset: const Offset(0, 10),
                               ),
@@ -142,21 +150,19 @@ class ProfileScreenState extends State<ProfileScreen> {
                                     backgroundColor: Colors.white,
                                     child: CircleAvatar(
                                       radius: 50,
-                                      backgroundColor: themeColor.withValues(
-                                        alpha: 0.1,
-                                      ),
+                                      backgroundColor: themeColor.withOpacity(0.1),
                                       backgroundImage: profileImage.isNotEmpty
                                           ? NetworkImage(profileImage)
                                           : null,
                                       child: isUploading
                                           ? const CircularProgressIndicator()
                                           : (profileImage.isEmpty
-                                                ? Icon(
-                                                    Icons.person_rounded,
-                                                    size: 50,
-                                                    color: themeColor,
-                                                  )
-                                                : null),
+                                              ? Icon(
+                                                  Icons.person_rounded,
+                                                  size: 50,
+                                                  color: themeColor,
+                                                )
+                                              : null),
                                     ),
                                   ),
                                 ),
@@ -180,7 +186,50 @@ class ProfileScreenState extends State<ProfileScreen> {
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                   if (!isVisiting)
+                                    // UNIVERSAL STAR RATING BADGE 
+                                    if (totalReviews > 0)
+                                      Container(
+                                        margin: const EdgeInsets.only(top: 8),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 5,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.amber.shade50,
+                                          borderRadius: BorderRadius.circular(20),
+                                          border: Border.all(
+                                            color: Colors.amber.shade200,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(
+                                              Icons.star_rounded,
+                                              color: Colors.amber,
+                                              size: 16,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              averageRating.toStringAsFixed(1),
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                                color: Colors.black87,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              "($totalReviews Reviews)",
+                                              style: TextStyle(
+                                                color: Colors.grey.shade600,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    if (!isVisiting)
                                       Text(
                                         email,
                                         style: TextStyle(
@@ -191,11 +240,19 @@ class ProfileScreenState extends State<ProfileScreen> {
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              if (!isVisiting && phone.isNotEmpty) _buildInfoTile(Icons.phone_android_rounded, phone),
-                              if (location.isNotEmpty) _buildInfoTile(Icons.location_on_rounded, location),
-                              if (!isVisiting && license.isNotEmpty && (role == 'ngo' || role == 'volunteer' || role == 'travel_agency'))
+                              if (!isVisiting && phone.isNotEmpty)
+                                _buildInfoTile(Icons.phone_android_rounded, phone),
+                              if (location.isNotEmpty)
+                                _buildInfoTile(Icons.location_on_rounded, location),
+                              if (!isVisiting &&
+                                  license.isNotEmpty &&
+                                  (role == 'ngo' ||
+                                      role == 'volunteer' ||
+                                      role == 'travel_agency'))
                                 _buildInfoTile(
-                                  role == 'volunteer' ? Icons.credit_card_rounded : Icons.verified_user_rounded,
+                                  role == 'volunteer'
+                                      ? Icons.credit_card_rounded
+                                      : Icons.verified_user_rounded,
                                   license,
                                 ),
                               const SizedBox(height: 20),
@@ -216,9 +273,8 @@ class ProfileScreenState extends State<ProfileScreen> {
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: themeColor,
                                           shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              30,
-                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(30),
                                           ),
                                         ),
                                         child: const Text(
@@ -237,23 +293,18 @@ class ProfileScreenState extends State<ProfileScreen> {
                                         List<dynamic> favorites = [];
                                         if (snapshot.hasData &&
                                             snapshot.data!.exists) {
-                                          final data =
-                                              snapshot.data!.data()
-                                                  as Map<String, dynamic>?;
+                                          final data = snapshot.data!.data()
+                                              as Map<String, dynamic>?;
                                           favorites = data?['favorites'] ?? [];
                                         }
-                                        bool isFav = favorites.contains(
-                                          targetUid,
-                                        );
+                                        bool isFav = favorites.contains(targetUid);
                                         return IconButton(
                                           icon: Icon(
                                             isFav
                                                 ? Icons.favorite
                                                 : Icons.favorite_border,
                                           ),
-                                          color: isFav
-                                              ? Colors.red
-                                              : themeColor,
+                                          color: isFav ? Colors.red : themeColor,
                                           iconSize: 32,
                                           onPressed: () => _toggleFavoriteNgo(
                                             currentUserId,
@@ -274,33 +325,42 @@ class ProfileScreenState extends State<ProfileScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
-                              _buildActionButton(
-                                role == 'ngo'
-                                    ? "My Requests"
-                                    : (role == 'volunteer'
-                                          ? "My Deliveries"
-                                          : "My Donations"),
-                                role == 'volunteer'
-                                    ? Icons.local_shipping_rounded
-                                    : Icons.history,
-                                () {
-                                  if (role == 'ngo') {
-                                    _showRecentRequestsSheet(
-                                      context,
-                                      targetUid,
-                                    );
-                                  } else if (role == 'volunteer') {
-                                    _showMyTasksSheet(context);
-                                  } else {
-                                    _showMyDonationsSheet(context);
-                                  }
-                                },
-                              ),
-                              _buildActionButton(
-                                "Share",
-                                Icons.share,
-                                () => _shareApp(context),
-                              ),
+                              // Navigates to PendingReceiptsScreen
+                              if (role == 'ngo') ...[
+                                _buildActionButton(
+                                    "Requests",
+                                    Icons.history,
+                                    () => _showRecentRequestsSheet(
+                                        context, targetUid)),
+                                _buildActionButton(
+                                    "Pending\nReceipts",
+                                    Icons.inventory_2_outlined,
+                                    () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) => PendingReceiptsScreen(
+                                                ngoId: targetUid)))),
+                                _buildActionButton("Share", Icons.share,
+                                    () => _shareApp(context)),
+                              ] else ...[
+                                _buildActionButton(
+                                  role == 'volunteer'
+                                      ? "My Deliveries"
+                                      : "My Donations",
+                                  role == 'volunteer'
+                                      ? Icons.local_shipping_rounded
+                                      : Icons.history,
+                                  () {
+                                    if (role == 'volunteer') {
+                                      _showMyTasksSheet(context);
+                                    } else {
+                                      _showMyDonationsSheet(context);
+                                    }
+                                  },
+                                ),
+                                _buildActionButton("Share", Icons.share,
+                                    () => _shareApp(context)),
+                              ],
                             ],
                           ),
                           const SizedBox(height: 25),
@@ -315,9 +375,10 @@ class ProfileScreenState extends State<ProfileScreen> {
                                       .snapshots(),
                                   builder: (context, snapshot) {
                                     String count = "0";
-                                    if (snapshot.hasData)
+                                    if (snapshot.hasData) {
                                       count = snapshot.data!.docs.length
                                           .toString();
+                                    }
                                     return _buildStatCard(
                                       "Total Requests",
                                       count,
@@ -340,18 +401,12 @@ class ProfileScreenState extends State<ProfileScreen> {
                                   builder: (context, snapshot) {
                                     String count = "0";
                                     if (snapshot.hasData) {
-                                      count = snapshot.data!.docs
-                                          .where(
-                                            (d) =>
-                                                (d.data()
-                                                    as Map<
-                                                      String,
-                                                      dynamic
-                                                    >)['status'] ==
-                                                'delivery_completed',
-                                          )
-                                          .length
-                                          .toString();
+                                      count = snapshot.data!.docs.where((d) {
+                                        String status = (d.data()
+                                                as Map<String, dynamic>)['status'] ??
+                                            '';
+                                        return status.contains('completed');
+                                      }).length.toString();
                                     }
                                     return _buildStatCard(
                                       "Completed Tasks",
@@ -368,9 +423,10 @@ class ProfileScreenState extends State<ProfileScreen> {
                                       .snapshots(),
                                   builder: (context, snapshot) {
                                     String count = "0";
-                                    if (snapshot.hasData)
+                                    if (snapshot.hasData) {
                                       count = snapshot.data!.docs.length
                                           .toString();
+                                    }
                                     return _buildStatCard(
                                       "Total Donations",
                                       count,
@@ -380,7 +436,6 @@ class ProfileScreenState extends State<ProfileScreen> {
                                 ),
                             ],
                           ),
-
                           if (role == 'volunteer') ...[
                             const SizedBox(height: 25),
                             VolunteerImpactStoryWidget(
@@ -388,7 +443,6 @@ class ProfileScreenState extends State<ProfileScreen> {
                               themeColor: themeColor,
                             ),
                           ],
-
                           if (role != 'ngo' && role != 'volunteer') ...[
                             const SizedBox(height: 25),
                             DonorImpactStoryWidget(
@@ -482,9 +536,8 @@ class ProfileScreenState extends State<ProfileScreen> {
                                 padding: EdgeInsets.zero,
                                 itemCount: posts.length,
                                 itemBuilder: (context, index) {
-                                  var postData =
-                                      posts[index].data()
-                                          as Map<String, dynamic>;
+                                  var postData = posts[index].data()
+                                      as Map<String, dynamic>;
                                   var post = PostModel.fromMap(
                                     postData,
                                     posts[index].id,
@@ -506,8 +559,9 @@ class ProfileScreenState extends State<ProfileScreen> {
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(15),
-                              boxShadow: const [
-                                BoxShadow(color: Colors.black12, blurRadius: 5),
+                              boxShadow: [
+                                BoxShadow(
+                                    color: Colors.black12, blurRadius: 5),
                               ],
                             ),
                             child: ListTile(
@@ -554,7 +608,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                         if (isVisiting)
                           Container(
                             decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.15),
+                              color: Colors.black.withOpacity(0.15),
                               shape: BoxShape.circle,
                             ),
                             child: IconButton(
@@ -569,7 +623,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                               onPressed: () => Navigator.pop(context),
                             ),
                           )
-                        else
+                       else
                           const SizedBox(),
                       ],
                     ),
@@ -595,7 +649,7 @@ class ProfileScreenState extends State<ProfileScreen> {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
+                  color: Colors.black.withOpacity(0.06),
                   blurRadius: 8,
                 ),
               ],
@@ -605,7 +659,8 @@ class ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 8),
           Text(
             label,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.2),
           ),
         ],
       ),
@@ -624,7 +679,7 @@ class ProfileScreenState extends State<ProfileScreen> {
             borderRadius: BorderRadius.circular(15),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
+                color: Colors.black.withOpacity(0.12),
                 blurRadius: 5,
               ),
             ],
@@ -656,7 +711,7 @@ class ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
- Widget _buildInfoTile(IconData icon, String text) {
+  Widget _buildInfoTile(IconData icon, String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Row(
@@ -670,11 +725,7 @@ class ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Future<void> _toggleFavoriteNgo(
-    String donorId,
-    String ngoId,
-    bool isFav,
-  ) async {
+  Future<void> _toggleFavoriteNgo(String donorId, String ngoId, bool isFav) async {
     if (donorId.isEmpty || ngoId.isEmpty) return;
     final docRef = FirebaseFirestore.instance.collection('users').doc(donorId);
     if (isFav) {
@@ -701,11 +752,7 @@ class ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Future<bool> _showCancelStepDialog(
-    BuildContext context,
-    String title,
-    String message,
-  ) async {
+  Future<bool> _showCancelStepDialog(BuildContext context, String title, String message) async {
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -827,26 +874,17 @@ class ProfileScreenState extends State<ProfileScreen> {
                         for (var doc in allDocs) {
                           var data = doc.data() as Map<String, dynamic>;
                           String listingId = data['listingId'] ?? doc.id;
-                          String rawQty =
-                              data['quantity']?.toString() ??
+                          String rawQty = data['quantity']?.toString() ??
                               data['qty']?.toString() ??
                               data['donatedAmount']?.toString() ??
                               '0';
-                          String cleanQty = rawQty.replaceAll(
-                            RegExp(r'[^0-9]'),
-                            '',
-                          );
-                          int mathQty =
-                              int.tryParse(cleanQty.isEmpty ? '0' : cleanQty) ??
-                              0;
+                          String cleanQty = rawQty.replaceAll(RegExp(r'[^0-9]'), '');
+                          int mathQty = int.tryParse(cleanQty.isEmpty ? '0' : cleanQty) ?? 0;
 
                           if (groupedDonations.containsKey(listingId)) {
                             groupedDonations[listingId]!['aggregatedQty'] =
-                                (groupedDonations[listingId]!['aggregatedQty']
-                                    as int) +
-                                mathQty;
-                            var existingTime =
-                                groupedDonations[listingId]!['createdAt'];
+                                (groupedDonations[listingId]!['aggregatedQty'] as int) + mathQty;
+                            var existingTime = groupedDonations[listingId]!['createdAt'];
                             var thisTime = data['createdAt'];
                             DateTime existingDate = existingTime is Timestamp
                                 ? existingTime.toDate()
@@ -855,17 +893,14 @@ class ProfileScreenState extends State<ProfileScreen> {
                                 ? thisTime.toDate()
                                 : DateTime.fromMillisecondsSinceEpoch(0);
                             if (thisDate.isAfter(existingDate)) {
-                              groupedDonations[listingId]!['createdAt'] =
-                                  data['createdAt'];
-                              groupedDonations[listingId]!['status'] =
-                                  data['status'];
+                              groupedDonations[listingId]!['createdAt'] = data['createdAt'];
+                              groupedDonations[listingId]!['status'] = data['status'];
                               groupedDonations[listingId]!['docId'] = doc.id;
                             }
                           } else {
                             data['aggregatedQty'] = mathQty;
                             data['docId'] = doc.id;
-                            groupedDonations[listingId] =
-                                Map<String, dynamic>.from(data);
+                            groupedDonations[listingId] = Map<String, dynamic>.from(data);
                           }
                         }
                         var donations = groupedDonations.values.toList();
@@ -896,57 +931,38 @@ class ProfileScreenState extends State<ProfileScreen> {
                             DateTime? createdDate;
                             if (createdAt is Timestamp) {
                               createdDate = createdAt.toDate();
-                              dateText =
-                                  '${createdDate.day}/${createdDate.month}/${createdDate.year}';
+                              dateText = '${createdDate.day}/${createdDate.month}/${createdDate.year}';
                             }
-                            String ngoName =
-                                donation['ngoName'] ?? 'NGO Partner';
-                            String itemName =
-                                donation['items'] ??
-                                donation['itemName'] ??
-                                'Item';
+                            String ngoName = donation['ngoName'] ?? 'NGO Partner';
+                            String itemName = donation['items'] ?? donation['itemName'] ?? 'Item';
                             int donatedQty = donation['aggregatedQty'] as int;
                             String rawDisplayQty = donatedQty.toString();
-                            String status =
-                                donation['status']
-                                    ?.toString()
-                                    .trim()
-                                    .toLowerCase() ??
-                                'pending';
+                            String status = donation['status']?.toString().trim().toLowerCase() ?? 'pending';
                             String ngoId = donation['ngoId'] ?? '';
                             String listingId = donation['listingId'] ?? '';
                             String targetDocId = donation['docId'] ?? '';
+                            
                             final bool isCancelled = status == 'cancelled';
-                            final bool canCancel =
-                                status == 'pending' &&
+                            final bool isPending = status == 'pending';
+                            final bool canCancel = isPending &&
                                 createdDate != null &&
-                                DateTime.now().difference(createdDate).inHours <
-                                    24;
+                                DateTime.now().difference(createdDate).inHours < 24;
 
                             return FutureBuilder<List<DocumentSnapshot?>>(
                               future: () async {
                                 final ngoDoc = ngoId.isNotEmpty
-                                    ? await FirebaseFirestore.instance
-                                          .collection('users')
-                                          .doc(ngoId)
-                                          .get()
+                                    ? await FirebaseFirestore.instance.collection('users').doc(ngoId).get()
                                     : null;
                                 DocumentSnapshot? listingDoc;
                                 if (listingId.isNotEmpty)
-                                  listingDoc = await FirebaseFirestore.instance
-                                      .collection('ngo_listings')
-                                      .doc(listingId)
-                                      .get();
+                                  listingDoc = await FirebaseFirestore.instance.collection('ngo_listings').doc(listingId).get();
                                 return [ngoDoc, listingDoc];
                               }(),
                               builder: (context, combinedSnapshot) {
-                                if (combinedSnapshot.connectionState ==
-                                    ConnectionState.waiting)
+                                if (combinedSnapshot.connectionState == ConnectionState.waiting)
                                   return const Padding(
                                     padding: EdgeInsets.symmetric(vertical: 20),
-                                    child: Center(
-                                      child: CircularProgressIndicator(),
-                                    ),
+                                    child: Center(child: CircularProgressIndicator()),
                                   );
 
                                 int totalQty = donatedQty;
@@ -954,55 +970,27 @@ class ProfileScreenState extends State<ProfileScreen> {
                                 String unit = '';
                                 String type = 'PRODUCT';
 
-                                if (combinedSnapshot.hasData &&
-                                    combinedSnapshot.data != null) {
+                                if (combinedSnapshot.hasData && combinedSnapshot.data != null) {
                                   final ngoSnapshot = combinedSnapshot.data![0];
-                                  if (ngoSnapshot != null &&
-                                      ngoSnapshot.exists) {
-                                    var userData =
-                                        ngoSnapshot.data()
-                                            as Map<String, dynamic>?;
+                                  if (ngoSnapshot != null && ngoSnapshot.exists) {
+                                    var userData = ngoSnapshot.data() as Map<String, dynamic>?;
                                     ngoName = userData?['name'] ?? ngoName;
                                   }
-                                  if (combinedSnapshot.data!.length > 1 &&
-                                      combinedSnapshot.data![1] != null) {
-                                    final listingSnapshot =
-                                        combinedSnapshot.data![1]!;
+                                  if (combinedSnapshot.data!.length > 1 && combinedSnapshot.data![1] != null) {
+                                    final listingSnapshot = combinedSnapshot.data![1]!;
                                     if (listingSnapshot.exists) {
-                                      var listingData =
-                                          listingSnapshot.data()
-                                              as Map<String, dynamic>?;
+                                      var listingData = listingSnapshot.data() as Map<String, dynamic>?;
                                       if (listingData != null) {
-                                        if (listingData['type'] == 'food' ||
-                                            listingData['type'] == 'FOOD') {
-                                          itemName =
-                                              listingData['foodType'] ??
-                                              itemName;
+                                        if (listingData['type'] == 'food' || listingData['type'] == 'FOOD') {
+                                          itemName = listingData['foodType'] ?? itemName;
                                           type = 'FOOD';
                                         } else {
-                                          itemName =
-                                              listingData['productName'] ??
-                                              itemName;
-                                          type =
-                                              (listingData['type'] ?? 'PRODUCT')
-                                                  .toString()
-                                                  .toUpperCase();
+                                          itemName = listingData['productName'] ?? itemName;
+                                          type = (listingData['type'] ?? 'PRODUCT').toString().toUpperCase();
                                         }
                                         unit = listingData['unit'] ?? '';
-                                        totalQty =
-                                            int.tryParse(
-                                              listingData['quantity']
-                                                      ?.toString() ??
-                                                  '0',
-                                            ) ??
-                                            donatedQty;
-                                        fulfilledQty =
-                                            int.tryParse(
-                                              listingData['fulfilledQuantity']
-                                                      ?.toString() ??
-                                                  '0',
-                                            ) ??
-                                            donatedQty;
+                                        totalQty = int.tryParse(listingData['quantity']?.toString() ?? '0') ?? donatedQty;
+                                        fulfilledQty = int.tryParse(listingData['fulfilledQuantity']?.toString() ?? '0') ?? donatedQty;
                                       }
                                     }
                                   }
@@ -1021,129 +1009,64 @@ class ProfileScreenState extends State<ProfileScreen> {
                                   unit: unit,
                                   type: type,
                                   dateText: dateText,
+                                  status: status, 
                                   isCancelled: isCancelled,
                                   canCancel: canCancel,
                                   themeColor: themeColor,
                                   onCancel: () async {
-                                    bool stepOne = await _showCancelStepDialog(
-                                      context,
-                                      'Step 1 of 3',
-                                      'Do you really want to cancel this donation?',
-                                    );
-                                    if (!stepOne) return;
-                                    if (!context.mounted) return;
-                                    bool stepTwo = await _showCancelStepDialog(
-                                      context,
-                                      'Step 2 of 3',
-                                      'This action cannot be undone. Are you sure?',
-                                    );
-                                    if (!stepTwo) return;
-                                    if (!context.mounted) return;
-                                    String? reason =
-                                        await _showCancelReasonDialog(context);
-                                    if (reason == null || reason.trim().isEmpty)
-                                      return;
+                                    bool stepOne = await _showCancelStepDialog(context, 'Step 1 of 3', 'Do you really want to cancel this donation?');
+                                    if (!stepOne || !context.mounted) return;
+                                    bool stepTwo = await _showCancelStepDialog(context, 'Step 2 of 3', 'This action cannot be undone. Are you sure?');
+                                    if (!stepTwo || !context.mounted) return;
+                                    String? reason = await _showCancelReasonDialog(context);
+                                    if (reason == null || reason.trim().isEmpty) return;
 
                                     try {
-                                      await FirebaseFirestore.instance
-                                          .collection('donations')
-                                          .doc(targetDocId)
-                                          .update({
-                                            'status': 'cancelled',
-                                            'cancelReason': reason.trim(),
-                                            'cancelledAt': Timestamp.now(),
-                                          });
+                                      await FirebaseFirestore.instance.collection('donations').doc(targetDocId).update({
+                                        'status': 'cancelled',
+                                        'cancelReason': reason.trim(),
+                                        'cancelledAt': Timestamp.now(),
+                                      });
 
                                       if (ngoId.isNotEmpty) {
-                                        String notificationId =
-                                            FirebaseFirestore.instance
-                                                .collection('notifications')
-                                                .doc()
-                                                .id;
-                                        NotificationModel
-                                        notification = NotificationModel(
+                                        String notificationId = FirebaseFirestore.instance.collection('notifications').doc().id;
+                                        NotificationModel notification = NotificationModel(
                                           id: notificationId,
                                           receiverId: ngoId,
                                           senderId: currentUserId,
                                           senderName: user.name,
                                           title: 'Donation Cancelled',
-                                          message:
-                                              '${user.name} cancelled the donation for $itemName. Reason: "${reason.trim()}". Phone: ${user.phone}',
+                                          message: '${user.name} cancelled the donation for $itemName. Reason: "${reason.trim()}". Phone: ${user.phone}',
                                           type: 'donation_cancelled',
                                           relatedItemId: targetDocId,
                                           createdAt: DateTime.now(),
                                           isRead: false,
                                         );
-                                        await FirestoreService()
-                                            .sendNotification(notification);
+                                        await FirestoreService().sendNotification(notification);
                                       }
 
                                       if (listingId.isNotEmpty) {
-                                        DocumentReference listingRef =
-                                            FirebaseFirestore.instance
-                                                .collection('ngo_listings')
-                                                .doc(listingId);
-                                        await FirebaseFirestore.instance
-                                            .runTransaction((
-                                              transaction,
-                                            ) async {
-                                              DocumentSnapshot listingSnap =
-                                                  await transaction.get(
-                                                    listingRef,
-                                                  );
-                                              if (listingSnap.exists) {
-                                                var lData =
-                                                    listingSnap.data()
-                                                        as Map<String, dynamic>;
-                                                int currentFulfilled =
-                                                    (lData['fulfilledQuantity']
-                                                            as num?)
-                                                        ?.toInt() ??
-                                                    0;
-                                                int totalNeeded =
-                                                    (lData['quantity'] as num?)
-                                                        ?.toInt() ??
-                                                    0;
-                                                int newFulfilled =
-                                                    currentFulfilled -
-                                                    donatedQty;
-                                                if (newFulfilled < 0)
-                                                  newFulfilled = 0;
-                                                String newStatus =
-                                                    lData['status'] ?? 'open';
-                                                if (newFulfilled <
-                                                        totalNeeded &&
-                                                    newStatus == 'closed')
-                                                  newStatus = 'open';
-                                                transaction.update(listingRef, {
-                                                  'fulfilledQuantity':
-                                                      newFulfilled,
-                                                  'status': newStatus,
-                                                });
-                                              }
+                                        DocumentReference listingRef = FirebaseFirestore.instance.collection('ngo_listings').doc(listingId);
+                                        await FirebaseFirestore.instance.runTransaction((transaction) async {
+                                          DocumentSnapshot listingSnap = await transaction.get(listingRef);
+                                          if (listingSnap.exists) {
+                                            var lData = listingSnap.data() as Map<String, dynamic>;
+                                            int currentFulfilled = (lData['fulfilledQuantity'] as num?)?.toInt() ?? 0;
+                                            int totalNeeded = (lData['quantity'] as num?)?.toInt() ?? 0;
+                                            int newFulfilled = currentFulfilled - donatedQty;
+                                            if (newFulfilled < 0) newFulfilled = 0;
+                                            String newStatus = lData['status'] ?? 'open';
+                                            if (newFulfilled < totalNeeded && newStatus == 'closed') newStatus = 'open';
+                                            transaction.update(listingRef, {
+                                              'fulfilledQuantity': newFulfilled,
+                                              'status': newStatus,
                                             });
+                                          }
+                                        });
                                       }
-                                      if (context.mounted)
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'Donation cancelled. NGO notified and quantity restored!',
-                                            ),
-                                          ),
-                                        );
+                                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Donation cancelled. NGO notified and quantity restored!')));
                                     } catch (e) {
-                                      if (context.mounted)
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'Failed to cancel donation.',
-                                            ),
-                                          ),
-                                        );
+                                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to cancel donation.')));
                                     }
                                   },
                                 );
@@ -1160,10 +1083,7 @@ class ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Future<void> _showRecentRequestsSheet(
-    BuildContext context,
-    String ngoId,
-  ) async {
+  Future<void> _showRecentRequestsSheet(BuildContext context, String ngoId) async {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFFFDF7F8),
@@ -1204,12 +1124,9 @@ class ProfileScreenState extends State<ProfileScreen> {
                     .where('ngoId', isEqualTo: ngoId)
                     .snapshots(),
                 builder: (context, snapshot) {
-                  if (snapshot.hasError)
-                    return Center(child: Text("Error: ${snapshot.error}"));
+                  if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
                   if (snapshot.connectionState == ConnectionState.waiting)
-                    return Center(
-                      child: CircularProgressIndicator(color: themeColor),
-                    );
+                    return Center(child: CircularProgressIndicator(color: themeColor));
 
                   var requests = snapshot.data!.docs.toList();
                   requests.sort((a, b) {
@@ -1217,54 +1134,30 @@ class ProfileScreenState extends State<ProfileScreen> {
                     var bData = b.data() as Map<String, dynamic>;
                     var aTime = aData['createdAt'];
                     var bTime = bData['createdAt'];
-                    DateTime aDate = aTime is Timestamp
-                        ? aTime.toDate()
-                        : (aTime is DateTime
-                              ? aTime
-                              : DateTime.fromMillisecondsSinceEpoch(0));
-                    DateTime bDate = bTime is Timestamp
-                        ? bTime.toDate()
-                        : (bTime is DateTime
-                              ? bTime
-                              : DateTime.fromMillisecondsSinceEpoch(0));
+                    DateTime aDate = aTime is Timestamp ? aTime.toDate() : (aTime is DateTime ? aTime : DateTime.fromMillisecondsSinceEpoch(0));
+                    DateTime bDate = bTime is Timestamp ? bTime.toDate() : (bTime is DateTime ? bTime : DateTime.fromMillisecondsSinceEpoch(0));
                     return bDate.compareTo(aDate);
                   });
 
                   if (requests.isEmpty)
-                    return const Center(
-                      child: Text("You haven't made any requests yet."),
-                    );
+                    return const Center(child: Text("You haven't made any requests yet."));
 
                   return ListView.builder(
                     physics: const BouncingScrollPhysics(),
                     itemCount: requests.length,
                     itemBuilder: (context, index) {
                       var data = requests[index].data() as Map<String, dynamic>;
-                      String type = (data['type'] ?? 'PRODUCT')
-                          .toString()
-                          .toUpperCase();
+                      String type = (data['type'] ?? 'PRODUCT').toString().toUpperCase();
                       bool isFood = type == 'FOOD';
-                      String itemName = isFood
-                          ? (data['foodType'] ?? 'Food')
-                          : (data['productName'] ?? 'Product');
-                      int totalQty =
-                          int.tryParse(data['quantity']?.toString() ?? '0') ??
-                          0;
-                      int fulfilledQty =
-                          int.tryParse(
-                            data['fulfilledQuantity']?.toString() ?? '0',
-                          ) ??
-                          0;
+                      String itemName = isFood ? (data['foodType'] ?? 'Food') : (data['productName'] ?? 'Product');
+                      int totalQty = int.tryParse(data['quantity']?.toString() ?? '0') ?? 0;
+                      int fulfilledQty = int.tryParse(data['fulfilledQuantity']?.toString() ?? '0') ?? 0;
                       int remainingQty = totalQty - fulfilledQty;
                       if (remainingQty < 0) remainingQty = 0;
                       String unit = data['unit'] ?? '';
-                      double progress = totalQty > 0
-                          ? (fulfilledQty / totalQty)
-                          : 0.0;
+                      double progress = totalQty > 0 ? (fulfilledQty / totalQty) : 0.0;
                       Timestamp? ts = data['createdAt'] as Timestamp?;
-                      String dateText = ts != null
-                          ? "${ts.toDate().day}-${ts.toDate().month}-${ts.toDate().year}"
-                          : "Unknown Date";
+                      String dateText = ts != null ? "${ts.toDate().day}-${ts.toDate().month}-${ts.toDate().year}" : "Unknown Date";
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 16),
@@ -1274,7 +1167,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.05),
+                              color: Colors.black.withOpacity(0.05),
                               blurRadius: 10,
                               offset: const Offset(0, 4),
                             ),
@@ -1288,27 +1181,17 @@ class ProfileScreenState extends State<ProfileScreen> {
                               children: [
                                 Text(
                                   itemName,
-                                  style: const TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                                 ),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                   decoration: BoxDecoration(
                                     color: Colors.grey.shade200,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
                                     type,
-                                    style: TextStyle(
-                                      color: Colors.grey.shade700,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
+                                    style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.bold, fontSize: 12),
                                   ),
                                 ),
                               ],
@@ -1316,24 +1199,15 @@ class ProfileScreenState extends State<ProfileScreen> {
                             const SizedBox(height: 12),
                             if (!isFood) ...[
                               Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     "$fulfilledQty donated out of $totalQty",
-                                    style: const TextStyle(
-                                      color: Colors.green,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                    ),
+                                    style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13),
                                   ),
                                   Text(
                                     "$remainingQty needed",
-                                    style: TextStyle(
-                                      color: themeColor,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                    ),
+                                    style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 13),
                                   ),
                                 ],
                               ),
@@ -1344,50 +1218,28 @@ class ProfileScreenState extends State<ProfileScreen> {
                                   value: progress,
                                   minHeight: 8,
                                   backgroundColor: Colors.grey.shade200,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    themeColor,
-                                  ),
+                                  valueColor: AlwaysStoppedAnimation<Color>(themeColor),
                                 ),
                               ),
                             ] else ...[
                               Text(
                                 "Quantity Requested: $totalQty $unit",
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                               ),
                             ],
                             const SizedBox(height: 16),
                             Row(
                               children: [
-                                Icon(
-                                  Icons.access_time,
-                                  size: 14,
-                                  color: Colors.grey.shade500,
-                                ),
+                                Icon(Icons.access_time, size: 14, color: Colors.grey.shade500),
                                 const SizedBox(width: 4),
-                                Text(
-                                  dateText,
-                                  style: TextStyle(
-                                    color: Colors.grey.shade600,
-                                    fontSize: 12,
-                                  ),
-                                ),
+                                Text(dateText, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
                                 const SizedBox(width: 16),
-                                Icon(
-                                  Icons.location_on_outlined,
-                                  size: 14,
-                                  color: Colors.grey.shade500,
-                                ),
+                                Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade500),
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
                                     data['ngoLocation'] ?? '',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade600,
-                                      fontSize: 12,
-                                    ),
+                                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -1407,6 +1259,7 @@ class ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+
   Future<void> _shareApp(BuildContext context) async {
     showModalBottomSheet(
       context: context,
@@ -1422,11 +1275,7 @@ class ProfileScreenState extends State<ProfileScreen> {
             children: [
               Text(
                 "Share App Via",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: themeColor,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: themeColor),
               ),
               const SizedBox(height: 20),
               Row(
@@ -1460,12 +1309,7 @@ class ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildShareOption(
-    BuildContext context,
-    String label,
-    IconData icon,
-    String urlScheme,
-  ) {
+  Widget _buildShareOption(BuildContext context, String label, IconData icon, String urlScheme) {
     return GestureDetector(
       onTap: () async {
         Navigator.pop(context);
@@ -1473,24 +1317,18 @@ class ProfileScreenState extends State<ProfileScreen> {
         try {
           await launchUrl(url, mode: LaunchMode.externalApplication);
         } catch (e) {
-          await launchUrl(
-            Uri.parse("https://charitey.app"),
-            mode: LaunchMode.platformDefault,
-          );
+          await launchUrl(Uri.parse("https://charitey.app"), mode: LaunchMode.platformDefault);
         }
       },
       child: Column(
         children: [
           CircleAvatar(
             radius: 26,
-            backgroundColor: themeColor.withValues(alpha: 0.1),
+            backgroundColor: themeColor.withOpacity(0.1),
             child: Icon(icon, color: themeColor, size: 26),
           ),
           const SizedBox(height: 8),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-          ),
+          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
         ],
       ),
     );
@@ -1528,11 +1366,7 @@ class ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 20),
             Text(
               "My Delivery Tasks",
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: themeColor,
-              ),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: themeColor),
             ),
             const SizedBox(height: 15),
             Expanded(
@@ -1541,46 +1375,30 @@ class ProfileScreenState extends State<ProfileScreen> {
                   : StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance
                           .collection('donations')
-                          .where(
-                            'assignedVolunteerId',
-                            isEqualTo: currentUserId,
-                          )
+                          .where('assignedVolunteerId', isEqualTo: currentUserId)
                           .snapshots(),
                       builder: (context, snapshot) {
-                        if (snapshot.hasError)
-                          return Center(
-                            child: Text("Error: ${snapshot.error}"),
-                          );
-                        if (snapshot.connectionState == ConnectionState.waiting)
-                          return Center(
-                            child: CircularProgressIndicator(color: themeColor),
-                          );
+                        if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
+                        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: themeColor));
 
                         var tasks = snapshot.data!.docs.toList();
                         tasks.sort((a, b) {
                           var aData = a.data() as Map<String, dynamic>;
                           var bData = b.data() as Map<String, dynamic>;
-                          DateTime aDate =
-                              (aData['createdAt'] as Timestamp?)?.toDate() ??
-                              DateTime.fromMillisecondsSinceEpoch(0);
-                          DateTime bDate =
-                              (bData['createdAt'] as Timestamp?)?.toDate() ??
-                              DateTime.fromMillisecondsSinceEpoch(0);
+                          DateTime aDate = (aData['createdAt'] as Timestamp?)?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0);
+                          DateTime bDate = (bData['createdAt'] as Timestamp?)?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0);
                           return bDate.compareTo(aDate);
                         });
 
                         if (tasks.isEmpty) {
-                          return const Center(
-                            child: Text("You haven't accepted any tasks yet."),
-                          );
+                          return const Center(child: Text("You haven't accepted any tasks yet."));
                         }
 
                         return ListView.builder(
                           physics: const BouncingScrollPhysics(),
                           itemCount: tasks.length,
                           itemBuilder: (context, index) {
-                            var taskData =
-                                tasks[index].data() as Map<String, dynamic>;
+                            var taskData = tasks[index].data() as Map<String, dynamic>;
                             var donationId = tasks[index].id;
                             String status = taskData['status'] ?? 'pending';
 
@@ -1600,8 +1418,283 @@ class ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+} // 👈 THIS IS THE CRUCIAL BRACKET CLOSING THE PROFILE SCREEN STATE
+
+
+// =========================================================================
+// PENDING RECEIPTS SCREEN
+// =========================================================================
+class PendingReceiptsScreen extends StatefulWidget {
+  final String ngoId;
+  const PendingReceiptsScreen({super.key, required this.ngoId});
+
+  @override
+  State<PendingReceiptsScreen> createState() => _PendingReceiptsScreenState();
 }
 
+class _PendingReceiptsScreenState extends State<PendingReceiptsScreen> {
+  final Color themeColor = const Color(0xFFB56F76);
+
+  @override
+  Widget build(BuildContext context) {
+    // 👇 `context` here belongs to the State itself — it stays alive as long as
+    // this screen is on top. Every async callback below uses THIS context,
+    // never the shadowed one from inner builders.
+    return Scaffold(
+      backgroundColor: const Color(0xFFFDF7F8),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          "Pending Receipts",
+          style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 20),
+        ),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              "Confirm physical receipt to release the volunteer's payment.",
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+            ),
+          ),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('donations')
+                  .where('ngoId', isEqualTo: widget.ngoId)
+                  .where('status', isEqualTo: 'pending_ngo_confirmation')
+                  .snapshots(),
+              builder: (streamContext, snapshot) {   // 👈 renamed, no shadowing
+                if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(child: CircularProgressIndicator(color: themeColor));
+                }
+
+                var receipts = snapshot.data!.docs.toList();
+                if (receipts.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.inventory_2_outlined, size: 60, color: Colors.grey.shade300),
+                        const SizedBox(height: 16),
+                        Text("No pending receipts", style: TextStyle(fontSize: 18, color: Colors.grey.shade500)),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: receipts.length,
+                  itemBuilder: (listContext, index) {   // 👈 renamed, no shadowing
+                    var data = receipts[index].data() as Map<String, dynamic>;
+                    String docId = receipts[index].id;
+                    String donorName = data['donorName'] ?? 'Unknown Donor';
+                    String volunteerName = data['volunteerName'] ?? 'Volunteer';
+                    int quantity = data['donatedQuantity'] ?? data['quantity'] ?? 1;
+                    String volunteerId = data['assignedVolunteerId'] ?? '';
+                    String donorId = data['donorId'] ?? '';
+                    String listingId = data['listingId'] ?? '';
+
+                    return FutureBuilder<DocumentSnapshot>(
+                      future: FirebaseFirestore.instance.collection('ngo_listings').doc(listingId).get(),
+                      builder: (futureContext, listingSnap) {   // 👈 renamed, no shadowing
+                        if (listingSnap.connectionState == ConnectionState.waiting) {
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 16),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.grey.shade200, width: 1.5),
+                            ),
+                            child: const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator())),
+                          );
+                        }
+
+                        String itemName = data['items'] ?? data['itemName'] ?? 'Donation Item';
+                        String unit = '';
+
+                        if (listingSnap.hasData && listingSnap.data!.exists) {
+                          var lData = listingSnap.data!.data() as Map<String, dynamic>;
+                          unit = lData['unit'] ?? '';
+                          if (lData['type'] == 'food') {
+                            itemName = lData['foodType'] ?? itemName;
+                          } else {
+                            itemName = lData['productName'] ?? itemName;
+                          }
+                        }
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: themeColor.withOpacity(0.3), width: 1.5),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.local_shipping_rounded, color: themeColor, size: 20),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      "Waiting for your confirmation",
+                                      style: TextStyle(color: themeColor, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const Divider(height: 24),
+                              Text("Item: $quantity $unit $itemName", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                              const SizedBox(height: 8),
+                              Text("From Donor: $donorName", style: TextStyle(color: Colors.grey.shade700)),
+                              const SizedBox(height: 16),
+
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: () async {
+                                    // 👇 Use `context` (the State's own, stable context) for the
+                                    // confirmation dialog too — keeps everything on one safe context.
+                                    bool confirm = await showDialog(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: Row(
+                                          children: [
+                                            Icon(Icons.inventory_rounded, color: Colors.green.shade700),
+                                            const SizedBox(width: 8),
+                                            const Text("Confirm Receipt"),
+                                          ],
+                                        ),
+                                        content: const Text("Have you physically received these items? Confirming this will prompt the donor to pay the volunteer."),
+                                        actions: [
+                                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+                                          ElevatedButton(
+                                            onPressed: () => Navigator.pop(ctx, true),
+                                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                                            child: const Text("Yes, Received", style: TextStyle(color: Colors.white)),
+                                          ),
+                                        ],
+                                      ),
+                                    ) ?? false;
+
+                                    if (!confirm) return;
+
+                                    if (volunteerId.isNotEmpty) {
+                                      var vSnap = await FirebaseFirestore.instance.collection('users').doc(volunteerId).get();
+                                      if (vSnap.exists) {
+                                        volunteerName = (vSnap.data() as Map<String, dynamic>)['name'] ?? 'Volunteer';
+                                      }
+                                    }
+
+                                    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                                    final currentUser = authProvider.currentUserModel;
+
+                                    try {
+                                      await FirebaseFirestore.instance.collection('donations').doc(docId).update({
+                                        'status': 'completed_awaiting_payment'
+                                      });
+
+                                      if (volunteerId.isNotEmpty) {
+                                        await FirebaseFirestore.instance.collection('users').doc(volunteerId).set({
+                                          'deliveriesCompleted': FieldValue.increment(1)
+                                        }, SetOptions(merge: true));
+                                      }
+
+                                      if (donorId.isNotEmpty && listingId.isNotEmpty) {
+                                        var requestQuery = await FirebaseFirestore.instance
+                                            .collection('volunteer_requests')
+                                            .where('donorId', isEqualTo: donorId)
+                                            .where('listingId', isEqualTo: listingId)
+                                            .limit(1).get();
+
+                                        if (requestQuery.docs.isNotEmpty) {
+                                          await FirebaseFirestore.instance.collection('volunteer_requests')
+                                              .doc(requestQuery.docs.first.id).update({'status': 'completed'});
+                                        }
+                                      }
+
+                                      String notifIdDonor = FirebaseFirestore.instance.collection('notifications').doc().id;
+                                      NotificationModel donorNotif = NotificationModel(
+                                        id: notifIdDonor,
+                                        receiverId: donorId,
+                                        senderId: widget.ngoId,
+                                        senderName: currentUser?.name ?? 'NGO',
+                                        type: 'payment_pending',
+                                        title: 'Delivery Successful! 🕊️',
+                                        message: 'Your donation of $itemName has safely reached us! Please tap here to pay your volunteer their delivery fee.',
+                                        relatedItemId: docId,
+                                        createdAt: DateTime.now(),
+                                        isRead: false,
+                                      );
+                                      await FirestoreService().sendNotification(donorNotif);
+                                    } catch (e) {
+                                      debugPrint("Update error: $e");
+                                    }
+
+                                    // 👇 THE FIX: `context` here is the State's own context,
+                                    // captured from the outer build() method — it is NOT tied to
+                                    // this specific list item, so it survives the item being
+                                    // filtered out of the list the instant the status changed above.
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                        content: Text('Receipt Confirmed! Donor notified to pay.'),
+                                        backgroundColor: Colors.green,
+                                      ));
+
+                                      showDialog(
+                                        context: context,
+                                        barrierDismissible: false,
+                                        builder: (dialogCtx) => NgoRatingDialog(
+                                          donorId: donorId,
+                                          donorName: donorName,
+                                          volunteerId: volunteerId,
+                                          volunteerName: volunteerName,
+                                          donationId: docId,
+                                          themeColor: themeColor,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  icon: const Icon(Icons.check_circle_outline, color: Colors.white),
+                                  label: const Text("Confirm Received", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green.shade600,
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 // =========================================================================
 // VOLUNTEER IMPACT STORY WIDGET
 // =========================================================================
@@ -1635,58 +1728,55 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
 
   @override
   void initState() {
-  super.initState();
-  _chartController = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1400),
-  );
-  _chartAnimation = CurvedAnimation(
-    parent: _chartController,
-    curve: Curves.easeOut,
-  );
-  _chartController.forward();
-  _updateVisitStreak();
-}
-
-Future<void> _updateVisitStreak() async {
-  try {
-    final docRef =
-        FirebaseFirestore.instance.collection('users').doc(widget.userId);
-    final snap = await docRef.get();
-    final now = DateTime.now();
-    final todayKey =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-
-    int newStreak = 1;
-
-    if (snap.exists) {
-      final data = snap.data() as Map<String, dynamic>?;
-      final String? lastVisit = data?['lastProfileVisitDate'];
-      final int prevStreak = (data?['profileVisitStreak'] as num?)?.toInt() ?? 0;
-
-      if (lastVisit == todayKey) {
-        // Already counted today — visiting again should NOT increase it
-        if (mounted) setState(() => _visitStreak = prevStreak > 0 ? prevStreak : 1);
-        return;
-      } else if (lastVisit != null) {
-        final lastDate = DateTime.parse(lastVisit);
-        final yesterday =
-            DateTime(now.year, now.month, now.day).subtract(const Duration(days: 1));
-        final lastDateOnly = DateTime(lastDate.year, lastDate.month, lastDate.day);
-        newStreak = (lastDateOnly == yesterday) ? prevStreak + 1 : 1;
-      }
-    }
-
-    await docRef.set({
-      'lastProfileVisitDate': todayKey,
-      'profileVisitStreak': newStreak,
-    }, SetOptions(merge: true));
-
-    if (mounted) setState(() => _visitStreak = newStreak);
-  } catch (_) {
-    // fail silently, keep _visitStreak at 0
+    super.initState();
+    _chartController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    _chartAnimation = CurvedAnimation(
+      parent: _chartController,
+      curve: Curves.easeOut,
+    );
+    _chartController.forward();
+    _updateVisitStreak();
   }
-}
+
+  Future<void> _updateVisitStreak() async {
+    try {
+      final docRef =
+          FirebaseFirestore.instance.collection('users').doc(widget.userId);
+      final snap = await docRef.get();
+      final now = DateTime.now();
+      final todayKey =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
+      int newStreak = 1;
+
+      if (snap.exists) {
+        final data = snap.data() as Map<String, dynamic>?;
+        final String? lastVisit = data?['lastProfileVisitDate'];
+        final int prevStreak = (data?['profileVisitStreak'] as num?)?.toInt() ?? 0;
+
+        if (lastVisit == todayKey) {
+          if (mounted) setState(() => _visitStreak = prevStreak > 0 ? prevStreak : 1);
+          return;
+        } else if (lastVisit != null) {
+          final lastDate = DateTime.parse(lastVisit);
+          final yesterday =
+              DateTime(now.year, now.month, now.day).subtract(const Duration(days: 1));
+          final lastDateOnly = DateTime(lastDate.year, lastDate.month, lastDate.day);
+          newStreak = (lastDateOnly == yesterday) ? prevStreak + 1 : 1;
+        }
+      }
+
+      await docRef.set({
+        'lastProfileVisitDate': todayKey,
+        'profileVisitStreak': newStreak,
+      }, SetOptions(merge: true));
+
+      if (mounted) setState(() => _visitStreak = newStreak);
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -1706,15 +1796,7 @@ Future<void> _updateVisitStreak() async {
 
     for (int i = 6; i >= 0; i--) {
       DateTime day = now.subtract(Duration(days: i));
-      String label = [
-        'Mon',
-        'Tue',
-        'Wed',
-        'Thu',
-        'Fri',
-        'Sat',
-        'Sun',
-      ][day.weekday - 1];
+      String label = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][day.weekday - 1];
       dayLabels.add(label);
       String key =
           '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
@@ -1784,44 +1866,23 @@ Future<void> _updateVisitStreak() async {
   Map<String, dynamic> _getBadgeInfo(int totalCompleted) {
     if (totalCompleted >= 31) {
       return {
-        'rank': 'Legend',
-        'emoji': '💎',
-        'min': 31,
-        'max': null,
-        'next': null,
-        'nextEmoji': '',
-        'quote': 'You are the backbone of this community. Thank you.',
+        'rank': 'Legend', 'emoji': '💎', 'min': 31, 'max': null,
+        'next': null, 'nextEmoji': '', 'quote': 'You are the backbone of this community. Thank you.',
       };
     } else if (totalCompleted >= 16) {
       return {
-        'rank': 'Champion',
-        'emoji': '🥇',
-        'min': 16,
-        'max': 30,
-        'next': 'Legend',
-        'nextEmoji': '💎',
-        'quote':
-            'You\'ve touched over ${totalCompleted * 3} lives. You\'re making real change.',
+        'rank': 'Champion', 'emoji': '🥇', 'min': 16, 'max': 30,
+        'next': 'Legend', 'nextEmoji': '💎', 'quote': 'You\'ve touched over ${totalCompleted * 3} lives. You\'re making real change.',
       };
     } else if (totalCompleted >= 6) {
       return {
-        'rank': 'Supporter',
-        'emoji': '🥈',
-        'min': 6,
-        'max': 15,
-        'next': 'Champion',
-        'nextEmoji': '🥇',
-        'quote': 'Your support is building a better tomorrow!',
+        'rank': 'Supporter', 'emoji': '🥈', 'min': 6, 'max': 15,
+        'next': 'Champion', 'nextEmoji': '🥇', 'quote': 'Your support is building a better tomorrow!',
       };
     } else {
       return {
-        'rank': 'Helper',
-        'emoji': '🥉',
-        'min': 0,
-        'max': 5,
-        'next': 'Supporter',
-        'nextEmoji': '🥈',
-        'quote': 'Every journey starts with one step. Keep going!',
+        'rank': 'Helper', 'emoji': '🥉', 'min': 0, 'max': 5,
+        'next': 'Supporter', 'nextEmoji': '🥈', 'quote': 'Every journey starts with one step. Keep going!',
       };
     }
   }
@@ -1842,12 +1903,8 @@ Future<void> _updateVisitStreak() async {
         final int streak = _visitStreak;
         final int livesTouched = stats['livesTouched'];
         final List<String> dayLabels = List<String>.from(stats['dayLabels']);
-        final List<double> acceptedCounts = List<double>.from(
-          stats['acceptedCounts'],
-        );
-        final List<double> completedCounts = List<double>.from(
-          stats['completedCounts'],
-        );
+        final List<double> acceptedCounts = List<double>.from(stats['acceptedCounts']);
+        final List<double> completedCounts = List<double>.from(stats['completedCounts']);
         final int personalBestIndex = stats['personalBestIndex'];
         final badge = _getBadgeInfo(totalCompleted);
 
@@ -1857,7 +1914,7 @@ Future<void> _updateVisitStreak() async {
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
+                color: Colors.black.withOpacity(0.08),
                 blurRadius: 16,
                 offset: const Offset(0, 6),
               ),
@@ -1870,76 +1927,37 @@ Future<void> _updateVisitStreak() async {
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.bolt_rounded,
-                      color: widget.themeColor,
-                      size: 22,
-                    ),
+                    Icon(Icons.bolt_rounded, color: widget.themeColor, size: 22),
                     const SizedBox(width: 8),
                     Text(
                       'YOUR IMPACT STORY',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: widget.themeColor,
-                        letterSpacing: 1.2,
-                      ),
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: widget.themeColor, letterSpacing: 1.2),
                     ),
                   ],
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.only(left: 20, bottom: 16),
-                child: Text(
-                  'Last 7 days  •  All Time',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-                ),
+                child: Text('Last 7 days  •  All Time', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
               ),
-
               SizedBox(
                 height: 108,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   children: [
-                    _buildStatChip(
-                      Icons.local_shipping_rounded,
-                      'Total Delivered',
-                      totalCompleted.toString(),
-                    ),
-                    _buildStatChip(
-                      Icons.hourglass_top_rounded,
-                      'Pending',
-                      totalPending.toString(),
-                    ),
-                    _buildStatChip(
-                      Icons.local_fire_department_rounded,
-                      'Streak',
-                      '$streak days',
-                    ),
-                    _buildStatChip(
-                      Icons.favorite_rounded,
-                      'Lives Touched',
-                      '~$livesTouched people',
-                    ),
+                    _buildStatChip(Icons.local_shipping_rounded, 'Total Delivered', totalCompleted.toString()),
+                    _buildStatChip(Icons.hourglass_top_rounded, 'Pending', totalPending.toString()),
+                    _buildStatChip(Icons.local_fire_department_rounded, 'Streak', '$streak days'),
+                    _buildStatChip(Icons.favorite_rounded, 'Lives Touched', '~$livesTouched people'),
                   ],
                 ),
               ),
-
               const SizedBox(height: 8),
               Divider(color: Colors.grey.shade100, thickness: 1, height: 1),
-
-              _buildChartSection(
-                dayLabels,
-                acceptedCounts,
-                completedCounts,
-                personalBestIndex,
-              ),
-
+              _buildChartSection(dayLabels, acceptedCounts, completedCounts, personalBestIndex),
               Divider(color: Colors.grey.shade100, thickness: 1, height: 1),
-
               _buildBadgeSection(totalCompleted, badge),
-
               const SizedBox(height: 20),
             ],
           ),
@@ -1955,29 +1973,15 @@ Future<void> _updateVisitStreak() async {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            _duskyRoseLight.withValues(alpha: 0.9),
-            _duskyRoseLight.withValues(alpha: 0.55),
-          ],
+          colors: [_duskyRoseLight.withOpacity(0.9), _duskyRoseLight.withOpacity(0.55)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.6),
-          width: 1,
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.6), width: 1),
         boxShadow: [
-          BoxShadow(
-            color: _duskyRose.withValues(alpha: 0.25),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-          BoxShadow(
-            color: Colors.white.withValues(alpha: 0.6),
-            blurRadius: 2,
-            offset: const Offset(-1, -1),
-          ),
+          BoxShadow(color: _duskyRose.withOpacity(0.25), blurRadius: 12, offset: const Offset(0, 4)),
+          BoxShadow(color: Colors.white.withOpacity(0.6), blurRadius: 2, offset: const Offset(-1, -1)),
         ],
       ),
       child: ClipRRect(
@@ -1985,19 +1989,14 @@ Future<void> _updateVisitStreak() async {
         child: Stack(
           children: [
             Positioned(
-              top: -20,
-              right: -20,
+              top: -20, right: -20,
               child: Transform.rotate(
                 angle: 0.6,
                 child: Container(
-                  width: 60,
-                  height: 100,
+                  width: 60, height: 100,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [
-                        Colors.white.withValues(alpha: 0.45),
-                        Colors.white.withValues(alpha: 0.0),
-                      ],
+                      colors: [Colors.white.withOpacity(0.45), Colors.white.withOpacity(0.0)],
                     ),
                   ),
                 ),
@@ -2009,32 +2008,13 @@ Future<void> _updateVisitStreak() async {
               children: [
                 Container(
                   padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.55), borderRadius: BorderRadius.circular(10)),
                   child: Icon(icon, size: 16, color: _duskyRoseDarkText),
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: _duskyRoseDarkText,
-                  ),
-                ),
+                Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _duskyRoseDarkText)),
                 const SizedBox(height: 2),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: _duskyRoseLabelText,
-                    height: 1.3,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 2,
-                ),
+                Text(label, style: const TextStyle(fontSize: 10, color: _duskyRoseLabelText, height: 1.3, fontWeight: FontWeight.w600), maxLines: 2),
               ],
             ),
           ],
@@ -2042,12 +2022,8 @@ Future<void> _updateVisitStreak() async {
       ),
     );
   }
-  Widget _buildChartSection(
-    List<String> labels,
-    List<double> accepted,
-    List<double> completed,
-    int personalBestIndex,
-  ) {
+
+  Widget _buildChartSection(List<String> labels, List<double> accepted, List<double> completed, int personalBestIndex) {
     double maxVal = 0;
     for (var v in [...accepted, ...completed]) {
       if (v > maxVal) maxVal = v;
@@ -2063,97 +2039,50 @@ Future<void> _updateVisitStreak() async {
             children: [
               Icon(Icons.show_chart, size: 15, color: widget.themeColor),
               const SizedBox(width: 6),
-              Text(
-                'Activity (Last 7 Days)',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade700,
-                ),
-              ),
+              Text('Activity (Last 7 Days)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
               const Spacer(),
-              Container(
-                width: 12,
-                height: 3,
-                decoration: BoxDecoration(
-                  color: widget.themeColor.withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+              Container(width: 12, height: 3, decoration: BoxDecoration(color: widget.themeColor.withOpacity(0.35), borderRadius: BorderRadius.circular(2))),
               const SizedBox(width: 4),
-              Text(
-                'Accepted',
-                style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-              ),
+              Text('Accepted', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
               const SizedBox(width: 10),
-              Container(
-                width: 12,
-                height: 3,
-                decoration: BoxDecoration(
-                  color: widget.themeColor,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-             const SizedBox(width: 4),
-              Text(
-                'Delivered',
-                style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-              ),
+              Container(width: 12, height: 3, decoration: BoxDecoration(color: widget.themeColor, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(width: 4),
+              Text('Delivered', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
             ],
           ),
           const SizedBox(height: 10),
-
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 200),
             child: _selectedDayIndex != null
                 ? Container(
                     key: ValueKey(_selectedDayIndex),
                     margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 7,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                     decoration: BoxDecoration(
-                      color: widget.themeColor.withValues(alpha: 0.08),
+                      color: widget.themeColor.withOpacity(0.08),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: widget.themeColor.withValues(alpha: 0.25),
-                      ),
+                      border: Border.all(color: widget.themeColor.withOpacity(0.25)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.touch_app_rounded,
-                          size: 14,
-                          color: widget.themeColor,
-                        ),
+                        Icon(Icons.touch_app_rounded, size: 14, color: widget.themeColor),
                         const SizedBox(width: 6),
-Text(
-                          '${labels[_selectedDayIndex!]}: '
-                          '${completed[_selectedDayIndex!].toInt()} delivered, '
-                          '${accepted[_selectedDayIndex!].toInt()} accepted',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: widget.themeColor,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        Text(
+                          '${labels[_selectedDayIndex!]}: ${completed[_selectedDayIndex!].toInt()} delivered, ${accepted[_selectedDayIndex!].toInt()} accepted',
+                          style: TextStyle(fontSize: 12, color: widget.themeColor, fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
                   )
                 : const SizedBox(key: ValueKey('empty'), height: 0),
           ),
-
           GestureDetector(
             onTapDown: (details) {
               final RenderBox box = context.findRenderObject() as RenderBox;
               double chartWidth = box.size.width - 32;
               double sectionWidth = chartWidth / 7;
-              int idx = (details.localPosition.dx / sectionWidth).floor().clamp(
-                0,
-                6,
-              );
+              int idx = (details.localPosition.dx / sectionWidth).floor().clamp(0, 6);
               setState(() {
                 _selectedDayIndex = _selectedDayIndex == idx ? null : idx;
               });
@@ -2186,12 +2115,8 @@ Text(
     final bool isLegend = badge['next'] == null;
     final int min = badge['min'] as int;
     final int? max = badge['max'] as int?;
-    final double progress = isLegend
-        ? 1.0
-        : ((totalCompleted - min) / ((max! - min))).clamp(0.0, 1.0);
-    final int toNext = isLegend
-        ? 0
-        : ((max ?? 0) - totalCompleted + 1).clamp(0, 999);
+    final double progress = isLegend ? 1.0 : ((totalCompleted - min) / ((max! - min))).clamp(0.0, 1.0);
+    final int toNext = isLegend ? 0 : ((max ?? 0) - totalCompleted + 1).clamp(0, 999);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
@@ -2202,25 +2127,13 @@ Text(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
-                width: 60,
-                height: 60,
+                width: 60, height: 60,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: widget.themeColor.withValues(alpha: 0.10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: widget.themeColor.withValues(alpha: 0.25),
-                      blurRadius: 16,
-                      spreadRadius: 2,
-                    ),
-                  ],
+                  color: widget.themeColor.withOpacity(0.10),
+                  boxShadow: [BoxShadow(color: widget.themeColor.withOpacity(0.25), blurRadius: 16, spreadRadius: 2)],
                 ),
-                child: Center(
-                  child: Text(
-                    badge['emoji'],
-                    style: const TextStyle(fontSize: 32),
-                  ),
-                ),
+                child: Center(child: Text(badge['emoji'], style: const TextStyle(fontSize: 32))),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -2229,98 +2142,40 @@ Text(
                   children: [
                     Row(
                       children: [
-                        Text(
-                          badge['rank'],
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: widget.themeColor,
-                          ),
-                        ),
+                        Text(badge['rank'], style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: widget.themeColor)),
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: widget.themeColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '$totalCompleted deliveries',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: widget.themeColor,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(color: widget.themeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                          child: Text('$totalCompleted deliveries', style: TextStyle(fontSize: 11, color: widget.themeColor, fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        minHeight: 8,
-                        backgroundColor: Colors.grey.shade200,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          widget.themeColor,
-                        ),
-                      ),
+                      child: LinearProgressIndicator(value: progress, minHeight: 8, backgroundColor: Colors.grey.shade200, valueColor: AlwaysStoppedAnimation<Color>(widget.themeColor)),
                     ),
                     const SizedBox(height: 6),
                     if (!isLegend)
-                      Text(
-                        '$toNext more to become ${badge['next']} ${badge['nextEmoji']}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                        ),
-                      )
+                      Text('$toNext more to become ${badge['next']} ${badge['nextEmoji']}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600))
                     else
-                      Text(
-                        'Highest rank achieved! 🎉',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: widget.themeColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      Text('Highest rank achieved! 🎉', style: TextStyle(fontSize: 12, color: widget.themeColor, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
             ],
           ),
-
           const SizedBox(height: 16),
-
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  widget.themeColor.withValues(alpha: 0.08),
-                  widget.themeColor.withValues(alpha: 0.02),
-                ],
-              ),
+              gradient: LinearGradient(colors: [widget.themeColor.withOpacity(0.08), widget.themeColor.withOpacity(0.02)]),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: widget.themeColor.withValues(alpha: 0.15),
-              ),
+              border: Border.all(color: widget.themeColor.withOpacity(0.15)),
             ),
-            child: Text(
-              '"${badge['quote']}"',
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.grey.shade700,
-                fontStyle: FontStyle.italic,
-                height: 1.6,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            child: Text('"${badge['quote']}"', style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontStyle: FontStyle.italic, height: 1.6), textAlign: TextAlign.center),
           ),
         ],
       ),
@@ -2329,7 +2184,7 @@ Text(
 }
 
 // =========================================================================
-// DONOR IMPACT STORY WIDGET (PENDING REMOVED)
+// DONOR IMPACT STORY WIDGET
 // =========================================================================
 class DonorImpactStoryWidget extends StatefulWidget {
   final String userId;
@@ -2411,9 +2266,7 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
       }, SetOptions(merge: true));
 
       if (mounted) setState(() => _visitStreak = newStreak);
-    } catch (_) {
-      // fail silently, keep _visitStreak at 0
-    }
+    } catch (_) {}
   }
 
   @override
@@ -2434,15 +2287,7 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
 
     for (int i = 6; i >= 0; i--) {
       DateTime day = now.subtract(Duration(days: i));
-      String label = [
-        'Mon',
-        'Tue',
-        'Wed',
-        'Thu',
-        'Fri',
-        'Sat',
-        'Sun',
-      ][day.weekday - 1];
+      String label = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][day.weekday - 1];
       dayLabels.add(label);
       String key =
           '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
@@ -2512,47 +2357,27 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
   Map<String, dynamic> _getBadgeInfo(int totalDonations) {
     if (totalDonations >= 31) {
       return {
-        'rank': 'Legend',
-        'emoji': '💎',
-        'min': 31,
-        'max': null,
-        'next': null,
-        'nextEmoji': '',
-        'quote': 'You are the backbone of this community. Thank you.',
+        'rank': 'Legend', 'emoji': '💎', 'min': 31, 'max': null,
+        'next': null, 'nextEmoji': '', 'quote': 'You are the backbone of this community. Thank you.',
       };
     } else if (totalDonations >= 16) {
       return {
-        'rank': 'Champion',
-        'emoji': '🥇',
-        'min': 16,
-        'max': 30,
-        'next': 'Legend',
-        'nextEmoji': '💎',
-        'quote':
-            'You\'ve touched over ${totalDonations * 3} lives. You\'re making real change.',
+        'rank': 'Champion', 'emoji': '🥇', 'min': 16, 'max': 30,
+        'next': 'Legend', 'nextEmoji': '💎', 'quote': 'You\'ve touched over ${totalDonations * 3} lives. You\'re making real change.',
       };
     } else if (totalDonations >= 6) {
       return {
-        'rank': 'Supporter',
-        'emoji': '🥈',
-        'min': 6,
-        'max': 15,
-        'next': 'Champion',
-        'nextEmoji': '🥇',
-        'quote': 'Your generosity is building a better tomorrow!',
+        'rank': 'Supporter', 'emoji': '🥈', 'min': 6, 'max': 15,
+        'next': 'Champion', 'nextEmoji': '🥇', 'quote': 'Your generosity is building a better tomorrow!',
       };
     } else {
       return {
-        'rank': 'Helper',
-        'emoji': '🥉',
-        'min': 0,
-        'max': 5,
-        'next': 'Supporter',
-        'nextEmoji': '🥈',
-        'quote': 'Every journey starts with one step. Keep going!',
+        'rank': 'Helper', 'emoji': '🥉', 'min': 0, 'max': 5,
+        'next': 'Supporter', 'nextEmoji': '🥈', 'quote': 'Every journey starts with one step. Keep going!',
       };
     }
   }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
@@ -2568,12 +2393,8 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
         final int streak = _visitStreak;
         final int livesTouched = stats['livesTouched'];
         final List<String> dayLabels = List<String>.from(stats['dayLabels']);
-        final List<double> donatedCounts = List<double>.from(
-          stats['donatedCounts'],
-        );
-        final List<double> fulfilledCounts = List<double>.from(
-          stats['fulfilledCounts'],
-        );
+        final List<double> donatedCounts = List<double>.from(stats['donatedCounts']);
+        final List<double> fulfilledCounts = List<double>.from(stats['fulfilledCounts']);
         final int personalBestIndex = stats['personalBestIndex'];
         final badge = _getBadgeInfo(totalDonations);
 
@@ -2583,7 +2404,7 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
+                color: Colors.black.withOpacity(0.08),
                 blurRadius: 16,
                 offset: const Offset(0, 6),
               ),
@@ -2596,71 +2417,36 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.bolt_rounded,
-                      color: widget.themeColor,
-                      size: 22,
-                    ),
+                    Icon(Icons.bolt_rounded, color: widget.themeColor, size: 22),
                     const SizedBox(width: 8),
                     Text(
                       'YOUR DONOR IMPACT',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: widget.themeColor,
-                        letterSpacing: 1.2,
-                      ),
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: widget.themeColor, letterSpacing: 1.2),
                     ),
                   ],
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.only(left: 20, bottom: 16),
-                child: Text(
-                  'Last 7 days  •  All Time',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-                ),
+                child: Text('Last 7 days  •  All Time', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
               ),
-
               SizedBox(
                 height: 108,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   children: [
-                    _buildStatChip(
-                      Icons.volunteer_activism_rounded,
-                      'Total Donations',
-                      totalDonations.toString(),
-                    ),
-                    _buildStatChip(
-                      Icons.local_fire_department_rounded,
-                      'Streak',
-                      '$streak days',
-                    ),
-                    _buildStatChip(
-                      Icons.favorite_rounded,
-                      'Lives Touched',
-                      '~$livesTouched people',
-                    ),
+                    _buildStatChip(Icons.volunteer_activism_rounded, 'Total Donations', totalDonations.toString()),
+                    _buildStatChip(Icons.local_fire_department_rounded, 'Streak', '$streak days'),
+                    _buildStatChip(Icons.favorite_rounded, 'Lives Touched', '~$livesTouched people'),
                   ],
                 ),
               ),
-
               const SizedBox(height: 8),
               Divider(color: Colors.grey.shade100, thickness: 1, height: 1),
-
-              _buildChartSection(
-                dayLabels,
-                donatedCounts,
-                fulfilledCounts,
-                personalBestIndex,
-              ),
-
+              _buildChartSection(dayLabels, donatedCounts, fulfilledCounts, personalBestIndex),
               Divider(color: Colors.grey.shade100, thickness: 1, height: 1),
-
               _buildBadgeSection(totalDonations, badge),
-
               const SizedBox(height: 20),
             ],
           ),
@@ -2676,29 +2462,15 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            _duskyRoseLight.withValues(alpha: 0.9),
-            _duskyRoseLight.withValues(alpha: 0.55),
-          ],
+          colors: [_duskyRoseLight.withOpacity(0.9), _duskyRoseLight.withOpacity(0.55)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.6),
-          width: 1,
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.6), width: 1),
         boxShadow: [
-          BoxShadow(
-            color: _duskyRose.withValues(alpha: 0.25),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-          BoxShadow(
-            color: Colors.white.withValues(alpha: 0.6),
-            blurRadius: 2,
-            offset: const Offset(-1, -1),
-          ),
+          BoxShadow(color: _duskyRose.withOpacity(0.25), blurRadius: 12, offset: const Offset(0, 4)),
+          BoxShadow(color: Colors.white.withOpacity(0.6), blurRadius: 2, offset: const Offset(-1, -1)),
         ],
       ),
       child: ClipRRect(
@@ -2706,19 +2478,14 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
         child: Stack(
           children: [
             Positioned(
-              top: -20,
-              right: -20,
+              top: -20, right: -20,
               child: Transform.rotate(
                 angle: 0.6,
                 child: Container(
-                  width: 60,
-                  height: 100,
+                  width: 60, height: 100,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [
-                        Colors.white.withValues(alpha: 0.45),
-                        Colors.white.withValues(alpha: 0.0),
-                      ],
+                      colors: [Colors.white.withOpacity(0.45), Colors.white.withOpacity(0.0)],
                     ),
                   ),
                 ),
@@ -2730,32 +2497,13 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
               children: [
                 Container(
                   padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.55), borderRadius: BorderRadius.circular(10)),
                   child: Icon(icon, size: 16, color: _duskyRoseDarkText),
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: _duskyRoseDarkText,
-                  ),
-                ),
+                Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _duskyRoseDarkText)),
                 const SizedBox(height: 2),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: _duskyRoseLabelText,
-                    height: 1.3,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 2,
-                ),
+                Text(label, style: const TextStyle(fontSize: 10, color: _duskyRoseLabelText, height: 1.3, fontWeight: FontWeight.w600), maxLines: 2),
               ],
             ),
           ],
@@ -2764,12 +2512,7 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
     );
   }
 
-  Widget _buildChartSection(
-    List<String> labels,
-    List<double> donated,
-    List<double> fulfilled,
-    int personalBestIndex,
-  ) {
+  Widget _buildChartSection(List<String> labels, List<double> donated, List<double> fulfilled, int personalBestIndex) {
     double maxVal = 0;
     for (var v in [...donated, ...fulfilled]) {
       if (v > maxVal) maxVal = v;
@@ -2785,96 +2528,50 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
             children: [
               Icon(Icons.show_chart, size: 15, color: widget.themeColor),
               const SizedBox(width: 6),
-              Text(
-                'Activity (Last 7 Days)',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade700,
-                ),
-              ),
+              Text('Activity (Last 7 Days)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
               const Spacer(),
-              Container(
-                width: 12,
-                height: 3,
-                decoration: BoxDecoration(
-                  color: widget.themeColor.withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+              Container(width: 12, height: 3, decoration: BoxDecoration(color: widget.themeColor.withOpacity(0.35), borderRadius: BorderRadius.circular(2))),
               const SizedBox(width: 4),
-              Text(
-                'Donated',
-                style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-              ),
+              Text('Donated', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
               const SizedBox(width: 10),
-              Container(
-                width: 12,
-                height: 3,
-                decoration: BoxDecoration(
-                  color: widget.themeColor,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+              Container(width: 12, height: 3, decoration: BoxDecoration(color: widget.themeColor, borderRadius: BorderRadius.circular(2))),
               const SizedBox(width: 4),
-              Text(
-                'Fulfilled',
-                style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-              ),
+              Text('Fulfilled', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
             ],
           ),
           const SizedBox(height: 10),
-
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 200),
             child: _selectedDayIndex != null
                 ? Container(
                     key: ValueKey(_selectedDayIndex),
                     margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 7,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                     decoration: BoxDecoration(
-                      color: widget.themeColor.withValues(alpha: 0.08),
+                      color: widget.themeColor.withOpacity(0.08),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: widget.themeColor.withValues(alpha: 0.25),
-                      ),
+                      border: Border.all(color: widget.themeColor.withOpacity(0.25)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.touch_app_rounded,
-                          size: 14,
-                          color: widget.themeColor,
-                        ),
+                        Icon(Icons.touch_app_rounded, size: 14, color: widget.themeColor),
                         const SizedBox(width: 6),
-Text(
-  '${labels[_selectedDayIndex!]}: '
-  '${donated[_selectedDayIndex!].toInt()} donated',
-  style: TextStyle(
-    fontSize: 12,
-    color: widget.themeColor,
-    fontWeight: FontWeight.w600,
-  ),
-),
+                        Text(
+                          '${labels[_selectedDayIndex!]}: ${donated[_selectedDayIndex!].toInt()} donated',
+                          style: TextStyle(fontSize: 12, color: widget.themeColor, fontWeight: FontWeight.w600),
+                        ),
                       ],
                     ),
                   )
                 : const SizedBox(key: ValueKey('empty'), height: 0),
           ),
-
           GestureDetector(
             onTapDown: (details) {
               final RenderBox box = context.findRenderObject() as RenderBox;
               double chartWidth = box.size.width - 32;
               double sectionWidth = chartWidth / 7;
-              int idx = (details.localPosition.dx / sectionWidth).floor().clamp(
-                0,
-                6,
-              );
+              int idx = (details.localPosition.dx / sectionWidth).floor().clamp(0, 6);
               setState(() {
                 _selectedDayIndex = _selectedDayIndex == idx ? null : idx;
               });
@@ -2907,12 +2604,8 @@ Text(
     final bool isLegend = badge['next'] == null;
     final int min = badge['min'] as int;
     final int? max = badge['max'] as int?;
-    final double progress = isLegend
-        ? 1.0
-        : ((totalDonations - min) / ((max! - min))).clamp(0.0, 1.0);
-    final int toNext = isLegend
-        ? 0
-        : ((max ?? 0) - totalDonations + 1).clamp(0, 999);
+    final double progress = isLegend ? 1.0 : ((totalDonations - min) / ((max! - min))).clamp(0.0, 1.0);
+    final int toNext = isLegend ? 0 : ((max ?? 0) - totalDonations + 1).clamp(0, 999);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
@@ -2923,25 +2616,13 @@ Text(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
-                width: 60,
-                height: 60,
+                width: 60, height: 60,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: widget.themeColor.withValues(alpha: 0.10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: widget.themeColor.withValues(alpha: 0.25),
-                      blurRadius: 16,
-                      spreadRadius: 2,
-                    ),
-                  ],
+                  color: widget.themeColor.withOpacity(0.10),
+                  boxShadow: [BoxShadow(color: widget.themeColor.withOpacity(0.25), blurRadius: 16, spreadRadius: 2)],
                 ),
-                child: Center(
-                  child: Text(
-                    badge['emoji'],
-                    style: const TextStyle(fontSize: 32),
-                  ),
-                ),
+                child: Center(child: Text(badge['emoji'], style: const TextStyle(fontSize: 32))),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -2950,98 +2631,40 @@ Text(
                   children: [
                     Row(
                       children: [
-                        Text(
-                          badge['rank'],
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: widget.themeColor,
-                          ),
-                        ),
+                        Text(badge['rank'], style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: widget.themeColor)),
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: widget.themeColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '$totalDonations donations',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: widget.themeColor,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(color: widget.themeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                          child: Text('$totalDonations donations', style: TextStyle(fontSize: 11, color: widget.themeColor, fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        minHeight: 8,
-                        backgroundColor: Colors.grey.shade200,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          widget.themeColor,
-                        ),
-                      ),
+                      child: LinearProgressIndicator(value: progress, minHeight: 8, backgroundColor: Colors.grey.shade200, valueColor: AlwaysStoppedAnimation<Color>(widget.themeColor)),
                     ),
                     const SizedBox(height: 6),
                     if (!isLegend)
-                      Text(
-                        '$toNext more to become ${badge['next']} ${badge['nextEmoji']}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                        ),
-                      )
+                      Text('$toNext more to become ${badge['next']} ${badge['nextEmoji']}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600))
                     else
-                      Text(
-                        'Highest rank achieved! 🎉',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: widget.themeColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      Text('Highest rank achieved! 🎉', style: TextStyle(fontSize: 12, color: widget.themeColor, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
             ],
           ),
-
           const SizedBox(height: 16),
-
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  widget.themeColor.withValues(alpha: 0.08),
-                  widget.themeColor.withValues(alpha: 0.02),
-                ],
-              ),
+              gradient: LinearGradient(colors: [widget.themeColor.withOpacity(0.08), widget.themeColor.withOpacity(0.02)]),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: widget.themeColor.withValues(alpha: 0.15),
-              ),
+              border: Border.all(color: widget.themeColor.withOpacity(0.15)),
             ),
-            child: Text(
-              '"${badge['quote']}"',
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.grey.shade700,
-                fontStyle: FontStyle.italic,
-                height: 1.6,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            child: Text('"${badge['quote']}"', style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontStyle: FontStyle.italic, height: 1.6), textAlign: TextAlign.center),
           ),
         ],
       ),
@@ -3142,7 +2765,7 @@ class _ImpactChartPainter extends CustomPainter {
     final double chartH = size.height - _padTop - _padBottom;
 
     final Paint gridPaint = Paint()
-      ..color = Colors.grey.withValues(alpha: 0.12)
+      ..color = Colors.grey.withOpacity(0.12)
       ..strokeWidth = 1;
     for (int i = 0; i <= 4; i++) {
       double y = _padTop + (i / 4) * chartH;
@@ -3156,7 +2779,7 @@ class _ImpactChartPainter extends CustomPainter {
     if (selectedIndex != null && selectedIndex! < n) {
       Offset selPt = _pt(selectedIndex!, completed, size);
       final Paint selPaint = Paint()
-        ..color = themeColor.withValues(alpha: 0.18)
+        ..color = themeColor.withOpacity(0.18)
         ..strokeWidth = 1.5;
       canvas.drawLine(
         Offset(selPt.dx, _padTop),
@@ -3187,8 +2810,8 @@ class _ImpactChartPainter extends CustomPainter {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              themeColor.withValues(alpha: 0.22),
-              themeColor.withValues(alpha: 0.02),
+              themeColor.withOpacity(0.22),
+              themeColor.withOpacity(0.02),
             ],
           ).createShader(Rect.fromLTWH(0, _padTop, size.width, chartH))
           ..style = PaintingStyle.fill,
@@ -3198,7 +2821,7 @@ class _ImpactChartPainter extends CustomPainter {
     canvas.drawPath(
       animAcceptedPath,
       Paint()
-        ..color = themeColor.withValues(alpha: 0.35)
+        ..color = themeColor.withOpacity(0.35)
         ..strokeWidth = 1.5
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
@@ -3208,7 +2831,7 @@ class _ImpactChartPainter extends CustomPainter {
     canvas.drawPath(
       animCompletedPath,
       Paint()
-        ..color = themeColor.withValues(alpha: 0.4)
+        ..color = themeColor.withOpacity(0.4)
         ..strokeWidth = 6
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
@@ -3237,7 +2860,7 @@ class _ImpactChartPainter extends CustomPainter {
         canvas.drawCircle(
           pt,
           9,
-          Paint()..color = themeColor.withValues(alpha: 0.18),
+          Paint()..color = themeColor.withOpacity(0.18),
         );
       }
       canvas.drawCircle(pt, 5, Paint()..color = Colors.white);
@@ -3362,7 +2985,9 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
 
   @override
   Widget build(BuildContext context) {
-    bool isCompleted = widget.status == 'delivery_completed';
+    bool isCompleted = widget.status == 'delivery_completed' || widget.status == 'fully_completed' || widget.status == 'completed_awaiting_payment';
+    bool isPendingNGO = widget.status == 'pending_ngo_confirmation';
+
     String itemName =
         widget.taskData['items'] ?? widget.taskData['itemName'] ?? 'Items';
     String ngoName = widget.taskData['ngoName'] ?? 'NGO Partner';
@@ -3392,11 +3017,13 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
           } else {
             itemName = listingData['productName'] ?? itemName;
           }
-          if (ngoName == 'NGO Partner' && listingData.containsKey('ngoName'))
+          if (ngoName == 'NGO Partner' && listingData.containsKey('ngoName')) {
             ngoName = listingData['ngoName'];
+          }
           if (ngoLocation == 'Location not provided' &&
-              listingData.containsKey('ngoLocation'))
+              listingData.containsKey('ngoLocation')) {
             ngoLocation = listingData['ngoLocation'];
+          }
         }
 
         String itemInfo = "$rawQty $unit $itemName".trim();
@@ -3427,7 +3054,7 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
+                    color: Colors.black.withOpacity(0.05),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -3458,20 +3085,20 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                         decoration: BoxDecoration(
                           color: isCompleted
                               ? Colors.green.shade50
-                              : Colors.orange.shade50,
+                              : (isPendingNGO ? Colors.orange.shade50 : widget.themeColor.withOpacity(0.1)),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: isCompleted
                                 ? Colors.green.shade200
-                                : Colors.orange.shade200,
+                                : (isPendingNGO ? Colors.orange.shade200 : widget.themeColor.withOpacity(0.3)),
                           ),
                         ),
                         child: Text(
-                          isCompleted ? "Completed" : "Pending",
+                          isCompleted ? "Completed" : (isPendingNGO ? "Waiting for NGO" : "In Transit"),
                           style: TextStyle(
                             color: isCompleted
                                 ? Colors.green.shade700
-                                : Colors.orange.shade700,
+                                : (isPendingNGO ? Colors.orange.shade700 : widget.themeColor),
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
                           ),
@@ -3638,13 +3265,12 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  // 👇 NEW: Mark as Completed Button with Popup (Profile Screen) 👇
-                  if (!isCompleted)
+                  
+                  if (widget.status == 'delivery_accepted')
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: () async {
-                           // 👇 1. Show Confirmation Dialog 👇
                            bool confirm = await showDialog(
                              context: context,
                              builder: (ctx) => AlertDialog(
@@ -3653,11 +3279,11 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                                  children: [
                                    Icon(Icons.check_circle_outline, color: Colors.green.shade600, size: 24),
                                    const SizedBox(width: 8),
-                                   Text("Confirm Delivery", style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold, fontSize: 20)),
+                                   Text("Confirm Drop-off", style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold, fontSize: 20)),
                                  ],
                                ),
                                content: const Text(
-                                 "Have you successfully delivered the item(s) from the donor to the NGO?\n\nPlease only confirm if the handover is fully complete.",
+                                 "Have you physically handed over the items to the NGO?",
                                  style: TextStyle(height: 1.5, fontSize: 15, color: Colors.black87),
                                ),
                                actions: [
@@ -3671,56 +3297,42 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                                      backgroundColor: Colors.green.shade600,
                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                    ),
-                                   child: const Text("Yes, Completed", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                   child: const Text("Yes, Dropped Off", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                                  ),
                                ],
                              ),
                            ) ?? false;
 
-                           // If they clicked cancel, stop here!
                            if (!confirm) return; 
 
-                           // 👇 2. Proceed with existing completion logic 👇
                            await FirebaseFirestore.instance.collection('donations').doc(widget.donationId).update({
-                              'status': 'delivery_completed'
+                              'status': 'pending_ngo_confirmation'
                            });
                            
                            final authProvider = Provider.of<AuthProvider>(context, listen: false);
                            final currentUserId = authProvider.currentFirebaseUser?.uid;
                            final currentUserName = authProvider.currentUserModel?.name ?? 'Volunteer';
+                           String ngoId = widget.taskData['ngoId'] ?? widget.taskData['ngold'] ?? '';
 
-                           if (currentUserId != null) {
-                             await FirebaseFirestore.instance.collection('users').doc(currentUserId).set({
-                               'deliveriesCompleted': FieldValue.increment(1)
-                             }, SetOptions(merge: true));
-                           }
+                           String notifIdNgo = FirebaseFirestore.instance.collection('notifications').doc().id;
+                           NotificationModel ngoNotif = NotificationModel(
+                             id: notifIdNgo,
+                             receiverId: ngoId, 
+                             senderId: currentUserId!,
+                             senderName: currentUserName,
+                             type: 'delivery_arrived',
+                             title: 'Delivery Arrived! 📦',
+                             message: '$currentUserName has dropped off $itemName. Please open your profile and confirm receipt to release their payment.',
+                             relatedItemId: widget.donationId,
+                             createdAt: DateTime.now(),
+                             isRead: false,
+                           );
+                           await FirestoreService().sendNotification(ngoNotif);
 
-                           String taskDonorId = widget.taskData['donorId'] ?? '';
-                           String taskListingId = widget.taskData['listingId'] ?? '';
-                           
-                           if (taskDonorId.isNotEmpty && taskListingId.isNotEmpty) {
-                             var requestQuery = await FirebaseFirestore.instance
-                                 .collection('volunteer_requests')
-                                 .where('donorId', isEqualTo: taskDonorId)
-                                 .where('listingId', isEqualTo: taskListingId)
-                                 .limit(1)
-                                 .get();
-
-                             if (requestQuery.docs.isNotEmpty) {
-                               await FirebaseFirestore.instance
-                                   .collection('volunteer_requests')
-                                   .doc(requestQuery.docs.first.id)
-                                   .update({
-                                     'status': 'completed', 
-                                     'assignedVolunteer': currentUserName, 
-                                   });
-                             }
-                           }
-                           
                            if (context.mounted) {
                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                               content: Text('Delivery marked as completed!'),
-                               backgroundColor: Colors.green,
+                               content: Text('NGO Notified! Awaiting their confirmation.'),
+                               backgroundColor: Colors.orange,
                              ));
                            }
                         },
@@ -3731,6 +3343,20 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                         ),
                         child: const Text("Mark Delivery as Completed", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                       ),
+                    )
+                  else if (isPendingNGO)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.orange.shade200)),
+                      child: Center(child: Text("Waiting for NGO to confirm receipt...", style: TextStyle(color: Colors.orange.shade900, fontWeight: FontWeight.bold))),
+                    )
+                  else if (widget.status == 'completed_awaiting_payment')
+                     Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.blue.shade200)),
+                      child: Center(child: Text("Delivery Verified! Awaiting Payment from Donor.", style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold))),
                     )
                   else
                     SizedBox(
@@ -3752,7 +3378,7 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
                         ),
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(
-                            color: widget.themeColor.withValues(alpha: 0.5),
+                            color: widget.themeColor.withOpacity(0.5),
                           ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
@@ -3785,6 +3411,7 @@ class VolunteerShareTemplate extends StatelessWidget {
     required this.itemInfo,
     required this.themeColor,
   }) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -3837,7 +3464,7 @@ class VolunteerShareTemplate extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
               decoration: BoxDecoration(
-                color: themeColor.withValues(alpha: 0.1),
+                color: themeColor.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -3902,6 +3529,7 @@ class EnhancedDonationHistoryCard extends StatefulWidget {
   final String unit;
   final String type;
   final String dateText;
+  final String status;
   final bool isCancelled;
   final bool canCancel;
   final Color themeColor;
@@ -3919,6 +3547,7 @@ class EnhancedDonationHistoryCard extends StatefulWidget {
     required this.unit,
     required this.type,
     required this.dateText,
+    required this.status,
     required this.isCancelled,
     required this.canCancel,
     required this.themeColor,
@@ -4028,7 +3657,7 @@ class EnhancedDonationHistoryCardState
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
+                color: Colors.black.withOpacity(0.05),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -4041,7 +3670,7 @@ class EnhancedDonationHistoryCardState
                 children: [
                   CircleAvatar(
                     radius: 20,
-                    backgroundColor: widget.themeColor.withValues(alpha: 0.1),
+                    backgroundColor: widget.themeColor.withOpacity(0.1),
                     child: Text(
                       widget.ngoName.isNotEmpty
                           ? widget.ngoName[0].toUpperCase()
@@ -4103,7 +3732,7 @@ class EnhancedDonationHistoryCardState
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: widget.themeColor.withValues(alpha: 0.1),
+                      color: widget.themeColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -4232,14 +3861,31 @@ class EnhancedDonationHistoryCardState
                         ),
                       ),
                     )
-                  else
+                  else if (widget.status == 'pending')
                     TextButton(
                       onPressed: null,
                       child: Text(
                         '24h Expired',
                         style: TextStyle(color: Colors.grey.shade400),
                       ),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        widget.status.replaceAll('_', ' ').toUpperCase(),
+                        style: TextStyle(
+                          color: Colors.green.shade700,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
+                    
                   if (!widget.isCancelled)
                     ElevatedButton.icon(
                       onPressed: () => _shareDonationCard(context),
@@ -4357,7 +4003,7 @@ class DonationShareTemplate extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
               decoration: BoxDecoration(
-                color: themeColor.withValues(alpha: 0.1),
+                color: themeColor.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -4487,9 +4133,242 @@ class FullScreenImageViewer extends StatelessWidget {
             child: CircleAvatar(
               radius: MediaQuery.of(context).size.width * 0.42,
               backgroundImage: NetworkImage(imageUrl),
-              backgroundColor: themeColor.withValues(alpha: 0.1),
+              backgroundColor: themeColor.withOpacity(0.1),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// NEW: NGO DUAL RATING DIALOG
+// =========================================================================
+class NgoRatingDialog extends StatefulWidget {
+  final String donorId;
+  final String donorName;
+  final String volunteerId;
+  final String volunteerName;
+  final String donationId;
+  final Color themeColor;
+
+  const NgoRatingDialog({
+    Key? key,
+    required this.donorId,
+    required this.donorName,
+    required this.volunteerId,
+    required this.volunteerName,
+    required this.donationId,
+    required this.themeColor,
+  }) : super(key: key);
+
+  @override
+  State<NgoRatingDialog> createState() => _NgoRatingDialogState();
+}
+
+class _NgoRatingDialogState extends State<NgoRatingDialog> {
+  int _donorRating = 0;
+  int _volunteerRating = 0;
+  bool _isSubmitting = false;
+
+  Future<void> _updateUserRating(String uid, int newStars) async {
+    if (uid.isEmpty || newStars == 0) return;
+
+    DocumentReference ref =
+        FirebaseFirestore.instance.collection('users').doc(uid);
+
+    await FirebaseFirestore.instance.runTransaction((transaction) async {
+      DocumentSnapshot snap = await transaction.get(ref);
+
+      double currentAvg = 0.0;
+      int currentTotal = 0;
+      if (snap.exists) {
+        Map<String, dynamic> data = snap.data() as Map<String, dynamic>;
+        currentAvg = (data['averageRating'] as num?)?.toDouble() ?? 0.0;
+        currentTotal = (data['totalReviews'] as num?)?.toInt() ?? 0;
+      }
+
+      double newAvg =
+          ((currentAvg * currentTotal) + newStars) / (currentTotal + 1);
+
+      transaction.set(
+        ref,
+        {
+          'averageRating': double.parse(newAvg.toStringAsFixed(1)),
+          'totalReviews': currentTotal + 1,
+        },
+        SetOptions(merge: true),
+      );
+    });
+  }
+
+  Future<void> _submitRatings() async {
+    if (_donorRating == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please rate the Donor.')),
+      );
+      return;
+    }
+    if (widget.volunteerId.isNotEmpty && _volunteerRating == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please rate the Volunteer.')),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      await _updateUserRating(widget.donorId, _donorRating);
+      if (widget.volunteerId.isNotEmpty) {
+        await _updateUserRating(widget.volunteerId, _volunteerRating);
+      }
+
+      await FirebaseFirestore.instance
+          .collection('donations')
+          .doc(widget.donationId)
+          .update({
+        'ngoRated': true,
+        'ngoToDonorRating': _donorRating,
+        'ngoToVolunteerRating': _volunteerRating,
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ratings submitted. Thank you!')),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      setState(() => _isSubmitting = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to submit ratings: $e')),
+      );
+    }
+  }
+
+  Widget _buildStarRow(int currentRating, Function(int) onRate) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(5, (index) {
+        return IconButton(
+          onPressed: () => onRate(index + 1),
+          icon: Icon(
+            index < currentRating
+                ? Icons.star_rounded
+                : Icons.star_border_rounded,
+            color: Colors.amber,
+            size: 36,
+          ),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+        );
+      }),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    bool hasVolunteer = widget.volunteerId.isNotEmpty;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      backgroundColor: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.star_rounded,
+                color: Colors.amber,
+                size: 40,
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              "Rate Your Experience",
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              "Rate the Donor: ${widget.donorName}",
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            _buildStarRow(
+              _donorRating,
+              (r) => setState(() => _donorRating = r),
+            ),
+            if (hasVolunteer) ...[
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 24),
+              Text(
+                "Rate the Volunteer: ${widget.volunteerName}",
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              _buildStarRow(
+                _volunteerRating,
+                (r) => setState(() => _volunteerRating = r),
+              ),
+            ],
+            const SizedBox(height: 30),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _isSubmitting ? null : _submitRatings,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: widget.themeColor,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: _isSubmitting
+                    ? const SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2.5,
+                        ),
+                      )
+                    : const Text(
+                        "Submit Ratings",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                "Skip for now",
+                style: TextStyle(color: Colors.grey.shade500),
+              ),
+            ),
+          ],
         ),
       ),
     );

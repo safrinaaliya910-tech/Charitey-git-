@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/notification_model.dart';
 import 'chat_screen.dart';
 import 'home_screen.dart';
+import 'profile_screen.dart';
+import 'volunteer_payment_screen.dart'; // 👇 NEW: Import the standalone payment screen
 
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
@@ -58,17 +61,16 @@ class NotificationsScreen extends StatelessWidget {
           result['senderProfileData'] =
               senderSnap.data() as Map<String, dynamic>;
         }
-      }
-
-      DocumentSnapshot notifSnap = await FirebaseFirestore.instance
-          .collection('notifications')
-          .doc(notif.id)
-          .get();
-      if (notifSnap.exists && notifSnap.data() != null) {
-        result['notifData'] = notifSnap.data() as Map<String, dynamic>;
+        DocumentSnapshot notifSnap = await FirebaseFirestore.instance
+            .collection('notifications')
+            .doc(notif.id)
+            .get();
+        if (notifSnap.exists && notifSnap.data() != null) {
+          result['notifData'] = notifSnap.data() as Map<String, dynamic>;
+        }
       }
     } catch (e) {
-      print("Error fetching dynamic notification details: $e");
+      debugPrint("Error fetching dynamic notification details: $e");
     }
     return result;
   }
@@ -162,7 +164,7 @@ class NotificationsScreen extends StatelessWidget {
                   contactUsername = senderProfile['username'] ??
                       senderProfile['userName'] ??
                       donationData['donorUsername'] ??
-                      '';
+                      "";
                   contactPhone = senderProfile['phone'] ??
                       donationData['donorPhone'] ??
                       'Unknown Phone';
@@ -185,7 +187,7 @@ class NotificationsScreen extends StatelessWidget {
                   contactUsername = ngoProfile['username'] ??
                       ngoProfile['userName'] ??
                       donationData['ngoUsername'] ??
-                      '';
+                      "";
                   contactPhone = ngoProfile['phone'] ??
                       ngoProfile['ngoPhone'] ??
                       donationData['ngoPhone'] ??
@@ -207,11 +209,10 @@ class NotificationsScreen extends StatelessWidget {
                 contactName = senderProfile['name'] ?? notif.senderName;
                 contactUsername = senderProfile['username'] ??
                     senderProfile['userName'] ??
-                    '';
+                    "";
                 contactPhone = senderProfile['phone'] ?? 'Not Provided';
                 contactLocation = senderProfile['location'] ?? 'Not Provided';
-                contactUserId =
-                    senderProfile['uid'] ?? notif.senderId; // Real User ID
+                contactUserId = senderProfile['uid'] ?? notif.senderId;
                 targetChatId = notif.senderId;
               } else {
                 var senderProfile = fetchedData['senderProfileData'] ?? {};
@@ -223,7 +224,7 @@ class NotificationsScreen extends StatelessWidget {
                     notif.senderName;
                 contactUsername = senderProfile['username'] ??
                     senderProfile['userName'] ??
-                    '';
+                    "";
                 contactPhone = senderProfile['phone'] ??
                     notifData['senderPhone'] ??
                     'Not Provided';
@@ -237,8 +238,9 @@ class NotificationsScreen extends StatelessWidget {
 
               String buttonText = "Open Chat";
               if (isDonationOffer) {
-                buttonText =
-                    amINGO ? "Accept & Chat with Donor" : "Chat with NGO";
+                buttonText = amINGO
+                    ? "Accept & Chat with Donor"
+                    : "Chat with NGO";
               } else if (isVolunteerAccepted) {
                 buttonText = "Open Chat with Volunteer";
               }
@@ -276,8 +278,6 @@ class NotificationsScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // ==================== UPDATED: Name + Username Below ====================
                   _detailRowWithId(
                     Icons.person_outline,
                     nameLabel,
@@ -285,7 +285,6 @@ class NotificationsScreen extends StatelessWidget {
                     contactUsername,
                     themeColor,
                   ),
-
                   const SizedBox(height: 16),
                   _detailRow(
                     Icons.phone_outlined,
@@ -301,7 +300,6 @@ class NotificationsScreen extends StatelessWidget {
                     themeColor,
                   ),
                   const SizedBox(height: 30),
-
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
@@ -342,7 +340,6 @@ class NotificationsScreen extends StatelessWidget {
     );
   }
 
-  // NEW HELPER - Shows Name + Username below (like in the image)
   Widget _detailRowWithId(
     IconData icon,
     String label,
@@ -540,8 +537,10 @@ class NotificationsScreen extends StatelessWidget {
                 ),
               );
             }
+
             var donorData = snapshot.data!.data() as Map<String, dynamic>;
             String contactName = donorData['name'] ?? notification.senderName;
+
             return Padding(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
               child: Column(
@@ -689,7 +688,8 @@ class NotificationsScreen extends StatelessWidget {
     if (user == null) {
       return Scaffold(
         appBar: AppBar(title: const Text("Notifications")),
-        body: const Center(child: Text("Please log in to view notifications.")),
+        body: const Center(
+            child: Text("Please log in to view notifications.")),
       );
     }
 
@@ -713,7 +713,8 @@ class NotificationsScreen extends StatelessWidget {
         stream: firestoreService.getUserNotifications(user.uid),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator(color: themeColor));
+            return Center(
+                child: CircularProgressIndicator(color: themeColor));
           }
           if (snapshot.hasError) {
             return const Center(child: Text("Error loading notifications."));
@@ -750,25 +751,27 @@ class NotificationsScreen extends StatelessWidget {
             itemCount: notifications.length,
             itemBuilder: (context, index) {
               final notif = notifications[index];
-
               bool isMessage = notif.type == 'new_message';
               bool isTag = notif.type == 'tag';
               bool isDonationOffer = notif.type == 'donation_offer';
               bool isCancellation = notif.type == 'donation_cancelled';
               bool isExpiration = notif.type == 'expired_request';
               bool isVolunteerAccepted = notif.type == 'volunteer_accepted';
+              bool isDeliveryArrived = notif.type == 'delivery_arrived';
+              bool isPaymentPending = notif.type == 'payment_pending';
 
               return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                margin: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   color: notif.isRead
                       ? Colors.white
-                      : themeColor.withValues(alpha: 0.05),
+                      : themeColor.withOpacity(0.05),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: notif.isRead
                         ? Colors.grey.shade200
-                        : themeColor.withValues(alpha: 0.3),
+                        : themeColor.withOpacity(0.3),
                   ),
                 ),
                 child: ListTile(
@@ -781,22 +784,32 @@ class NotificationsScreen extends StatelessWidget {
                         ? Colors.red.shade50
                         : (isExpiration
                             ? Colors.orange.shade50
-                            : themeColor.withValues(alpha: 0.1)),
+                            : (isPaymentPending
+                                ? Colors.blue.shade50
+                                : themeColor.withOpacity(0.1))),
                     child: Icon(
                       isCancellation
                           ? Icons.cancel_presentation_rounded
                           : isExpiration
                               ? Icons.timer_off_rounded
-                              : (isTag
-                                  ? Icons.photo_library_rounded
-                                  : (isMessage
-                                      ? Icons.message_rounded
-                                      : (isVolunteerAccepted
-                                          ? Icons.directions_car_rounded
-                                          : Icons.volunteer_activism))),
+                              : isDeliveryArrived
+                                  ? Icons.inventory_2_rounded
+                                  : isPaymentPending
+                                      ? Icons.payment_rounded
+                                      : (isTag
+                                          ? Icons.photo_library_rounded
+                                          : (isMessage
+                                              ? Icons.message_rounded
+                                              : (isVolunteerAccepted
+                                                  ? Icons.directions_car_rounded
+                                                  : Icons.volunteer_activism))),
                       color: isCancellation
                           ? Colors.red
-                          : (isExpiration ? Colors.orange : themeColor),
+                          : (isExpiration
+                              ? Colors.orange
+                              : (isPaymentPending
+                                  ? Colors.blue
+                                  : themeColor)),
                     ),
                   ),
                   title: Text(
@@ -835,7 +848,24 @@ class NotificationsScreen extends StatelessWidget {
                     if (!notif.isRead) {
                       firestoreService.markNotificationAsRead(notif.id);
                     }
-                    if (isTag) {
+                    if (isDeliveryArrived) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => PendingReceiptsScreen(ngoId: user.uid),
+                        ),
+                      );
+                    } else if (isPaymentPending) {
+                      // 👇 UPDATED LOGIC: Pushes straight to the new Payment Screen!
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => VolunteerPaymentScreen(
+                            donationId: notif.relatedItemId,
+                          ),
+                        ),
+                      );
+                    } else if (isTag) {
                       Navigator.pushAndRemoveUntil(
                         context,
                         MaterialPageRoute(
@@ -847,7 +877,11 @@ class NotificationsScreen extends StatelessWidget {
                         (Route<dynamic> route) => false,
                       );
                     } else if (isCancellation) {
-                      _showDonorCancellationDetails(context, notif, themeColor);
+                      _showDonorCancellationDetails(
+                        context,
+                        notif,
+                        themeColor,
+                      );
                     } else if (isExpiration) {
                       _showExpirationDetails(context, notif);
                     } else {

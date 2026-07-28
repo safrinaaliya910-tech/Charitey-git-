@@ -1,13 +1,16 @@
-//create_listing_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart'; 
+import 'package:geocoding/geocoding.dart'; 
+
 import '../models/ngo_listing_model.dart';
 import '../services/firestore_service.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_text_field.dart';
-import 'home_screen.dart'; // REQUIRED: To navigate back safely
+import 'home_screen.dart'; 
+import 'location_picker_screen.dart'; 
 
 class CreateListingScreen extends StatefulWidget {
   const CreateListingScreen({Key? key}) : super(key: key);
@@ -19,15 +22,16 @@ class CreateListingScreen extends StatefulWidget {
 class CreateListingScreenState extends State<CreateListingScreen> {
   final FirestoreService firestoreService = FirestoreService();
   String _listingType = 'food';
-  bool isStep1 = true; // Controls Progressive Disclosure (The "Next" Logic)
+  bool isStep1 = true; 
   
-  // Volunteer Availability State
+  // Volunteer Availability & Location State
   bool? isVolunteerAvailable;
+  LatLng? _pickupLatLng; 
+  String? _pickupAddressText; 
   
   final TextEditingController _foodTypeController = TextEditingController();
   final TextEditingController _quantityController = TextEditingController();
   
-  // Dedicated units for separate listing branches
   String _foodUnit = 'kg';
   String _productUnit = 'items';
   
@@ -37,9 +41,8 @@ class CreateListingScreenState extends State<CreateListingScreen> {
   final TextEditingController _descriptionController = TextEditingController(); 
   
   bool isLoading = false;
-  final Color themeColor = const Color(0xFF7D444C); // App Theme Color
+  final Color themeColor = const Color(0xFF7D444C); 
   
-  // Suggestion Lists for Autocomplete
   static const List<String> foodSuggestions = [
     'Biriyani', 'Chappathi', 'Curry', 'Dal', 'Dosa', 'Idli', 'Meals',
     'Parotta', 'Pongal', 'Puri', 'Rice', 'Roll', 'Sambar', 'Sandwich'
@@ -61,7 +64,41 @@ class CreateListingScreenState extends State<CreateListingScreen> {
     super.dispose();
   }
 
-  //--- Interactive Date and Time Picker
+  // Open Map and get coordinates 
+  Future<void> _selectLocation() async {
+    final LatLng? picked = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const LocationPickerScreen()),
+    );
+    if (picked != null) {
+      setState(() => _pickupLatLng = picked);
+      _getAddressFromCoordinates(picked);
+    }
+  }
+
+  // Convert coordinates to clean readable address 
+  Future<void> _getAddressFromCoordinates(LatLng coords) async {
+    try {
+      List<Placemark> placemarks = await placemarkFromCoordinates(coords.latitude, coords.longitude);
+      if (placemarks.isNotEmpty) {
+        final p = placemarks.first;
+        setState(() {
+          // Extracts just the area/city (e.g., "RS Puram, Coimbatore")
+          _pickupAddressText = [p.subLocality, p.locality]
+              .where((e) => e != null && e.isNotEmpty)
+              .join(", ");
+          if (_pickupAddressText!.isEmpty) {
+             _pickupAddressText = p.name ?? "Selected Location";
+          }
+        });
+      }
+    } catch (_) {
+      setState(() {
+        _pickupAddressText = "Location Pinned";
+      });
+    }
+  }
+
   Future<void> selectDateTime(BuildContext context) async {
     final DateTime? pickedDate = await showDatePicker(
       context: context,
@@ -165,6 +202,14 @@ class CreateListingScreenState extends State<CreateListingScreen> {
       );
       return;
     }
+    
+    // Force location if no volunteer 
+    if (isVolunteerAvailable == false && _pickupLatLng == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please pin a pickup location for the platform volunteer.')),
+      );
+      return;
+    }
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUserModel;
@@ -216,6 +261,11 @@ class CreateListingScreenState extends State<CreateListingScreen> {
         status: 'open',
         isVolunteerAvailable: isVolunteerAvailable,
         description: _descriptionController.text.trim().isNotEmpty ? _descriptionController.text.trim() : null, 
+        
+        // 👇 FIXED: UNCOMMENTED SO FIREBASE SAVES THE EXACT LOCATION 👇
+        pickupLat: _pickupLatLng?.latitude,
+        pickupLng: _pickupLatLng?.longitude,
+        pickupAddress: _pickupAddressText,
       );
 
       await firestoreService.createNgoListing(newListing);
@@ -323,7 +373,6 @@ class CreateListingScreenState extends State<CreateListingScreen> {
     );
   }
 
-  // 👇 CUSTOM BUTTON FOR THE TOGGLE 👇
   Widget _buildVolunteerToggle(String text, bool isSelected, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
@@ -660,14 +709,17 @@ class CreateListingScreenState extends State<CreateListingScreen> {
                                       ),
                                       const SizedBox(height: 24),
 
-                                      // 👇 THE NEW CLEAN TOGGLE SECTION 👇
                                       Row(
                                         children: [
                                           Expanded(
                                             child: _buildVolunteerToggle(
                                               "I have volunteer\nfor pickup",
                                               isVolunteerAvailable == true, 
-                                              () => setState(() => isVolunteerAvailable = true),
+                                              () => setState(() {
+                                                isVolunteerAvailable = true;
+                                                _pickupLatLng = null; // Clear map if switching
+                                                _pickupAddressText = null;
+                                              }),
                                             ),
                                           ),
                                           const SizedBox(width: 12),
@@ -680,7 +732,68 @@ class CreateListingScreenState extends State<CreateListingScreen> {
                                           ),
                                         ],
                                       ),
-                                      // 👆 END TOGGLE SECTION 👆
+                                     
+                                      // 👇 THE LOCATION PICKER FOR PLATFORM VOLUNTEERS 👇
+                                      if (isVolunteerAvailable == false) ...[
+                                        const SizedBox(height: 16),
+                                        GestureDetector(
+                                          onTap: _selectLocation,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.shade50,
+                                              borderRadius: BorderRadius.circular(16),
+                                              border: Border.all(
+                                                color: _pickupLatLng == null ? themeColor.withOpacity(0.5) : Colors.green.shade400, 
+                                                width: 1.5
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                Icon(
+                                                  _pickupLatLng == null ? Icons.location_on_rounded : Icons.check_circle_rounded, 
+                                                  color: _pickupLatLng == null ? themeColor : Colors.green, 
+                                                  size: 22
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Text(
+                                                    _pickupAddressText ?? "Tap to pin pickup location",
+                                                    style: TextStyle(
+                                                      color: _pickupAddressText == null ? Colors.grey.shade500 : Colors.black87,
+                                                      fontWeight: _pickupAddressText == null ? FontWeight.w500 : FontWeight.w600,
+                                                      fontSize: 15,
+                                                    ),
+                                                  ),
+                                                ),
+                                                Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey.shade400, size: 16),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        
+                                        const SizedBox(height: 16),
+                                        Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                          decoration: BoxDecoration(
+                                            color: themeColor.withOpacity(0.04),
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(color: themeColor.withOpacity(0.15), width: 1),
+                                          ),
+                                          child: Text(
+                                            "Utilizing platform volunteers may result in a slight pickup delay after a donation is made. You will be notified instantly once a volunteer accepts the task.",
+                                            textAlign: TextAlign.center, 
+                                            style: TextStyle(
+                                              color: themeColor.withOpacity(0.9), 
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w500, 
+                                              height: 1.4,
+                                              letterSpacing: 0.2, 
+                                            ),
+                                          ),
+                                        ),
+                                      ],
 
                                       const SizedBox(height: 45),
                                       SizedBox(

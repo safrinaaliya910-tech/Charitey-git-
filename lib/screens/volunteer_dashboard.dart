@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import 'package:geolocator/geolocator.dart'; // 👇 NEW: For distance & fare math
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/notification_model.dart';
@@ -35,8 +36,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
         'assignedVolunteerId': volunteerId, 
       });
 
-      // 👇 NEW: 2. Update the volunteer_requests collection for the Admin Panel 👇
-      // This searches for the pending request involving this specific Donor and NGO and marks it accepted.
+      // 2. Update the volunteer_requests collection for the Admin Panel
       var requestQuery = await FirebaseFirestore.instance
           .collection('volunteer_requests')
           .where('donorId', isEqualTo: donorId)
@@ -50,8 +50,8 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
             .collection('volunteer_requests')
             .doc(requestQuery.docs.first.id)
             .update({
-              'status': 'accepted', // Changes status for Admin Panel!
-              'assignedVolunteer': user!.name, // Records the volunteer's name
+              'status': 'accepted', 
+              'assignedVolunteer': user!.name, 
             });
       }
 
@@ -103,7 +103,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     }
   }
 
-// 👇 NEW: Confirmation Dialog before accepting 👇
   Future<void> _confirmAndAcceptTask(BuildContext context, String donationId, String volunteerId, String donorId, String ngoId, String itemName) async {
     bool confirm = await showDialog(
       context: context,
@@ -137,24 +136,17 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       ),
     ) ?? false;
 
-    // If they clicked "Yes", trigger your existing accept task logic!
     if (confirm) {
       await _acceptTask(donationId, volunteerId, donorId, ngoId, itemName);
     }
   }
-  // =========================================================================
-  // 👇 NEW: LAZY EXPIRATION AND URGENT ALERT LOGIC 👇
-  // =========================================================================
 
-  // Handles tasks that nobody accepted in time
   Future<void> _handleExpiredTask(String donationId, String donorId, String ngoId, String itemName) async {
     try {
-      // 1. Mark the donation as expired so it disappears from all lists
       await FirebaseFirestore.instance.collection('donations').doc(donationId).update({
         'status': 'volunteer_not_found',
       });
       
-      // 2. Notify the NGO
       if (ngoId.isNotEmpty) {
         String notifIdNgo = FirebaseFirestore.instance.collection('notifications').doc().id;
         await FirebaseFirestore.instance.collection('notifications').doc(notifIdNgo).set({
@@ -171,7 +163,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
         });
       }
 
-      // 3. Notify the Donor
       if (donorId.isNotEmpty) {
         String notifIdDonor = FirebaseFirestore.instance.collection('notifications').doc().id;
         await FirebaseFirestore.instance.collection('notifications').doc(notifIdDonor).set({
@@ -188,7 +179,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
         });
       }
       
-      // 4. Update the Admin Panel Database
       var requestQuery = await FirebaseFirestore.instance
           .collection('volunteer_requests')
           .where('donorId', isEqualTo: donorId)
@@ -209,21 +199,17 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     }
   }
 
-  // Sends a broadcast alert 24 hours before expiry
   Future<void> _triggerUrgentVolunteerNotification(String donationId, String itemName, String location) async {
     try {
-      // 1. Immediately flag it so other volunteers don't trigger duplicate alerts
       await FirebaseFirestore.instance.collection('donations').doc(donationId).update({
         'urgentNotified': true,
       });
 
-      // 2. Fetch all registered volunteers
       var volunteersSnap = await FirebaseFirestore.instance
           .collection('users')
           .where('role', isEqualTo: 'volunteer')
           .get();
       
-      // 3. Send them all an urgent notification via a Firebase Batch Write
       WriteBatch batch = FirebaseFirestore.instance.batch();
       
       for (var volDoc in volunteersSnap.docs) {
@@ -249,7 +235,8 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       debugPrint("Error triggering urgent notification: $e");
     }
   }
- Future<List<Widget>> _generateFilteredCards(List<QueryDocumentSnapshot> donations, String myUserId) async {
+
+  Future<List<Widget>> _generateFilteredCards(List<QueryDocumentSnapshot> donations, String myUserId) async {
     List<Widget> cardList = [];
     
     for (var donationDoc in donations) {
@@ -267,16 +254,17 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       String status = donationData['status'] ?? 'pending';
       String? assignedVolunteerId = donationData['assignedVolunteerId'];
       
-      bool isAcceptedByMe = (status == 'delivery_accepted' && assignedVolunteerId == myUserId);
+      bool isAcceptedByMe = (status == 'delivery_accepted' && assignedVolunteerId == myUserId) || 
+                            (status == 'pending_ngo_confirmation' && assignedVolunteerId == myUserId) ||
+                            (status == 'completed_awaiting_payment' && assignedVolunteerId == myUserId) ||
+                            (status == 'fully_completed' && assignedVolunteerId == myUserId);
       
-      // 👇 Tab filter - FIXED: Now strictly hides 'volunteer_not_found' tasks 👇
       if (showAvailable) {
         if (status != 'pending') continue; 
       } else {
         if (!isAcceptedByMe) continue; 
       }
 
-      // Fetch the NGO listing to see if they actually need a volunteer
       var listingSnap = await FirebaseFirestore.instance.collection('ngo_listings').doc(listingId).get();
       if (!listingSnap.exists) continue;
       
@@ -284,35 +272,28 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       bool? isVolunteerAvailable = listingData['isVolunteerAvailable'] as bool?;
       
       if (isVolunteerAvailable == true) {
-        continue; // The NGO has their own volunteer, so skip this card!
+        continue; // NGO has their own volunteer, skip
       }
       
       String type = listingData['type'] ?? 'food';
       String itemName = type == 'food' ? (listingData['foodType'] ?? "Food") : (listingData['productName'] ?? "Product");
 
-      // ==========================================================
-      // 👇 NEW: EXPIRY & URGENT NOTIFICATION LOGIC 👇
-      // ==========================================================
       Timestamp? liveUntilTs = listingData['liveUntil'] as Timestamp?;
       DateTime liveUntil = liveUntilTs != null ? liveUntilTs.toDate() : DateTime.now().add(const Duration(days: 365));
       DateTime now = DateTime.now();
 
       if (status == 'pending') {
         if (now.isAfter(liveUntil)) {
-          // ❌ TASK HAS EXPIRED: Run cleanup and skip building the card
           _handleExpiredTask(donationId, donorId, listingData['ngold'] ?? listingData['ngoId'] ?? '', itemName);
           continue; 
         } else {
-          // 🚨 URGENT NOTIFICATION: Less than 24 hours remaining
           bool urgentNotified = donationData['urgentNotified'] == true;
           if (!urgentNotified && liveUntil.difference(now).inHours <= 24) {
             _triggerUrgentVolunteerNotification(donationId, itemName, listingData['ngoLocation'] ?? 'your area');
           }
         }
       }
-      // ==========================================================
-      
-      // Pulling the exact donated amount directly from the Donation Document
+
       String rawDonatedQty = donationData['donatedQuantity']?.toString() ?? 
                              donationData['quantity']?.toString() ?? 
                              donationData['donatedAmount']?.toString() ?? '';
@@ -322,15 +303,39 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
 
       String availability = listingData['availability'] ?? 'Time not specified';
       String ngoName = listingData['ngoName'] ?? 'Unknown NGO';
-      String ngoLocation = listingData['ngoLocation'] ?? 'Location unavailable';
+      
+      // 👇 FETCH NGO PICKUP/DROP ADDRESS PREFERRING PINNED ADDRESS 👇
+      String ngoLocation = listingData['pickupAddress'] ?? listingData['ngoLocation'] ?? 'Location unavailable';
       String ngoId = listingData['ngoId'] ?? listingData['ngold'] ?? '';
       
-      // Fetch NGO Phone
       String ngoPhone = 'Phone unavailable';
       var ngoUserSnap = await FirebaseFirestore.instance.collection('users').doc(ngoId).get();
       if (ngoUserSnap.exists) {
         var ngoUserData = ngoUserSnap.data() as Map<String, dynamic>;
         ngoPhone = ngoUserData['phone'] ?? 'Phone unavailable';
+      }
+
+      // 👇 PROFESSSIONAL FARE & DISTANCE ENGINE (UBER / RAPIDO STYLE) 👇
+      double deliveryFee = (donationData['deliveryFee'] as num?)?.toDouble() ?? 0.0;
+      double? donorLat = (donationData['donorLat'] as num?)?.toDouble();
+      double? donorLng = (donationData['donorLng'] as num?)?.toDouble();
+      double? ngoLat = (listingData['pickupLat'] as num?)?.toDouble();
+      double? ngoLng = (listingData['pickupLng'] as num?)?.toDouble();
+
+      double distanceKm = 0.0;
+      if (donorLat != null && donorLng != null && ngoLat != null && ngoLng != null) {
+        double distMeters = Geolocator.distanceBetween(donorLat, donorLng, ngoLat, ngoLng);
+        distanceKm = (distMeters / 1000.0);
+      }
+
+      // If fee was not saved directly, dynamically compute with professional rate structure:
+      if (deliveryFee <= 0) {
+        if (distanceKm > 0) {
+          // Base Fee ₹25 + ₹10/km
+          deliveryFee = (25.0 + (distanceKm * 10.0)).roundToDouble();
+        } else {
+          deliveryFee = 35.0; // Standard local delivery baseline
+        }
       }
 
       cardList.add(
@@ -349,7 +354,10 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
           donorPhone: donorPhone,
           donorId: donorId,
           myId: myUserId,
+          status: status, // Passed down for rendering logic
           isAcceptedByMe: isAcceptedByMe,
+          deliveryFee: deliveryFee,
+          distanceKm: distanceKm,
         )
       );
     }
@@ -426,7 +434,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('donations')
-                  .where('status', whereIn: ['pending', 'delivery_accepted'])
+                  .where('status', whereIn: ['pending', 'delivery_accepted', 'pending_ngo_confirmation', 'completed_awaiting_payment', 'fully_completed'])
                   .snapshots(),
               builder: (context, donationSnapshot) {
                 if (donationSnapshot.connectionState == ConnectionState.waiting) {
@@ -446,7 +454,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                   return bTime.compareTo(aTime);
                 });
                 
-                // 👇 This is where the magic happens! We wait for the cards to be fully built and checked
                 return FutureBuilder<List<Widget>>(
                   future: _generateFilteredCards(donations, user.uid),
                   builder: (context, cardSnapshot) {
@@ -454,7 +461,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                       return Center(child: CircularProgressIndicator(color: themeColor));
                     }
                     
-                    // If the list comes back completely empty, show the message!
                     if (!cardSnapshot.hasData || cardSnapshot.data!.isEmpty) {
                       return _buildEmptyState();
                     }
@@ -480,7 +486,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     );
   }
 
- Widget _buildDeliveryCard({
+  Widget _buildDeliveryCard({
     required String donationId,
     required String listingId, 
     required String itemName,
@@ -495,28 +501,31 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     required String donorPhone,
     required String donorId,
     required String myId,
+    required String status,
     required bool isAcceptedByMe,
+    required double deliveryFee,
+    required double distanceKm,
   }) {
+    bool isCompleted = status == 'delivery_completed' || status == 'fully_completed' || status == 'completed_awaiting_payment';
+    bool isPendingNGO = status == 'pending_ngo_confirmation';
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 18), // Slightly more breathing room
+      margin: const EdgeInsets.only(bottom: 18),
       decoration: BoxDecoration(
-        // 👇 Premium gradient background fading into a faint dusky rose 👇
         gradient: LinearGradient(
           colors: [
             Colors.white,
-            themeColor.withValues(alpha: 0.04), // Faint dusky rose tint
+            themeColor.withValues(alpha: 0.04),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(20), // Rounder edges look more modern
-        // 👇 Crisp, neat border to frame the card 👇
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: themeColor.withValues(alpha: 0.2), 
           width: 1.5,
         ),
         boxShadow: [
-          // 👇 Soft glowing shadow using the theme color instead of harsh black 👇
           BoxShadow(
             color: themeColor.withValues(alpha: 0.12),
             blurRadius: 16,
@@ -536,17 +545,64 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: isAcceptedByMe ? Colors.green.shade50 : themeColor.withValues(alpha: 0.1),
+                    color: isCompleted ? Colors.green.shade50 : (isPendingNGO ? Colors.orange.shade50 : themeColor.withValues(alpha: 0.1)),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: isAcceptedByMe ? Colors.green.shade200 : Colors.transparent),
+                    border: Border.all(color: isCompleted ? Colors.green.shade200 : (isPendingNGO ? Colors.orange.shade200 : Colors.transparent)),
                   ),
                   child: Text(
-                    isAcceptedByMe ? "Task Accepted" : "Pickup Needed",
+                    isCompleted ? "Completed" : (isPendingNGO ? "Waiting for NGO" : (isAcceptedByMe ? "In Transit" : "Pickup Needed")),
                     style: TextStyle(
                       fontSize: 12, 
                       fontWeight: FontWeight.bold, 
-                      color: isAcceptedByMe ? Colors.green.shade700 : themeColor,
+                      color: isCompleted ? Colors.green.shade700 : (isPendingNGO ? Colors.orange.shade700 : themeColor),
                     ),
+                  ),
+                ),
+
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1B5E20).withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF2E7D32).withOpacity(0.3), width: 1.2),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.account_balance_wallet_rounded, color: Color(0xFF2E7D32), size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        "₹${deliveryFee.toStringAsFixed(0)} Pay",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF2E7D32),
+                          fontSize: 15,
+                        ),
+                      ),
+                      if (distanceKm > 0) ...[
+                        const SizedBox(width: 4),
+                        Text(
+                          "(${distanceKm.toStringAsFixed(1)} km)",
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.green.shade800,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    itemName, 
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
                   ),
                 ),
                 Text(
@@ -554,11 +610,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                   style: TextStyle(fontWeight: FontWeight.bold, color: themeColor, fontSize: 16),
                 ),
               ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              itemName, 
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
             ),
             const SizedBox(height: 8),
             Row(
@@ -592,7 +643,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "PICKUP FROM", 
+                          "PICKUP FROM (DONOR)", 
                           style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: themeColor, letterSpacing: 0.5),
                         ),
                         const SizedBox(height: 8),
@@ -647,7 +698,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  // 👇 Hooks into the new Confirmation Dialog 👇
                   onPressed: () => _confirmAndAcceptTask(context, donationId, myId, donorId, ngoId, itemName),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: themeColor,
@@ -655,113 +705,128 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                     elevation: 0,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text(
-                    "Accept Task", 
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                  child: Text(
+                    "Accept Task (Earn ₹${deliveryFee.toStringAsFixed(0)})", 
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                 ),
               )
             else
               Column(
                 children: [
-                 // 👇 NEW: Mark as Completed Button with Popup (Dashboard) 👇
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () async {
-                         // 👇 1. Show Confirmation Dialog 👇
-                         bool confirm = await showDialog(
-                           context: context,
-                           builder: (ctx) => AlertDialog(
-                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                             title: Row(
-                               children: [
-                                 Icon(Icons.check_circle_outline, color: Colors.green.shade600, size: 24),
-                                 const SizedBox(width: 8),
-                                 Text("Confirm Delivery", style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold, fontSize: 20)),
+                  if (status == 'delivery_accepted')
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                           bool confirm = await showDialog(
+                             context: context,
+                             builder: (ctx) => AlertDialog(
+                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                               title: Row(
+                                 children: [
+                                   Icon(Icons.check_circle_outline, color: Colors.green.shade600, size: 24),
+                                   const SizedBox(width: 8),
+                                   Text("Confirm Drop-off", style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold, fontSize: 20)),
+                                 ],
+                               ),
+                               content: const Text(
+                                 "Have you physically handed over the items to the NGO?\n\nPlease only confirm if the handover is fully complete.",
+                                 style: TextStyle(height: 1.5, fontSize: 15, color: Colors.black87),
+                               ),
+                               actions: [
+                                 TextButton(
+                                   onPressed: () => Navigator.pop(ctx, false),
+                                   child: Text("Cancel", style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                                 ),
+                                 ElevatedButton(
+                                   onPressed: () => Navigator.pop(ctx, true),
+                                   style: ElevatedButton.styleFrom(
+                                     backgroundColor: Colors.green.shade600,
+                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                   ),
+                                   child: const Text("Yes, Dropped Off", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                 ),
                                ],
                              ),
-                             content: const Text(
-                               "Have you successfully delivered the item(s) from the donor to the NGO?\n\nPlease only confirm if the handover is fully complete. If there is a delay, use the chat to inform them.",
-                               style: TextStyle(height: 1.5, fontSize: 15, color: Colors.black87),
-                             ),
-                             actions: [
-                               TextButton(
-                                 onPressed: () => Navigator.pop(ctx, false),
-                                 child: Text("Cancel", style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
-                               ),
-                               ElevatedButton(
-                                 onPressed: () => Navigator.pop(ctx, true),
-                                 style: ElevatedButton.styleFrom(
-                                   backgroundColor: Colors.green.shade600,
-                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                 ),
-                                 child: const Text("Yes, Completed", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                               ),
-                             ],
-                           ),
-                         ) ?? false;
+                           ) ?? false;
 
-                         // If they clicked cancel, stop here!
-                         if (!confirm) return; 
+                           if (!confirm) return; 
 
-                         // 👇 2. Proceed with existing completion logic 👇
-                         await FirebaseFirestore.instance.collection('donations').doc(donationId).update({
-                            'status': 'delivery_completed'
-                         });
-                         
-                         final authProvider = Provider.of<AuthProvider>(context, listen: false);
-                         final currentUserId = authProvider.currentFirebaseUser?.uid;
-                         final currentUserName = authProvider.currentUserModel?.name ?? 'Volunteer';
+                           await FirebaseFirestore.instance.collection('donations').doc(donationId).update({
+                              'status': 'pending_ngo_confirmation'
+                           });
+                           
+                           final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                           final currentUserId = authProvider.currentFirebaseUser?.uid;
+                           final currentUserName = authProvider.currentUserModel?.name ?? 'Volunteer';
 
-                         if (currentUserId != null) {
-                           await FirebaseFirestore.instance.collection('users').doc(currentUserId).set({
-                             'deliveriesCompleted': FieldValue.increment(1)
-                           }, SetOptions(merge: true));
-                         }
+                           String notifIdNgo = FirebaseFirestore.instance.collection('notifications').doc().id;
+                           NotificationModel ngoNotif = NotificationModel(
+                             id: notifIdNgo,
+                             receiverId: ngoId, 
+                             senderId: currentUserId!,
+                             senderName: currentUserName,
+                             type: 'delivery_arrived',
+                             title: 'Delivery Arrived! 📦',
+                             message: '$currentUserName has dropped off $itemName. Please open your profile and confirm receipt to release their payment.',
+                             relatedItemId: donationId,
+                             createdAt: DateTime.now(),
+                             isRead: false,
+                           );
+                           await FirestoreService().sendNotification(ngoNotif);
 
-                         if (donorId.isNotEmpty && listingId.isNotEmpty) {
-                           var requestQuery = await FirebaseFirestore.instance
-                               .collection('volunteer_requests')
-                               .where('donorId', isEqualTo: donorId)
-                               .where('listingId', isEqualTo: listingId)
-                               .limit(1)
-                               .get();
-
-                           if (requestQuery.docs.isNotEmpty) {
-                             await FirebaseFirestore.instance
-                                 .collection('volunteer_requests')
-                                 .doc(requestQuery.docs.first.id)
-                                 .update({
-                                   'status': 'completed', 
-                                   'assignedVolunteer': currentUserName, 
-                                 });
+                           if (context.mounted) {
+                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                               content: Text('NGO Notified! Awaiting their confirmation.'),
+                               backgroundColor: Colors.orange,
+                             ));
                            }
-                         }
-
-                         if (context.mounted) {
-                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                             content: Text('Delivery marked as completed!'),
-                             backgroundColor: Colors.green,
-                           ));
-                         }
-                      },
-                      icon: const Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
-                      label: const Text(
-                        "Mark Delivery as Completed",
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                        },
+                        icon: const Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
+                        label: const Text(
+                          "Mark Delivery as Completed",
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: themeColor, 
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
                       ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green.shade600, 
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    )
+                  else if (isPendingNGO)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.orange.shade200)),
+                      child: Center(child: Text("Waiting for NGO to confirm receipt...", style: TextStyle(color: Colors.orange.shade900, fontWeight: FontWeight.bold))),
+                    )
+                  else if (status == 'completed_awaiting_payment')
+                     Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.blue.shade200)),
+                      child: Center(child: Text("Delivery Verified! Awaiting Payment from Donor.", style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold))),
+                    )
+                  else
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () {},
+                        icon: Icon(Icons.share, size: 18, color: themeColor),
+                        label: Text("Share Impact", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold)),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: themeColor.withValues(alpha: 0.5)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
                       ),
                     ),
-                  ),
+                  
                   const SizedBox(height: 10),
                   
-                  // 👇 NEW: Chat Buttons Side-By-Side (Bottom) 👇
                   Row(
                     children: [
                       Expanded(
@@ -820,6 +885,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       ),
     );
   }
+
   Widget _buildDetailRow(IconData icon, String text) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,

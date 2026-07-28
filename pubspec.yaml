@@ -101,6 +101,8 @@ flutter:
   assets:
     - assets/
     - assets/google logo.png
+    - assets/hero_banner.jpg
+    - assets/dove_icons.png
 
 
   # An image asset can refer to one or more resolution-specific "variants", see

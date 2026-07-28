@@ -90,7 +90,7 @@ class _VolunteerLoginScreenState extends State<VolunteerLoginScreen> with Single
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Invalid credentials or this account is not registered as a Volunteer.'),
+          content: Text('Invalid credentials or this account is not registered as a Kindness Champion.'),
         ),
       );
     }
@@ -217,7 +217,7 @@ class _VolunteerLoginScreenState extends State<VolunteerLoginScreen> with Single
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Volunteer Login',
+                      'Kindness Champion Login',
                       style: TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.bold,

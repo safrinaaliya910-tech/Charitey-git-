@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import '../providers/auth_provider.dart';
 import '../models/post_model.dart';
 import 'create_post_screen.dart';
+import 'create_volunteer_post_screen.dart';
 import 'profile_screen.dart';
 
 class NgoDashboard extends StatefulWidget {
@@ -182,8 +183,7 @@ class NgoDashboardState extends State<NgoDashboard>
                             String ngoName = "NGO";
                             if (userSnapshot.hasData &&
                                 userSnapshot.data!.exists) {
-                              ngoName =
-                                  (userSnapshot.data!.data()
+                              ngoName = (userSnapshot.data!.data()
                                       as Map<String, dynamic>)['name'] ??
                                   "NGO";
                             }
@@ -204,7 +204,6 @@ class NgoDashboardState extends State<NgoDashboard>
                                     )
                                   : const BoxDecoration(),
                               child: PostCardWidget(
-                                key: ValueKey(post.postId),   // ADD THIS
                                 post: post,
                                 ngoName: ngoName,
                                 currentUserId: user.uid,
@@ -223,8 +222,12 @@ class NgoDashboardState extends State<NgoDashboard>
         ],
       ),
 
-      // ── FAB (NGO only) ─────────────────────────────────────
-      floatingActionButton: user.role == 'ngo'
+      // ── FAB (NGO + Volunteer) ─────────────────────────────────────
+      // NGO gets the original CreatePostScreen (with donor/volunteer tagging).
+      // Volunteer gets the same posting flow but through
+      // CreateVolunteerPostScreen (no user-id tagging fields — just
+      // image + caption), placed the same "+" way on the right side.
+      floatingActionButton: (user.role == 'ngo' || user.role == 'volunteer')
           ? Padding(
               padding: const EdgeInsets.only(bottom: 90),
               child: FloatingActionButton(
@@ -237,7 +240,9 @@ class NgoDashboardState extends State<NgoDashboard>
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const CreatePostScreen(),
+                      builder: (context) => user.role == 'ngo'
+                          ? const CreatePostScreen()
+                          : const CreateVolunteerPostScreen(),
                     ),
                   );
                 },
@@ -343,8 +348,8 @@ class NgoDashboardState extends State<NgoDashboard>
             taggedOnly
                 ? "No tagged posts yet.\nPosts you are tagged in will appear here."
                 : role == 'ngo'
-                ? "No posts yet.\nCheck back later for updates!"
-                : "No posts yet.\nCheck back later for updates!",
+                    ? "No posts yet.\nCheck back later for updates!"
+                    : "No posts yet.\nCheck back later for updates!",
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 15,
@@ -385,40 +390,12 @@ class _PostCardWidgetState extends State<PostCardWidget> {
   bool _isLiked = false;
   bool _isSharing = false;
 
-
-  @override
-  void initState() {
-    super.initState();
-    _isLiked = widget.post.likedBy.contains(widget.currentUserId);   // ADD THIS
-  }
-
-@override
-  void didUpdateWidget(covariant PostCardWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _isLiked = widget.post.likedBy.contains(widget.currentUserId);   // ADD THIS
-  }
-
   void _toggleLike() {
-    final bool wasLiked = _isLiked;
-    setState(() => _isLiked = !wasLiked);
-
-    final postRef = FirebaseFirestore.instance
+    setState(() => _isLiked = !_isLiked);
+    FirebaseFirestore.instance
         .collection('posts')
-        .doc(widget.post.postId);
-
-    if (wasLiked) {
-      // Unliking
-      postRef.update({
-        'likes': FieldValue.increment(-1),
-        'likedBy': FieldValue.arrayRemove([widget.currentUserId]),
-      });
-    } else {
-      // Liking
-      postRef.update({
-        'likes': FieldValue.increment(1),
-        'likedBy': FieldValue.arrayUnion([widget.currentUserId]),
-      });
-    }
+        .doc(widget.post.postId)
+        .update({'likes': FieldValue.increment(_isLiked ? 1 : -1)});
   }
 
   Future<void> _sharePost() async {
@@ -443,9 +420,26 @@ class _PostCardWidgetState extends State<PostCardWidget> {
       File(path).writeAsBytesSync(bytes);
 
       String textToShare = "${widget.post.description}\n\n";
+
+      // ── Collect ALL tagged mentions (donor + volunteer) ──────
+      // Previously only donorId was added here, so if a post had
+      // both a donor and a volunteer tagged (or multiple tags),
+      // only one @username showed up in the shared WhatsApp text
+      // even though the post caption showed all of them.
+      // Now we gather every non-empty mention into one list and
+      // add them all, exactly like the caption does.
+      final List<String> mentions = [];
       if (widget.post.donorId.isNotEmpty) {
-        textToShare += "✨ ${widget.post.donorId}\n\n";
+        mentions.add(widget.post.donorId.trim());
       }
+      if (widget.post.volunteerName.isNotEmpty) {
+        mentions.add(widget.post.volunteerName.trim());
+      }
+
+      if (mentions.isNotEmpty) {
+        textToShare += "✨ ${mentions.join(' ')}\n\n";
+      }
+
       textToShare += "Shared via Charitey App❤️";
 
       await Share.shareXFiles([XFile(path)], text: textToShare);
@@ -559,9 +553,9 @@ class _PostCardWidgetState extends State<PostCardWidget> {
                   .collection('posts')
                   .doc(widget.post.postId)
                   .update({
-                    'description': descController.text.trim(),
-                    'donorId': tagController.text.trim(),
-                  });
+                'description': descController.text.trim(),
+                'donorId': tagController.text.trim(),
+              });
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -632,11 +626,10 @@ class _PostCardWidgetState extends State<PostCardWidget> {
                           ),
                           backgroundImage:
                               (widget.post.ngoProfileImage != null &&
-                                  widget.post.ngoProfileImage!.isNotEmpty)
-                              ? NetworkImage(widget.post.ngoProfileImage!)
-                              : null,
-                          child:
-                              (widget.post.ngoProfileImage == null ||
+                                      widget.post.ngoProfileImage!.isNotEmpty)
+                                  ? NetworkImage(widget.post.ngoProfileImage!)
+                                  : null,
+                          child: (widget.post.ngoProfileImage == null ||
                                   widget.post.ngoProfileImage!.isEmpty)
                               ? Text(
                                   widget.ngoName.isNotEmpty
@@ -770,11 +763,11 @@ class _PostCardWidgetState extends State<PostCardWidget> {
                     duration: const Duration(milliseconds: 300),
                     transitionBuilder:
                         (Widget child, Animation<double> animation) {
-                          return ScaleTransition(
-                            scale: animation,
-                            child: child,
-                          );
-                        },
+                      return ScaleTransition(
+                        scale: animation,
+                        child: child,
+                      );
+                    },
                     child: Icon(
                       _isLiked
                           ? Icons.favorite_rounded
