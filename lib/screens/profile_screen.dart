@@ -1525,13 +1525,13 @@ class ProfileScreenState extends State<ProfileScreen> {
                     sheetContext,
                     "WhatsApp",
                     Icons.chat_bubble_outline,
-                    "whatsapp://send?text=Check out Charitey App: https://charitey.app",
+                    "whatsapp://send?text=Check out Fourth Idly App: https://fourth idly.app",
                   ),
                   _buildShareOption(
                     sheetContext,
                     "Facebook",
                     Icons.facebook,
-                    "https://www.facebook.com/sharer/sharer.php?u=https://charitey.app",
+                    "https://www.facebook.com/sharer/sharer.php?u=https://fourth idly.app",
                   ),
                   _buildShareOption(
                     sheetContext,
@@ -1557,7 +1557,7 @@ class ProfileScreenState extends State<ProfileScreen> {
         try {
           await launchUrl(url, mode: LaunchMode.externalApplication);
         } catch (e) {
-          await launchUrl(Uri.parse("https://charitey.app"), mode: LaunchMode.platformDefault);
+          await launchUrl(Uri.parse("https://fourth idly.app"), mode: LaunchMode.platformDefault);
         }
       },
       child: Column(
@@ -3345,9 +3345,9 @@ class _VolunteerTaskHistoryCardState extends State<VolunteerTaskHistoryCard> {
       if (context.mounted) Navigator.pop(context);
 
       String shareMessage =
-          "I just completed a delivery of $itemInfo to $ngoName through Charitey!\n\n"
-          "Join me in helping families in need. Download Charitey and make an impact today!\n\n"
-          "#Charitey #Volunteer #SocialImpact";
+          "I just completed a delivery of $itemInfo to $ngoName through Fourth Idly!\n\n"
+          "Join me in helping families in need. Download Fourth Idly and make an impact today!\n\n"
+          "#Fourth Idly #Volunteer #SocialImpact";
 
       final xFile = XFile.fromData(
         pngBytes,
@@ -3883,7 +3883,7 @@ class VolunteerShareTemplate extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              "#ChariteyVolunteer",
+              "#Fourth Idly Volunteer",
               style: TextStyle(
                 color: themeColor,
                 fontWeight: FontWeight.bold,
@@ -3970,13 +3970,13 @@ class EnhancedDonationHistoryCardState
       }
 
       String shareMessage =
-          "I just donated $formattedQty of ${widget.itemName} to ${widget.ngoName} through Charitey!\n\n";
+          "I just donated $formattedQty of ${widget.itemName} to ${widget.ngoName} through Fourth Idly!\n\n";
       if (widget.remainingQty > 0 && widget.type.toUpperCase() != 'FOOD') {
         shareMessage +=
             "They still need ${widget.remainingQty} ${widget.unit}. Every contribution helps change lives.\n\n";
       }
       shareMessage +=
-          "Join me in helping families in need. Download Charitey and make an impact today!\n\n#Charitey #Donate #SocialImpact";
+          "Join me in helping families in need. Download Fourth Idly and make an impact today!\n\n#Fourth Idly #Donate #SocialImpact";
 
       final xFile = XFile.fromData(
         pngBytes,
@@ -4468,7 +4468,7 @@ class DonationShareTemplate extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              "#Charitey",
+              "#Fourth Idly",
               style: TextStyle(color: themeColor, fontWeight: FontWeight.bold),
             ),
           ],
