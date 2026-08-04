@@ -935,11 +935,7 @@ class ChatScreenState extends State<ChatScreen> {
             ],
           ),
           actions: [
-            IconButton(
-              icon: Icon(Icons.call_rounded, color: themeColor, size: 24),
-              onPressed: _makePhoneCall,
-              tooltip: 'Call User',
-            ),
+            
             PopupMenuButton<String>(
               icon: Icon(Icons.more_vert, color: themeColor),
               onSelected: (value) {

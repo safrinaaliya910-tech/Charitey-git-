@@ -202,6 +202,54 @@ class FirestoreService {
     }
   }
 
+  // 👇 NEW: Broadcast a brand-new pickup task to every registered volunteer 👇
+  // Fired immediately when a donation needing a platform volunteer is created,
+  // so volunteers see it right away (Rapido-style instant task alert).
+  Future<void> broadcastNewTaskToVolunteers({
+    required String donationId,
+    required String itemName,
+    required String pickupLocation, // donor location
+    required String dropLocation,   // ngo location
+    required double deliveryFee,
+  }) async {
+    try {
+      var volunteersSnap = await _firestore
+          .collection('users')
+          .where('role', isEqualTo: 'volunteer')
+          .get();
+
+      if (volunteersSnap.docs.isEmpty) return;
+
+      WriteBatch batch = _firestore.batch();
+
+      for (var volDoc in volunteersSnap.docs) {
+        String volId = volDoc.id;
+        String notifId = _firestore.collection('notifications').doc().id;
+
+        batch.set(
+          _firestore.collection('notifications').doc(notifId),
+          {
+            'id': notifId,
+            'receiverId': volId,
+            'senderId': 'system',
+            'senderName': 'New Task',
+            'type': 'new_task_available',
+            'title': 'New Pickup Task Available! 🛵',
+            'message':
+                '$itemName • $pickupLocation → $dropLocation • Earn ₹${deliveryFee.toStringAsFixed(0)}',
+            'relatedItemId': donationId,
+            'createdAt': FieldValue.serverTimestamp(),
+            'isRead': false,
+          },
+        );
+      }
+
+      await batch.commit();
+    } catch (e) {
+      print("Error broadcasting new task to volunteers: $e");
+    }
+  }
+
   // Listen for new notifications for a specific user (NGO)
   Stream<List<NotificationModel>> getUserNotifications(String userId) {
     return _firestore

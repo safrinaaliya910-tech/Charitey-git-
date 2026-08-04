@@ -15,7 +15,7 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <application
-        android:label="Charitey"
+        android:label="Fourth Idly"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
         

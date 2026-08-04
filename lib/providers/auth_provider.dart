@@ -1,3 +1,4 @@
+///auth_provider.dart
 //auth_provider.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -245,7 +246,8 @@ class AuthProvider with ChangeNotifier {
     String? profileImage,
     String? license,
     String? profession,
-    String? upiId, // 👈 Successfully added here
+    String? upiId,
+    String? vehicleType,
   }) async {
     if (_currentUserModel == null) return false;
 
@@ -259,7 +261,8 @@ class AuthProvider with ChangeNotifier {
       if (profileImage != null) data['profileImage'] = profileImage;
       if (license != null) data['license'] = license;
       if (profession != null) data['profession'] = profession;
-      if (upiId != null) data['upiId'] = upiId;  // 👈 Successfully added here
+      if (upiId != null) data['upiId'] = upiId;
+      if (vehicleType != null) data['vehicleType'] = vehicleType;
 
       if (data.isNotEmpty) {
         final uid = _currentUserModel!.uid;

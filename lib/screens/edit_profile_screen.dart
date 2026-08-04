@@ -1,10 +1,12 @@
 //edit_profile_screen.dart
+//edit_profile_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 import '../providers/auth_provider.dart';
+import '../services/fare_calculator.dart';
 import '../services/storage_service.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -19,6 +21,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _nameController;
   late TextEditingController _phoneController;
   late TextEditingController _locationController;
+  String? _selectedVehicleType;
 
   File? _newImageFile;
   bool _isUploadingImage = false;
@@ -33,6 +36,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _nameController = TextEditingController(text: user.name);
     _phoneController = TextEditingController(text: user.phone);
     _locationController = TextEditingController(text: user.location);
+    _selectedVehicleType = user.vehicleType;
   }
 
   String? get currentImageUrl =>
@@ -101,6 +105,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         name: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
         location: _locationController.text.trim(),
+        vehicleType: _selectedVehicleType,
       );
       if (mounted) Navigator.pop(context);
     } finally {
@@ -174,6 +179,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUserModel;
     final currentImageUrl = user?.profileImage;
+    final role = user?.role.toLowerCase();
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -293,6 +299,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               _buildEditField("Phone Number", _phoneController, Icons.phone_android_outlined),
               const SizedBox(height: 20),
               _buildEditField("Location", _locationController, Icons.location_on_outlined),
+              const SizedBox(height: 20),
+              if (role == 'travel_agency' || role == 'volunteer')
+                _buildVehicleDropdown(),
             ],
           ),
         ),
@@ -301,7 +310,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Widget _buildEditField(
-      String label, TextEditingController controller, IconData icon) {
+    String label,
+    TextEditingController controller,
+    IconData icon,
+  ) {
     return TextFormField(
       controller: controller,
       decoration: InputDecoration(
@@ -313,6 +325,38 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           borderSide: BorderSide(color: themeColor, width: 2),
         ),
       ),
+      validator: (value) {
+        if (value == null || value.trim().isEmpty) {
+          return 'Please enter your $label';
+        }
+        return null;
+      },
+    );
+  }
+
+  Widget _buildVehicleDropdown() {
+    return DropdownButtonFormField<String>(
+      value: _selectedVehicleType,
+      decoration: InputDecoration(
+        labelText: 'Vehicle Type',
+        prefixIcon: Icon(Icons.directions_car_outlined, color: themeColor),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide(color: themeColor, width: 2),
+        ),
+      ),
+      items: VehicleType.values.map((vehicle) {
+        return DropdownMenuItem(
+          value: vehicle.name,
+          child: Text(vehicle.name[0].toUpperCase() + vehicle.name.substring(1)),
+        );
+      }).toList(),
+      onChanged: (value) {
+        setState(() {
+          _selectedVehicleType = value;
+        });
+      },
     );
   }
 }

@@ -1,3 +1,4 @@
+//profile_setup_screen.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +9,7 @@ import '../main.dart';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../services/storage_service.dart';
+import '../services/fare_calculator.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
@@ -32,8 +34,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   // Controllers & State for Volunteer Profession Step
   final TextEditingController professionController = TextEditingController();
   String? _selectedProfessionType;
+  VehicleType? _selectedVehicle;
 
-  // 👇 NEW: Controller for Volunteer UPI ID Step 👇
+  // Controller for Volunteer UPI ID Step
   final TextEditingController upiController = TextEditingController();
 
   File? _selectedImage;
@@ -51,16 +54,22 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     addressController.dispose();
     licenseController.dispose();
     professionController.dispose();
-    upiController.dispose(); // 👇 Disposed UPI controller
+    upiController.dispose();
     super.dispose();
   }
 
-  // 👇 Volunteers now have 7 pages (Image, Name, Profession, Phone, UPI ID, Location, License) 👇
+  // 👇 UPDATED: Volunteers now have 8 pages (Image, Name, Profession, Phone,
+  // UPI ID, Vehicle, Location, License). Travel agency stays at 7 (no
+  // Profession step). Vehicle step is now shared by BOTH roles, right after
+  // the UPI step, matching the flow order Raj wants.
   int get _totalPages {
     if (widget.role == "volunteer") {
-      return 7; 
+      return 8; // Image, Name, Profession, Phone, UPI, Vehicle, Location, License
     }
-    if (widget.role == "ngo" || widget.role == "travel_agency") {
+    if (widget.role == "travel_agency") {
+      return 7; // Image, Name, Phone, UPI, Vehicle, Location, License
+    }
+    if (widget.role == "ngo") {
       return 5; // Image, Name, Phone, Location, License
     }
     return 4; // Donors: Image, Name, Phone, Location
@@ -87,7 +96,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     return regex.hasMatch(cleaned);
   }
 
-  // 👇 UPI ID Format Validation (e.g., name@upi, 9876543210@paytm) 👇
+  // UPI ID Format Validation (e.g., name@upi, 9876543210@paytm)
   bool get _isUpiFormatValid {
     String value = upiController.text.trim().toLowerCase();
     final upiRegex = RegExp(r'^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$');
@@ -103,7 +112,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     return value.isNotEmpty;
   }
 
-  // 👇 Dynamic Validation with new UPI Page Index 👇
+  // 👇 UPDATED: volunteer branch now has a Vehicle step at index 5, pushing
+  // Location to 6 and License to 7 (previously 5 and 6).
   bool get _isCurrentPageValid {
     bool isValid = true;
 
@@ -124,20 +134,39 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       } else if (_currentPage == 3) {
         isValid = phoneController.text.trim().length == 10;
       } else if (_currentPage == 4) {
-        isValid = _isUpiFormatValid; // 👇 Validates UPI ID page
+        isValid = _isUpiFormatValid; // Validates UPI ID page
+      } else if (_currentPage == 5) {
+        isValid = _selectedVehicle != null; // 👈 NEW: Vehicle step
+      } else if (_currentPage == 6) {
+        isValid = addressController.text.trim().isNotEmpty; // shifted from 5
+      } else if (_currentPage == 7) {
+        isValid = _isLicenseFormatValid; // shifted from 6
+      }
+    } else if (widget.role == 'travel_agency') {
+      if (_currentPage == 2) {
+        isValid = phoneController.text.trim().length == 10;
+      } else if (_currentPage == 3) {
+        isValid = _isUpiFormatValid;
+      } else if (_currentPage == 4) {
+        isValid = _selectedVehicle != null;
       } else if (_currentPage == 5) {
         isValid = addressController.text.trim().isNotEmpty;
       } else if (_currentPage == 6) {
         isValid = _isLicenseFormatValid;
       }
-    } else {
-      // Standard page indexes for NGOs, Donors, Travel Agencies
+    } else if (widget.role == 'ngo') {
       if (_currentPage == 2) {
         isValid = phoneController.text.trim().length == 10;
       } else if (_currentPage == 3) {
         isValid = addressController.text.trim().isNotEmpty;
       } else if (_currentPage == 4) {
         isValid = _isLicenseFormatValid;
+      }
+    } else {
+      if (_currentPage == 2) {
+        isValid = phoneController.text.trim().length == 10;
+      } else if (_currentPage == 3) {
+        isValid = addressController.text.trim().isNotEmpty;
       }
     }
 
@@ -151,7 +180,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     setState(() {});
   }
 
-  // 👇 Confirmation Dialog for UPI ID 👇
+  // Confirmation Dialog for UPI ID
   Future<bool> _showUpiConfirmationDialog(String upiId) async {
     return await showDialog<bool>(
           context: context,
@@ -299,19 +328,45 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       setState(() => _isCheckingUsername = false);
     }
 
-    // 👇 Prompt Volunteer Confirmation on the UPI step 👇
-    if (widget.role == 'volunteer' && _currentPage == 4) {
+    // 👇 UPDATED: UPI confirmation dialog trigger — volunteer's UPI page is
+    // now index 4 (unchanged), travel_agency's is index 3 (unchanged).
+    if ((widget.role == 'volunteer' && _currentPage == 4) ||
+        (widget.role == 'travel_agency' && _currentPage == 3)) {
       bool confirmed = await _showUpiConfirmationDialog(upiController.text.trim().toLowerCase());
       if (!confirmed) return; // Stay on page if user clicks "Edit ID"
     }
 
     if (_currentPage < _totalPages - 1) {
+      // 👇 UPDATED: Vehicle validation now checked for BOTH roles —
+      // travel_agency at index 4, volunteer at index 5.
+      if (((widget.role == 'travel_agency' && _currentPage == 4) ||
+              (widget.role == 'volunteer' && _currentPage == 5)) &&
+          _selectedVehicle == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Please select the vehicle you'll use for deliveries."),
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
       FocusScope.of(context).unfocus();
       _pageController.nextPage(
         duration: const Duration(milliseconds: 400),
         curve: Curves.easeInOutQuart,
       );
     } else {
+      // 👇 UPDATED: final-page vehicle guard now covers both roles.
+      if ((widget.role == 'travel_agency' || widget.role == 'volunteer') &&
+          _selectedVehicle == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Please select the vehicle you'll use for deliveries."),
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
       _saveProfile();
     }
   }
@@ -696,6 +751,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     return "CONTINUE";
   }
 
+  // 👇 UPDATED: Vehicle step now added for BOTH 'volunteer' and
+  // 'travel_agency' roles, immediately after the UPI step and before Address.
   List<Widget> _buildPages() {
     List<Widget> pages = [
       _buildImageStep(),
@@ -708,9 +765,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
 
     pages.add(_buildPhoneStep());
 
-    // 👇 Insert UPI Step ONLY for Volunteers 👇
-    if (widget.role == "volunteer") {
+    if (widget.role == "volunteer" || widget.role == "travel_agency") {
       pages.add(_buildUpiStep());
+    }
+    if (widget.role == "volunteer" || widget.role == "travel_agency") {
+      pages.add(_buildVehicleTypeStep()); // 👈 now shared by both roles
     }
 
     pages.add(_buildAddressStep());
@@ -1062,7 +1121,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     );
   }
 
-  // 👇 NEW: Step 5 Widget for Volunteer UPI ID Setup 👇
+  // Step for Volunteer/Travel Agency UPI ID Setup
   Widget _buildUpiStep() {
     bool showError = upiController.text.trim().isNotEmpty && !_isUpiFormatValid;
 
@@ -1118,6 +1177,103 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
         ],
       ),
     );
+  }
+
+  Widget _buildVehicleTypeStep() {
+    return _buildStepContainer(
+      title: "What vehicle will you use for deliveries?",
+      subtitle: "Select the vehicle you will use for delivery tasks.",
+      icon: Icons.local_shipping_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: VehicleType.values.map((vehicle) {
+              final bool isSelected = _selectedVehicle == vehicle;
+              return GestureDetector(
+                onTap: () {
+                  setState(() => _selectedVehicle = vehicle);
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 150,
+                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: isSelected ? themeColor.withOpacity(0.14) : Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: isSelected ? themeColor : Colors.grey.shade300,
+                      width: isSelected ? 2 : 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.03),
+                        blurRadius: 10,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _vehicleIcon(vehicle),
+                        color: isSelected ? themeColor : Colors.grey.shade700,
+                        size: 30,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _vehicleLabel(vehicle),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                          color: isSelected ? themeColor : Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          if (_selectedVehicle == null) ...[
+            const SizedBox(height: 14),
+            Text(
+              "Please select a vehicle to continue.",
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.red.shade400,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  IconData _vehicleIcon(VehicleType vehicleType) {
+    switch (vehicleType) {
+      case VehicleType.scooty:
+        return Icons.moped_outlined;
+      case VehicleType.bike:
+        return Icons.pedal_bike_rounded;
+      case VehicleType.auto:
+        return Icons.electric_rickshaw_rounded;
+      case VehicleType.car:
+        return Icons.directions_car_rounded;
+      case VehicleType.tempo:
+      case VehicleType.van:
+        return Icons.local_shipping_outlined;
+      case VehicleType.lorry:
+        return Icons.local_shipping_rounded;
+    }
+  }
+
+  String _vehicleLabel(VehicleType vehicleType) {
+    return vehicleType.name[0].toUpperCase() + vehicleType.name.substring(1);
   }
 
   Widget _buildAddressStep() {
@@ -1216,10 +1372,17 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
           : null,
       profileImage: profileImageUrl,
       profession: finalProfession,
-      
-      // 👇 Pass upiId to your AuthProvider / Firestore UserModel 👇
-      upiId: widget.role == 'volunteer' && upiController.text.trim().isNotEmpty
+
+      // Pass upiId to AuthProvider / Firestore UserModel
+      upiId: (widget.role == 'volunteer' || widget.role == 'travel_agency') &&
+              upiController.text.trim().isNotEmpty
           ? upiController.text.trim().toLowerCase()
+          : null,
+
+      // 👇 UPDATED: vehicleType now saved for BOTH volunteer and travel_agency
+      vehicleType: (widget.role == 'volunteer' || widget.role == 'travel_agency') &&
+              _selectedVehicle != null
+          ? _selectedVehicle!.name
           : null,
     );
 

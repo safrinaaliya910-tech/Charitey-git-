@@ -9,11 +9,13 @@ import 'dart:typed_data';
 
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
+import '../services/fare_calculator.dart';
 import '../models/post_model.dart';
 import '../models/notification_model.dart';
 import 'edit_profile_screen.dart';
 import 'role_selection_screen.dart';
 import 'ngo_dashboard.dart';
+import 'create_post_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? visitedUserId;
@@ -254,6 +256,11 @@ class ProfileScreenState extends State<ProfileScreen> {
                                       ? Icons.credit_card_rounded
                                       : Icons.verified_user_rounded,
                                   license,
+                                ),
+                              if (!isVisiting && role == 'travel_agency')
+                                _buildVehicleInfoTile(
+                                  currentUser.vehicleType,
+                                  () => _showChangeVehicleDialog(currentUser.vehicleType),
                                 ),
                               const SizedBox(height: 20),
                               Row(
@@ -723,6 +730,239 @@ class ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildVehicleInfoTile(String? vehicleType, VoidCallback onEdit) {
+    final String label = (vehicleType != null && vehicleType.trim().isNotEmpty)
+        ? _capitalize(vehicleType.trim())
+        : 'Not set';
+    final IconData icon = _vehicleIconFromString(vehicleType);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 16, color: Colors.grey),
+          const SizedBox(width: 8),
+          Text(label),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: onEdit,
+            child: Icon(
+              Icons.edit_rounded,
+              size: 18,
+              color: themeColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _vehicleIconFromString(String? vehicleType) {
+    final type = _vehicleTypeFromString(vehicleType);
+    if (type == null) {
+      return Icons.local_shipping_outlined;
+    }
+    switch (type) {
+      case VehicleType.scooty:
+        return Icons.moped_outlined;
+      case VehicleType.bike:
+        return Icons.pedal_bike_rounded;
+      case VehicleType.auto:
+        return Icons.electric_rickshaw_rounded;
+      case VehicleType.car:
+        return Icons.directions_car_rounded;
+      case VehicleType.tempo:
+      case VehicleType.van:
+        return Icons.local_shipping_outlined;
+      case VehicleType.lorry:
+        return Icons.local_shipping_rounded;
+    }
+  }
+
+  VehicleType? _vehicleTypeFromString(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    try {
+      return VehicleType.values.firstWhere(
+        (vehicle) => vehicle.name.toLowerCase() == value.trim().toLowerCase(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _capitalize(String text) {
+    if (text.isEmpty) return text;
+    return text[0].toUpperCase() + text.substring(1).toLowerCase();
+  }
+
+  Future<void> _showChangeVehicleDialog(String? currentVehicleType) async {
+    VehicleType? selectedVehicle =
+        _vehicleTypeFromString(currentVehicleType) ?? VehicleType.bike;
+
+    final bool? didSave = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              return Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header: icon + title (matches screenshot)
+                    Row(
+                      children: [
+                        Icon(Icons.directions_car_filled_rounded,
+                            color: themeColor, size: 24),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Choose Your Vehicle',
+                          style: TextStyle(
+                            color: themeColor,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Select the vehicle your travel agency uses.',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Horizontal scrollable chip row (matches screenshot)
+                    SizedBox(
+                      height: 68,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: VehicleType.values.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 10),
+                        itemBuilder: (context, index) {
+                          final vehicle = VehicleType.values[index];
+                          final bool isSelected = selectedVehicle == vehicle;
+                          return GestureDetector(
+                            onTap: () => setState(() {
+                              selectedVehicle = vehicle;
+                            }),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? themeColor.withOpacity(0.12)
+                                    : Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? themeColor
+                                      : Colors.grey.shade300,
+                                  width: isSelected ? 1.6 : 1,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _vehicleIconFromString(vehicle.name),
+                                    size: 20,
+                                    color: isSelected
+                                        ? themeColor
+                                        : Colors.grey.shade600,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    vehicle.name,
+                                    style: TextStyle(
+                                      fontWeight: isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.w500,
+                                      color: isSelected
+                                          ? themeColor
+                                          : Colors.black87,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Cancel / Continue buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: themeColor.withOpacity(0.5)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            child: Text(
+                              'Cancel',
+                              style: TextStyle(color: themeColor),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.of(context).pop(true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: themeColor,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            child: const Text('Continue'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+
+    if (didSave == true && selectedVehicle != null) {
+      await Provider.of<AuthProvider>(context, listen: false)
+          .updateProfile(vehicleType: selectedVehicle!.name);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Vehicle updated to ${_capitalize(selectedVehicle!.name)}',
+            ),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _toggleFavoriteNgo(String donorId, String ngoId, bool isFav) async {
@@ -1721,8 +1961,16 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
 
   static const Color _duskyRose = Color(0xFFB76E79);
   static const Color _duskyRoseLight = Color(0xFFE8B4BC);
-  static const Color _duskyRoseDarkText = Color(0xFF6B2737);
-  static const Color _duskyRoseLabelText = Color(0xFF7A3B48);
+  static const Color _duskyRoseDarkText = Color(0xFF5A1E29);
+  static const Color _duskyRoseLabelText = Color(0xFF6B2737);
+
+  // Statuses that count as a finished delivery for stats/badges/chart.
+  static const Set<String> _completedStatuses = {
+    'delivery_completed',
+    'completed_awaiting_payment',
+    'fully_completed',
+    'completed',
+  };
 
   int _visitStreak = 0;
 
@@ -1809,10 +2057,11 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
       var data = doc.data() as Map<String, dynamic>;
       String status = (data['status'] ?? '').toString().trim().toLowerCase();
       var ts = data['createdAt'];
+      bool isCompleted = _completedStatuses.contains(status);
 
-      if (status == 'delivery_completed') {
+      if (isCompleted) {
         totalCompleted++;
-      } else if (status != 'cancelled' && status != 'completed') {
+      } else if (status != 'cancelled') {
         totalPending++;
       }
 
@@ -1823,9 +2072,9 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
         int? idx = dayIndexMap[key];
         if (idx != null) {
           acceptedCounts[idx]++;
-          if (status == 'delivery_completed') completedCounts[idx]++;
+          if (isCompleted) completedCounts[idx]++;
         }
-        if (status == 'delivery_completed') streakDays.add(key);
+        if (isCompleted) streakDays.add(key);
       }
     }
 
@@ -1895,6 +2144,9 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
           .where('assignedVolunteerId', isEqualTo: widget.userId)
           .snapshots(),
       builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          return _buildLoadingCard();
+        }
         if (!snapshot.hasData) return const SizedBox.shrink();
 
         final stats = _computeStats(snapshot.data!.docs);
@@ -1911,12 +2163,12 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
         return Container(
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(22),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.08),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
+                color: widget.themeColor.withOpacity(0.14),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
               ),
             ],
           ),
@@ -1933,12 +2185,14 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
                       'YOUR IMPACT STORY',
                       style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: widget.themeColor, letterSpacing: 1.2),
                     ),
+                    const Spacer(),
+                    _buildLiveBadge(),
                   ],
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.only(left: 20, bottom: 16),
-                child: Text('Last 7 days  •  All Time', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                child: Text('Last 7 days  •  All Time', style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
               ),
               SizedBox(
                 height: 108,
@@ -1954,15 +2208,55 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
                 ),
               ),
               const SizedBox(height: 8),
-              Divider(color: Colors.grey.shade100, thickness: 1, height: 1),
+              Divider(color: Colors.grey.shade200, thickness: 1, height: 1),
               _buildChartSection(dayLabels, acceptedCounts, completedCounts, personalBestIndex),
-              Divider(color: Colors.grey.shade100, thickness: 1, height: 1),
+              Divider(color: Colors.grey.shade200, thickness: 1, height: 1),
               _buildBadgeSection(totalCompleted, badge),
               const SizedBox(height: 20),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildLoadingCard() {
+    return Container(
+      height: 220,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 16, offset: const Offset(0, 6)),
+        ],
+      ),
+      child: Center(child: CircularProgressIndicator(color: widget.themeColor)),
+    );
+  }
+
+  Widget _buildLiveBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.green.shade200),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            'LIVE',
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green.shade700, letterSpacing: 0.6),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2008,13 +2302,21 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
               children: [
                 Container(
                   padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.55), borderRadius: BorderRadius.circular(10)),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.7), borderRadius: BorderRadius.circular(10)),
                   child: Icon(icon, size: 16, color: _duskyRoseDarkText),
                 ),
                 const SizedBox(height: 6),
-                Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _duskyRoseDarkText)),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 350),
+                  transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+                  child: Text(
+                    value,
+                    key: ValueKey(value),
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _duskyRoseDarkText),
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(label, style: const TextStyle(fontSize: 10, color: _duskyRoseLabelText, height: 1.3, fontWeight: FontWeight.w600), maxLines: 2),
+                Text(label, style: const TextStyle(fontSize: 10, color: _duskyRoseLabelText, height: 1.3, fontWeight: FontWeight.w700), maxLines: 2),
               ],
             ),
           ],
@@ -2039,15 +2341,15 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
             children: [
               Icon(Icons.show_chart, size: 15, color: widget.themeColor),
               const SizedBox(width: 6),
-              Text('Activity (Last 7 Days)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
+              Text('Activity (Last 7 Days)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey.shade800)),
               const Spacer(),
               Container(width: 12, height: 3, decoration: BoxDecoration(color: widget.themeColor.withOpacity(0.35), borderRadius: BorderRadius.circular(2))),
               const SizedBox(width: 4),
-              Text('Accepted', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+              Text('Accepted', style: TextStyle(fontSize: 10, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
               const SizedBox(width: 10),
               Container(width: 12, height: 3, decoration: BoxDecoration(color: widget.themeColor, borderRadius: BorderRadius.circular(2))),
               const SizedBox(width: 4),
-              Text('Delivered', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+              Text('Delivered', style: TextStyle(fontSize: 10, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
             ],
           ),
           const SizedBox(height: 10),
@@ -2070,7 +2372,7 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
                         const SizedBox(width: 6),
                         Text(
                           '${labels[_selectedDayIndex!]}: ${completed[_selectedDayIndex!].toInt()} delivered, ${accepted[_selectedDayIndex!].toInt()} accepted',
-                          style: TextStyle(fontSize: 12, color: widget.themeColor, fontWeight: FontWeight.w600),
+                          style: TextStyle(fontSize: 12, color: widget.themeColor, fontWeight: FontWeight.w700),
                         ),
                       ],
                     ),
@@ -2154,11 +2456,16 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
                     const SizedBox(height: 8),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: LinearProgressIndicator(value: progress, minHeight: 8, backgroundColor: Colors.grey.shade200, valueColor: AlwaysStoppedAnimation<Color>(widget.themeColor)),
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0, end: progress),
+                        duration: const Duration(milliseconds: 600),
+                        curve: Curves.easeOut,
+                        builder: (context, value, _) => LinearProgressIndicator(value: value, minHeight: 8, backgroundColor: Colors.grey.shade200, valueColor: AlwaysStoppedAnimation<Color>(widget.themeColor)),
+                      ),
                     ),
                     const SizedBox(height: 6),
                     if (!isLegend)
-                      Text('$toNext more to become ${badge['next']} ${badge['nextEmoji']}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600))
+                      Text('$toNext more to become ${badge['next']} ${badge['nextEmoji']}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w500))
                     else
                       Text('Highest rank achieved! 🎉', style: TextStyle(fontSize: 12, color: widget.themeColor, fontWeight: FontWeight.bold)),
                   ],
@@ -2171,11 +2478,11 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [widget.themeColor.withOpacity(0.08), widget.themeColor.withOpacity(0.02)]),
+              gradient: LinearGradient(colors: [widget.themeColor.withOpacity(0.10), widget.themeColor.withOpacity(0.03)]),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: widget.themeColor.withOpacity(0.15)),
+              border: Border.all(color: widget.themeColor.withOpacity(0.18)),
             ),
-            child: Text('"${badge['quote']}"', style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontStyle: FontStyle.italic, height: 1.6), textAlign: TextAlign.center),
+            child: Text('"${badge['quote']}"', style: TextStyle(fontSize: 13, color: Colors.grey.shade800, fontStyle: FontStyle.italic, height: 1.6, fontWeight: FontWeight.w500), textAlign: TextAlign.center),
           ),
         ],
       ),
@@ -2208,8 +2515,16 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
 
   static const Color _duskyRose = Color(0xFFB76E79);
   static const Color _duskyRoseLight = Color(0xFFE8B4BC);
-  static const Color _duskyRoseDarkText = Color(0xFF6B2737);
-  static const Color _duskyRoseLabelText = Color(0xFF7A3B48);
+  static const Color _duskyRoseDarkText = Color(0xFF5A1E29);
+  static const Color _duskyRoseLabelText = Color(0xFF6B2737);
+
+  // Statuses that count as a fulfilled / completed donation.
+  static const Set<String> _completedStatuses = {
+    'delivery_completed',
+    'completed_awaiting_payment',
+    'fully_completed',
+    'completed',
+  };
 
   int _visitStreak = 0;
 
@@ -2277,6 +2592,7 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
 
   Map<String, dynamic> _computeStats(List<QueryDocumentSnapshot> docs) {
     int totalDonations = 0;
+    int totalFulfilled = 0;
     int totalPending = 0;
 
     DateTime now = DateTime.now();
@@ -2300,10 +2616,13 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
       var data = doc.data() as Map<String, dynamic>;
       String status = (data['status'] ?? '').toString().trim().toLowerCase();
       var ts = data['createdAt'];
+      bool isFulfilled = _completedStatuses.contains(status);
+      bool isCancelled = status == 'cancelled';
 
       totalDonations++;
-
-      if (status != 'cancelled') {
+      if (isFulfilled) {
+        totalFulfilled++;
+      } else if (!isCancelled) {
         totalPending++;
       }
 
@@ -2314,9 +2633,9 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
         int? idx = dayIndexMap[key];
         if (idx != null) {
           donatedCounts[idx]++;
-          if (status == 'delivery_completed') fulfilledCounts[idx]++;
+          if (isFulfilled) fulfilledCounts[idx]++;
         }
-        if (status == 'delivery_completed') streakDays.add(key);
+        if (isFulfilled) streakDays.add(key);
       }
     }
 
@@ -2344,9 +2663,10 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
 
     return {
       'totalDonations': totalDonations,
+      'totalFulfilled': totalFulfilled,
       'totalPending': totalPending,
       'streak': streak,
-      'livesTouched': totalDonations * 3,
+      'livesTouched': totalFulfilled * 3,
       'dayLabels': dayLabels,
       'donatedCounts': donatedCounts,
       'fulfilledCounts': fulfilledCounts,
@@ -2386,10 +2706,14 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
           .where('donorId', isEqualTo: widget.userId)
           .snapshots(),
       builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          return _buildLoadingCard();
+        }
         if (!snapshot.hasData) return const SizedBox.shrink();
 
         final stats = _computeStats(snapshot.data!.docs);
         final int totalDonations = stats['totalDonations'];
+        final int totalPending = stats['totalPending'];
         final int streak = _visitStreak;
         final int livesTouched = stats['livesTouched'];
         final List<String> dayLabels = List<String>.from(stats['dayLabels']);
@@ -2401,12 +2725,12 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
         return Container(
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(22),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.08),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
+                color: widget.themeColor.withOpacity(0.14),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
               ),
             ],
           ),
@@ -2423,12 +2747,14 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
                       'YOUR DONOR IMPACT',
                       style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: widget.themeColor, letterSpacing: 1.2),
                     ),
+                    const Spacer(),
+                    _buildLiveBadge(),
                   ],
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.only(left: 20, bottom: 16),
-                child: Text('Last 7 days  •  All Time', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                child: Text('Last 7 days  •  All Time', style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
               ),
               SizedBox(
                 height: 108,
@@ -2437,21 +2763,62 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   children: [
                     _buildStatChip(Icons.volunteer_activism_rounded, 'Total Donations', totalDonations.toString()),
+                    _buildStatChip(Icons.hourglass_top_rounded, 'Pending', totalPending.toString()),
                     _buildStatChip(Icons.local_fire_department_rounded, 'Streak', '$streak days'),
                     _buildStatChip(Icons.favorite_rounded, 'Lives Touched', '~$livesTouched people'),
                   ],
                 ),
               ),
               const SizedBox(height: 8),
-              Divider(color: Colors.grey.shade100, thickness: 1, height: 1),
+              Divider(color: Colors.grey.shade200, thickness: 1, height: 1),
               _buildChartSection(dayLabels, donatedCounts, fulfilledCounts, personalBestIndex),
-              Divider(color: Colors.grey.shade100, thickness: 1, height: 1),
+              Divider(color: Colors.grey.shade200, thickness: 1, height: 1),
               _buildBadgeSection(totalDonations, badge),
               const SizedBox(height: 20),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildLoadingCard() {
+    return Container(
+      height: 220,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 16, offset: const Offset(0, 6)),
+        ],
+      ),
+      child: Center(child: CircularProgressIndicator(color: widget.themeColor)),
+    );
+  }
+
+  Widget _buildLiveBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.green.shade200),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            'LIVE',
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green.shade700, letterSpacing: 0.6),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2497,13 +2864,21 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
               children: [
                 Container(
                   padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.55), borderRadius: BorderRadius.circular(10)),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.7), borderRadius: BorderRadius.circular(10)),
                   child: Icon(icon, size: 16, color: _duskyRoseDarkText),
                 ),
                 const SizedBox(height: 6),
-                Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _duskyRoseDarkText)),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 350),
+                  transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+                  child: Text(
+                    value,
+                    key: ValueKey(value),
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _duskyRoseDarkText),
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(label, style: const TextStyle(fontSize: 10, color: _duskyRoseLabelText, height: 1.3, fontWeight: FontWeight.w600), maxLines: 2),
+                Text(label, style: const TextStyle(fontSize: 10, color: _duskyRoseLabelText, height: 1.3, fontWeight: FontWeight.w700), maxLines: 2),
               ],
             ),
           ],
@@ -2528,15 +2903,15 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
             children: [
               Icon(Icons.show_chart, size: 15, color: widget.themeColor),
               const SizedBox(width: 6),
-              Text('Activity (Last 7 Days)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
+              Text('Activity (Last 7 Days)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey.shade800)),
               const Spacer(),
               Container(width: 12, height: 3, decoration: BoxDecoration(color: widget.themeColor.withOpacity(0.35), borderRadius: BorderRadius.circular(2))),
               const SizedBox(width: 4),
-              Text('Donated', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+              Text('Donated', style: TextStyle(fontSize: 10, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
               const SizedBox(width: 10),
               Container(width: 12, height: 3, decoration: BoxDecoration(color: widget.themeColor, borderRadius: BorderRadius.circular(2))),
               const SizedBox(width: 4),
-              Text('Fulfilled', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+              Text('Fulfilled', style: TextStyle(fontSize: 10, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
             ],
           ),
           const SizedBox(height: 10),
@@ -2558,8 +2933,8 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
                         Icon(Icons.touch_app_rounded, size: 14, color: widget.themeColor),
                         const SizedBox(width: 6),
                         Text(
-                          '${labels[_selectedDayIndex!]}: ${donated[_selectedDayIndex!].toInt()} donated',
-                          style: TextStyle(fontSize: 12, color: widget.themeColor, fontWeight: FontWeight.w600),
+                          '${labels[_selectedDayIndex!]}: ${fulfilled[_selectedDayIndex!].toInt()} fulfilled, ${donated[_selectedDayIndex!].toInt()} donated',
+                          style: TextStyle(fontSize: 12, color: widget.themeColor, fontWeight: FontWeight.w700),
                         ),
                       ],
                     ),
@@ -2643,11 +3018,16 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
                     const SizedBox(height: 8),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: LinearProgressIndicator(value: progress, minHeight: 8, backgroundColor: Colors.grey.shade200, valueColor: AlwaysStoppedAnimation<Color>(widget.themeColor)),
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0, end: progress),
+                        duration: const Duration(milliseconds: 600),
+                        curve: Curves.easeOut,
+                        builder: (context, value, _) => LinearProgressIndicator(value: value, minHeight: 8, backgroundColor: Colors.grey.shade200, valueColor: AlwaysStoppedAnimation<Color>(widget.themeColor)),
+                      ),
                     ),
                     const SizedBox(height: 6),
                     if (!isLegend)
-                      Text('$toNext more to become ${badge['next']} ${badge['nextEmoji']}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600))
+                      Text('$toNext more to become ${badge['next']} ${badge['nextEmoji']}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w500))
                     else
                       Text('Highest rank achieved! 🎉', style: TextStyle(fontSize: 12, color: widget.themeColor, fontWeight: FontWeight.bold)),
                   ],
@@ -2660,11 +3040,11 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [widget.themeColor.withOpacity(0.08), widget.themeColor.withOpacity(0.02)]),
+              gradient: LinearGradient(colors: [widget.themeColor.withOpacity(0.10), widget.themeColor.withOpacity(0.03)]),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: widget.themeColor.withOpacity(0.15)),
+              border: Border.all(color: widget.themeColor.withOpacity(0.18)),
             ),
-            child: Text('"${badge['quote']}"', style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontStyle: FontStyle.italic, height: 1.6), textAlign: TextAlign.center),
+            child: Text('"${badge['quote']}"', style: TextStyle(fontSize: 13, color: Colors.grey.shade800, fontStyle: FontStyle.italic, height: 1.6, fontWeight: FontWeight.w500), textAlign: TextAlign.center),
           ),
         ],
       ),
@@ -2765,7 +3145,7 @@ class _ImpactChartPainter extends CustomPainter {
     final double chartH = size.height - _padTop - _padBottom;
 
     final Paint gridPaint = Paint()
-      ..color = Colors.grey.withOpacity(0.12)
+      ..color = Colors.grey.withOpacity(0.14)
       ..strokeWidth = 1;
     for (int i = 0; i <= 4; i++) {
       double y = _padTop + (i / 4) * chartH;
@@ -2896,8 +3276,8 @@ class _ImpactChartPainter extends CustomPainter {
           text: labels[i],
           style: TextStyle(
             fontSize: 10,
-            color: isSel ? themeColor : Colors.grey.shade500,
-            fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+            color: isSel ? themeColor : Colors.grey.shade700,
+            fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
           ),
         ),
         textDirection: TextDirection.ltr,
@@ -2912,7 +3292,9 @@ class _ImpactChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(_ImpactChartPainter old) =>
       old.animationValue != animationValue ||
-      old.selectedIndex != selectedIndex;
+      old.selectedIndex != selectedIndex ||
+      old.accepted != accepted ||
+      old.completed != completed;
 }
 
 // =========================================================================
@@ -4143,7 +4525,11 @@ class FullScreenImageViewer extends StatelessWidget {
 }
 
 // =========================================================================
-// NEW: NGO DUAL RATING DIALOG
+// NGO DUAL RATING DIALOG
+// After the NGO submits ratings for the donor (and volunteer, if any), the
+// dialog no longer just closes. It switches into a mandatory "Create Post"
+// step — the only way to leave the dialog at that point is to tap
+// "Create Post Now", which takes the NGO straight into CreatePostScreen.
 // =========================================================================
 class NgoRatingDialog extends StatefulWidget {
   final String donorId;
@@ -4171,6 +4557,10 @@ class _NgoRatingDialogState extends State<NgoRatingDialog> {
   int _donorRating = 0;
   int _volunteerRating = 0;
   bool _isSubmitting = false;
+
+  // NEW: once true, the dialog shows the mandatory "Create Post" prompt
+  // instead of the rating form.
+  bool _showPostPrompt = false;
 
   Future<void> _updateUserRating(String uid, int newStars) async {
     if (uid.isEmpty || newStars == 0) return;
@@ -4235,10 +4625,14 @@ class _NgoRatingDialogState extends State<NgoRatingDialog> {
       });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ratings submitted. Thank you!')),
-      );
-      Navigator.pop(context);
+
+      // CHANGED: don't close the dialog here anymore. Instead, flip it into
+      // the mandatory "create a post" prompt — the dialog stays open until
+      // the NGO taps through to CreatePostScreen.
+      setState(() {
+        _isSubmitting = false;
+        _showPostPrompt = true;
+      });
     } catch (e) {
       setState(() => _isSubmitting = false);
       if (!mounted) return;
@@ -4268,38 +4662,123 @@ class _NgoRatingDialogState extends State<NgoRatingDialog> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    bool hasVolunteer = widget.volunteerId.isNotEmpty;
+  // NEW: the only exit from the post-rating prompt — closes this dialog and
+  // pushes straight into CreatePostScreen (the same screen the "+" / Post
+  // button on the activity tab opens).
+  void _goToCreatePost() {
+    final navigator = Navigator.of(context);
+    navigator.pop(); // close the rating/prompt dialog
+    navigator.push(
+      MaterialPageRoute(builder: (_) => const CreatePostScreen()),
+    );
+  }
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      backgroundColor: Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                shape: BoxShape.circle,
+  // NEW: mandatory post-submission prompt UI.
+  Widget _buildPostPromptContent() {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.check_circle_rounded,
+              color: Colors.green.shade600,
+              size: 40,
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            "Ratings Submitted!",
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            "Now let's share this impact with the community. Please create a post about this donation to continue.",
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade700,
+              height: 1.4,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 28),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton.icon(
+              onPressed: _goToCreatePost,
+              icon: const Icon(Icons.add_a_photo_rounded, color: Colors.white),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: widget.themeColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              child: const Icon(
-                Icons.star_rounded,
-                color: Colors.amber,
-                size: 40,
+              label: const Text(
+                "Create Post Now",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             ),
-            const SizedBox(height: 20),
-            const Text(
-              "Rate Your Experience",
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRatingFormContent(bool hasVolunteer) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade50,
+              shape: BoxShape.circle,
             ),
+            child: const Icon(
+              Icons.star_rounded,
+              color: Colors.amber,
+              size: 40,
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            "Rate Your Experience",
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            "Rate the Donor: ${widget.donorName}",
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          _buildStarRow(
+            _donorRating,
+            (r) => setState(() => _donorRating = r),
+          ),
+          if (hasVolunteer) ...[
+            const SizedBox(height: 24),
+            const Divider(),
             const SizedBox(height: 24),
             Text(
-              "Rate the Donor: ${widget.donorName}",
+              "Rate the Volunteer: ${widget.volunteerName}",
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -4308,68 +4787,70 @@ class _NgoRatingDialogState extends State<NgoRatingDialog> {
             ),
             const SizedBox(height: 8),
             _buildStarRow(
-              _donorRating,
-              (r) => setState(() => _donorRating = r),
-            ),
-            if (hasVolunteer) ...[
-              const SizedBox(height: 24),
-              const Divider(),
-              const SizedBox(height: 24),
-              Text(
-                "Rate the Volunteer: ${widget.volunteerName}",
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              _buildStarRow(
-                _volunteerRating,
-                (r) => setState(() => _volunteerRating = r),
-              ),
-            ],
-            const SizedBox(height: 30),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _isSubmitting ? null : _submitRatings,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: widget.themeColor,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: _isSubmitting
-                    ? const SizedBox(
-                        height: 24,
-                        width: 24,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2.5,
-                        ),
-                      )
-                    : const Text(
-                        "Submit Ratings",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                "Skip for now",
-                style: TextStyle(color: Colors.grey.shade500),
-              ),
+              _volunteerRating,
+              (r) => setState(() => _volunteerRating = r),
             ),
           ],
-        ),
+          const SizedBox(height: 30),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: _isSubmitting ? null : _submitRatings,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: widget.themeColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: _isSubmitting
+                  ? const SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2.5,
+                      ),
+                    )
+                  : const Text(
+                      "Submit Ratings",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              "Skip for now",
+              style: TextStyle(color: Colors.grey.shade500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    bool hasVolunteer = widget.volunteerId.isNotEmpty;
+
+    return WillPopScope(
+      // NEW: once ratings are submitted and the "create post" prompt is
+      // showing, block the Android back button too — the NGO must tap
+      // "Create Post Now" to proceed. This is what makes the post-review
+      // navigation compulsory rather than optional.
+      onWillPop: () async => !_showPostPrompt,
+      child: Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: Colors.white,
+        child: _showPostPrompt
+            ? _buildPostPromptContent()
+            : _buildRatingFormContent(hasVolunteer),
       ),
     );
   }

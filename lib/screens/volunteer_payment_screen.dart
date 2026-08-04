@@ -1,6 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
+import '../services/firestore_service.dart';
+import '../models/notification_model.dart';
 import 'rating_dialog.dart';
 
 class VolunteerPaymentScreen extends StatefulWidget {
@@ -15,49 +20,33 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
   final Color themeColor = const Color(0xFF7D444C);
   bool _isLoading = true;
   bool _hasAttemptedPayment = false;
-
-  // 👇 NEW: tracks whether this donation was already paid before this screen opened.
-  // This is what prevents the "payment already done but screen opens again" bug,
-  // no matter which entry point (home screen listener OR notification tap) opened it.
-  bool _alreadyPaid = false;
+  bool _isWaitingForVolunteer = false;
 
   double _feeAmount = 0.0;
   String _volunteerId = "";
   String _volunteerName = "";
   String _volunteerUpi = "";
+  String _itemName = "Delivery Item";
+
+  StreamSubscription<DocumentSnapshot>? _donationSubscription;
 
   @override
   void initState() {
     super.initState();
-    _fetchPaymentDetails();
+    _fetchInitialDetails();
+    _listenToDonationStatus();
   }
 
-  Future<void> _fetchPaymentDetails() async {
+  Future<void> _fetchInitialDetails() async {
     try {
-      // 1. Fetch Donation Doc
       var donSnap = await FirebaseFirestore.instance.collection('donations').doc(widget.donationId).get();
-      if (!donSnap.exists) {
-        setState(() => _isLoading = false);
-        return;
-      }
-
+      if (!donSnap.exists) return;
+      
       var donData = donSnap.data() as Map<String, dynamic>;
-
-      // 👇 NEW: Check current status BEFORE showing the "pay now" UI.
-      // If it's already fully_completed / paid, we don't need fee or volunteer
-      // details at all — we just flag it and bail out early.
-      final String status = donData['status'] ?? '';
-      final String paymentStatus = donData['paymentStatus'] ?? '';
-      if (status == 'fully_completed' || paymentStatus == 'paid') {
-        _alreadyPaid = true;
-        setState(() => _isLoading = false);
-        return;
-      }
-
       _feeAmount = (donData['deliveryFee'] as num?)?.toDouble() ?? 35.0;
       _volunteerId = donData['assignedVolunteerId'] ?? '';
+      _itemName = donData['items'] ?? donData['itemName'] ?? 'Delivery Item';
 
-      // 2. Fetch Volunteer Doc for UPI ID
       if (_volunteerId.isNotEmpty) {
         var volSnap = await FirebaseFirestore.instance.collection('users').doc(_volunteerId).get();
         if (volSnap.exists) {
@@ -66,11 +55,53 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
           _volunteerUpi = volData['upiId'] ?? '';
         }
       }
-
       setState(() => _isLoading = false);
     } catch (e) {
       setState(() => _isLoading = false);
     }
+  }
+
+  // 👇 REAL-TIME LISTENER: Automatically unlocks when Volunteer approves 👇
+  void _listenToDonationStatus() {
+    _donationSubscription = FirebaseFirestore.instance
+        .collection('donations')
+        .doc(widget.donationId)
+        .snapshots()
+        .listen((snap) {
+      if (snap.exists && mounted) {
+        var data = snap.data() as Map<String, dynamic>;
+        String status = data['status'] ?? '';
+
+        if (status == 'fully_completed') {
+          // Volunteer clicked YES! Unlock and show rating!
+          _donationSubscription?.cancel();
+          Navigator.pop(context); // Close the lock screen
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => RatingDialog(
+              volunteerId: _volunteerId,
+              volunteerName: _volunteerName,
+              donationId: widget.donationId,
+            ),
+          );
+        } else if (status == 'payment_verification_pending') {
+          setState(() => _isWaitingForVolunteer = true);
+        } else if (status == 'completed_awaiting_payment') {
+          // Volunteer clicked NO. Reset back to payment buttons.
+          setState(() {
+            _isWaitingForVolunteer = false;
+            _hasAttemptedPayment = false;
+          });
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _donationSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _launchUPI() async {
@@ -82,74 +113,52 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
       return;
     }
 
-    // Safely encode spaces so the URL doesn't break
     String safeName = Uri.encodeComponent(_volunteerName);
     String safeNote = Uri.encodeComponent("Charitey Delivery Fee");
-
     String upiUrl = "upi://pay?pa=${_volunteerUpi.trim()}&pn=$safeName&am=$_feeAmount&cu=INR&tn=$safeNote";
 
     try {
       bool launched = await launchUrl(Uri.parse(upiUrl), mode: LaunchMode.externalApplication);
       if (!launched) throw Exception("Could not launch");
-
-      // Update UI to show confirmation buttons after they return from UPI app
       setState(() => _hasAttemptedPayment = true);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No UPI App found (GPay, PhonePe, etc.)'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('No UPI App found. Please check your apps.'), backgroundColor: Colors.red),
       );
-      setState(() => _hasAttemptedPayment = true); // Let them manually bypass if it breaks
+      setState(() => _hasAttemptedPayment = true); 
     }
   }
 
-  Future<void> _confirmPaymentComplete() async {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Center(child: CircularProgressIndicator(color: themeColor)),
-    );
-
+  // 👇 NOTIFIES VOLUNTEER FOR VERIFICATION INSTEAD OF UNLOCKING 👇
+  Future<void> _notifyVolunteerForVerification() async {
+    setState(() => _isWaitingForVolunteer = true);
+    
     try {
       await FirebaseFirestore.instance.collection('donations').doc(widget.donationId).update({
-        'status': 'fully_completed',
-        'paymentStatus': 'paid',
+        'status': 'payment_verification_pending',
       });
 
-      // 👇 NEW: Mark any existing "payment_pending" notifications for this donation
-      // as read, so they don't keep sitting in the notification list as an
-      // actionable item after payment is already done.
-      try {
-        final notifSnap = await FirebaseFirestore.instance
-            .collection('notifications')
-            .where('relatedItemId', isEqualTo: widget.donationId)
-            .where('type', isEqualTo: 'payment_pending')
-            .get();
-        for (var doc in notifSnap.docs) {
-          await doc.reference.update({'isRead': true});
-        }
-      } catch (_) {
-        // Non-critical cleanup — ignore failures here so it never blocks payment flow.
-      }
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final currentUser = authProvider.currentUserModel!;
 
-      if (!mounted) return;
-      Navigator.pop(context); // close loader
-      Navigator.pop(context); // close payment screen
-
-      // Open Rating Dialog instantly after payment screen closes
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => RatingDialog(
-          volunteerId: _volunteerId,
-          volunteerName: _volunteerName,
-          donationId: widget.donationId,
-        ),
+      String notifId = FirebaseFirestore.instance.collection('notifications').doc().id;
+      NotificationModel notif = NotificationModel(
+        id: notifId,
+        receiverId: _volunteerId,
+        senderId: currentUser.uid,
+        senderName: currentUser.name,
+        type: 'verify_payment',
+        title: 'Payment Verification Required',
+        message: 'Donor ${currentUser.name} says they have paid the ₹${_feeAmount.toStringAsFixed(0)} delivery fee for $_itemName. Please confirm if you received it.',
+        relatedItemId: widget.donationId,
+        createdAt: DateTime.now(),
+        isRead: false,
       );
+      await FirestoreService().sendNotification(notif);
 
     } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error updating payment.')));
+      setState(() => _isWaitingForVolunteer = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error contacting volunteer. Try again.')));
     }
   }
 
@@ -159,33 +168,10 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
       return Scaffold(backgroundColor: Colors.white, body: Center(child: CircularProgressIndicator(color: themeColor)));
     }
 
-    // 👇 NEW: If this donation was already paid before this screen even opened,
-    // don't show the lock/payment UI at all. Just notify and pop back out.
-    // This is the fix for: home screen already showed payment -> user paid ->
-    // user then taps the old notification -> screen would reopen asking to pay again.
-    if (_alreadyPaid) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('This delivery fee is already paid ✅'), backgroundColor: Colors.green),
-          );
-          Navigator.pop(context);
-        }
-      });
-      return const Scaffold(backgroundColor: Colors.white, body: SizedBox.shrink());
-    }
-
     return PopScope(
-      canPop: false, // Prevent swiping back
+      canPop: false, 
       child: Scaffold(
-        backgroundColor: const Color(0xFFFDF7F8),
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          backgroundColor: Colors.white,
-          elevation: 0,
-          title: Text("Pending Payment", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold)),
-          centerTitle: true,
-        ),
+        backgroundColor: Colors.black.withOpacity(0.5),
         body: Center(
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 24),
@@ -193,80 +179,97 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(28),
-              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 20)],
+              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 20)],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(color: Colors.red.shade50, shape: BoxShape.circle),
-                  child: const Icon(Icons.lock_rounded, color: Colors.red, size: 36),
+                  decoration: BoxDecoration(
+                    color: _isWaitingForVolunteer ? Colors.blue.shade50 : Colors.red.shade50, 
+                    shape: BoxShape.circle
+                  ),
+                  child: Icon(
+                    _isWaitingForVolunteer ? Icons.hourglass_top_rounded : Icons.lock_rounded, 
+                    color: _isWaitingForVolunteer ? Colors.blue : Colors.red, 
+                    size: 36
+                  ),
                 ),
                 const SizedBox(height: 20),
-                const Text(
-                  "Action Required",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.black87),
+                Text(
+                  _isWaitingForVolunteer ? "Awaiting Verification" : "Action Required",
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.black87),
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  "Your delivery has been safely completed by $_volunteerName!\n\nPlease clear the delivery fee to unlock full access.",
+                  _isWaitingForVolunteer 
+                      ? "We have notified $_volunteerName. \nYour screen will unlock automatically the moment they confirm receipt."
+                      : "Your delivery has been safely completed by $_volunteerName!\n\nPlease clear the delivery fee to unlock full access.",
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 14, color: Colors.grey.shade600, height: 1.4),
                 ),
                 const SizedBox(height: 24),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.green.shade200),
+                
+                if (!_isWaitingForVolunteer) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text("Delivery Fee Due:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                        Text("₹${_feeAmount.toStringAsFixed(0)}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.green)),
+                      ],
+                    ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text("Delivery Fee Due:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
-                      Text("₹${_feeAmount.toStringAsFixed(0)}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.green)),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
+                  const SizedBox(height: 24),
 
-                if (!_hasAttemptedPayment) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: _launchUPI,
-                      icon: const Icon(Icons.payment_rounded, color: Colors.white),
-                      label: Text("Pay ₹${_feeAmount.toStringAsFixed(0)} via UPI", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: themeColor,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  if (!_hasAttemptedPayment) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: _launchUPI,
+                        icon: const Icon(Icons.payment_rounded, color: Colors.white),
+                        label: Text("Pay ₹${_feeAmount.toStringAsFixed(0)} via UPI", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: themeColor,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
                       ),
                     ),
-                  ),
+                  ] else ...[
+                    const Text("Did the payment succeed?", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: _notifyVolunteerForVerification,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        child: const Text("Yes, Payment Completed", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: () => setState(() => _hasAttemptedPayment = false),
+                      child: const Text("No, let me try again", style: TextStyle(color: Colors.redAccent)),
+                    )
+                  ]
                 ] else ...[
-                  // Shows AFTER they click the UPI button and return to the app
-                  const Text("Did the payment succeed?", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: _confirmPaymentComplete,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                      child: const Text("Yes, Payment Completed", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: () => setState(() => _hasAttemptedPayment = false),
-                    child: const Text("No, let me try again", style: TextStyle(color: Colors.redAccent)),
+                  // Showing waiting spinner
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20.0),
+                    child: CircularProgressIndicator(color: Colors.blue),
                   )
                 ]
               ],

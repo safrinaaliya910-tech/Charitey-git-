@@ -246,34 +246,22 @@ class HomeScreenState extends State<HomeScreen> {
         title: Row(
           children: [
             const SizedBox(width: 16), // 👈 Provides a clean, standardized margin from the screen edge
-            Container(
-              height: 42, // 👈 Kept compact so the background circle stays normal
-              width: 42,  // 👈 Kept compact so the background circle stays normal
-              decoration: BoxDecoration(
+           Container(
+              height: 44, // Slightly larger for a premium feel
+              width: 44,
+              decoration: const BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
+                // 👇 We removed the shadow and background color so it blends flawlessly into the AppBar
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(21),
-                child: Transform.scale(
-                  scale: 1.3, // 👈 Upscales ONLY the bird icon inside the asset to fill the circle
-                  child: Image.asset(
-                    'assets/dove_icons.png',
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: Colors.grey.shade200,
-                        child: const Icon(Icons.broken_image, size: 18),
-                      );
-                    },
-                  ),
+              clipBehavior: Clip.hardEdge, // 👇 This guarantees a perfect circular crop
+              child: Transform.scale(
+                scale: 1.15, // 👇 This slight zoom removes the logo's inner background border!
+                child: Image.asset(
+                  'assets/app_logo.png',
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Icon(Icons.broken_image, size: 20, color: Colors.grey);
+                  },
                 ),
               ),
             ),

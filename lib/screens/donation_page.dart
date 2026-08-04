@@ -11,6 +11,8 @@ import '../models/ngo_listing_model.dart';
 import '../models/donation_model.dart';
 import '../models/notification_model.dart';
 import '../providers/auth_provider.dart';
+import '../services/fare_calculator.dart';
+import '../services/location_service.dart';
 import 'location_picker_screen.dart'; // 👇 NEW: For map picking
 import 'dart:async';
 import 'dart:ui' as ui;
@@ -41,6 +43,7 @@ class _DonationPageState extends State<DonationPage> {
 
   // 👇 NEW: Variables for Distance Math 👇
   LatLng? _donorLatLng;
+  double _distanceKm = 0.0;
   double _calculatedFee = 0.0;
 
   @override
@@ -187,24 +190,34 @@ class _DonationPageState extends State<DonationPage> {
         );
         return;
       }
-      
+
       if (widget.listing.pickupLat != null && widget.listing.pickupLng != null) {
-        // Calculate Distance in meters
         double distanceMeters = Geolocator.distanceBetween(
-          _donorLatLng!.latitude, _donorLatLng!.longitude,
-          widget.listing.pickupLat!, widget.listing.pickupLng!
+          _donorLatLng!.latitude,
+          _donorLatLng!.longitude,
+          widget.listing.pickupLat!,
+          widget.listing.pickupLng!,
         );
-        
-        // Convert to KM
-        double distanceKm = distanceMeters / 1000;
-        
-        // Apply Rate: ₹10 per KM
-        _calculatedFee = (distanceKm * 10).roundToDouble();
-        
-        // Minimum Fee threshold
-        if (_calculatedFee < 20.0) {
-          _calculatedFee = 20.0;
-        }
+
+        final double straightDistanceKm = distanceMeters / 1000;
+        final double? routeDistanceKm = await LocationHelperService.getRouteDistanceKm(
+          originLat: _donorLatLng!.latitude,
+          originLng: _donorLatLng!.longitude,
+          destLat: widget.listing.pickupLat!,
+          destLng: widget.listing.pickupLng!,
+        );
+
+        final double distanceKm = routeDistanceKm ?? straightDistanceKm;
+        _distanceKm = distanceKm;
+
+        // Use the shared vehicle fare calculator so volunteer pricing stays
+        // consistent across donor and volunteer screens.
+        // The listing model does not carry a vehicle field, so we default to
+        // bike for now and keep the logic centralized in FareCalculator.
+        _calculatedFee = FareCalculator.calculate(
+          vehicle: VehicleType.bike,
+          distanceKm: distanceKm,
+        );
       }
     }
     // 👆 END MATH 👆
@@ -242,6 +255,7 @@ class _DonationPageState extends State<DonationPage> {
         
         // 👇 NEW: Attaching Phase 2 Math Data 👇
         deliveryFee: _calculatedFee > 0 ? _calculatedFee : null,
+        distanceKm: _distanceKm > 0 ? _distanceKm : null,
         donorLat: _donorLatLng?.latitude,
         donorLng: _donorLatLng?.longitude,
       );

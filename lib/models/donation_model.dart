@@ -1,3 +1,4 @@
+//lib/models/donation_model.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class DonationModel {
@@ -17,6 +18,7 @@ class DonationModel {
 
   // 👇 NEW: Delivery Math & Location Fields for Volunteers 👇
   final double? deliveryFee;
+  final double? distanceKm;
   final double? donorLat;
   final double? donorLng;
 
@@ -34,6 +36,7 @@ class DonationModel {
     this.cancelReason,
     this.cancelledAt,
     this.deliveryFee, // <-- NEW
+    this.distanceKm,  // <-- NEW
     this.donorLat,    // <-- NEW
     this.donorLng,    // <-- NEW
   });
@@ -53,6 +56,7 @@ class DonationModel {
       'cancelReason': cancelReason,
       'cancelledAt': cancelledAt != null ? Timestamp.fromDate(cancelledAt!) : null,
       'deliveryFee': deliveryFee, // <-- NEW
+      'distanceKm': distanceKm,   // <-- NEW
       'donorLat': donorLat,       // <-- NEW
       'donorLng': donorLng,       // <-- NEW
     };
@@ -75,6 +79,7 @@ class DonationModel {
       
       // 👇 NEW: Safe parsing for doubles from Firestore 👇
       deliveryFee: (map['deliveryFee'] as num?)?.toDouble(),
+      distanceKm: (map['distanceKm'] as num?)?.toDouble(),
       donorLat: (map['donorLat'] as num?)?.toDouble(),
       donorLng: (map['donorLng'] as num?)?.toDouble(),
     );
