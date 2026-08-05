@@ -9,7 +9,7 @@ import 'screens/profile_setup_screen.dart';
 import 'providers/auth_provider.dart';
 import 'services/notification_service.dart';
 import 'package:flutter/foundation.dart';
-import 'screens/forgot_password_screen.dart';
+import 'screens/pending_verification_screen.dart';
 
 // --- FIX 1: Removed the underscore from HomeScreenState ---
 final GlobalKey<HomeScreenState> homeScreenKey = GlobalKey<HomeScreenState>();
@@ -72,15 +72,19 @@ class AuthWrapper extends StatelessWidget {
       return const SplashScreen();
     }
 
-    // 2. THE LOOP FIX: Only force setup if the user has NO data at all.
-    // If they have either a phone OR a location, we treat them as finished.
-    // This allows users to skip parts of the setup without getting stuck.
+    // 2. Only force setup if the user has NO data at all.
     if (user.phone.isEmpty && user.location.isEmpty) {
       return ProfileSetupScreen(role: user.role);
-    } 
-    
-    // 3. Go Home
-    // --- FIX 2: Attach the GlobalKey to the HomeScreen! ---
-    return HomeScreen(key: homeScreenKey); 
+    }
+
+    // 3. NEW — NGO/Volunteer waiting on admin verification
+    final bool requiresVerification = user.role == 'ngo' || user.role == 'volunteer';
+    final bool isVerified = user.status == 'approved' || user.status == 'active';
+    if (requiresVerification && !isVerified) {
+      return const PendingVerificationScreen();
+    }
+
+    // 4. Go Home
+    return HomeScreen(key: homeScreenKey);
   }
 }

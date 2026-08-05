@@ -13,6 +13,11 @@ class AuthProvider with ChangeNotifier {
 
   late final StreamSubscription<User?> _authSubscription;
 
+  // 👇 NEW: live listener on the signed-in user's own Firestore document.
+  // This is what makes admin approve/reject/block actions reflect in the
+  // app INSTANTLY, without the user needing to log out and back in.
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userDocSubscription;
+
   UserModel? _currentUserModel;
   bool _isLoading = false;
 
@@ -38,6 +43,8 @@ class AuthProvider with ChangeNotifier {
       if (firebaseUser != null) {
         await _fetchUserData(firebaseUser.uid);
       } else {
+        _userDocSubscription?.cancel();
+        _userDocSubscription = null;
         _currentUserModel = null;
         notifyListeners();
       }
@@ -52,6 +59,31 @@ class AuthProvider with ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+
+    // 👇 NEW: start (or restart) the live listener for this uid.
+    _listenToUserStatusChanges(uid);
+  }
+
+  // 👇 NEW: subscribes to the user's own document. Any Firestore write to it
+  // — most importantly an admin approving/rejecting/blocking them from the
+  // web panel — rebuilds anything watching `currentUserModel` immediately.
+  void _listenToUserStatusChanges(String uid) {
+    _userDocSubscription?.cancel();
+    _userDocSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .listen(
+      (snapshot) {
+        final data = snapshot.data();
+        if (data == null) return;
+        _currentUserModel = UserModel.fromMap(data, snapshot.id);
+        notifyListeners();
+      },
+      onError: (e) {
+        debugPrint('User status listener error: $e');
+      },
+    );
   }
 
   // ================= SIGN IN =================
@@ -229,6 +261,8 @@ class AuthProvider with ChangeNotifier {
     try {
       //await FirebaseAuth.instance.signOut();
       await _authService.signOut();
+      await _userDocSubscription?.cancel(); // 👈 NEW: stop listening on sign out
+      _userDocSubscription = null;
       _currentUserModel = null;
       notifyListeners();
     } catch (e) {
@@ -248,6 +282,8 @@ class AuthProvider with ChangeNotifier {
     String? profession,
     String? upiId,
     String? vehicleType,
+    String? licenseDocumentUrl,
+    String? status, // 👈 NEW: e.g. set to 'pending' right after doc upload
   }) async {
     if (_currentUserModel == null) return false;
 
@@ -263,6 +299,8 @@ class AuthProvider with ChangeNotifier {
       if (profession != null) data['profession'] = profession;
       if (upiId != null) data['upiId'] = upiId;
       if (vehicleType != null) data['vehicleType'] = vehicleType;
+      if (licenseDocumentUrl != null) data['licenseDocumentUrl'] = licenseDocumentUrl;
+      if (status != null) data['status'] = status; // 👈 NEW
 
       if (data.isNotEmpty) {
         final uid = _currentUserModel!.uid;
@@ -316,6 +354,7 @@ class AuthProvider with ChangeNotifier {
   @override
   void dispose() {
     _authSubscription.cancel();
+    _userDocSubscription?.cancel(); // 👈 NEW
     super.dispose();
   }
 }

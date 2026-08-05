@@ -20,8 +20,15 @@ class UserModel {
   final String? profession;
   final String? upiId;
   final String? vehicleType;
-  
-  // 👇 NEW: Fields for the 5-Star Rating System 👇
+  final String? licenseDocumentUrl;
+
+  // 👇 NEW: Verification status. Admin-controlled via the web panel.
+  // 'pending' -> waiting for admin review (default for ngo/volunteer)
+  // 'approved' / 'active' -> can access the home screen
+  // 'rejected' / 'blocked' -> access denied, shown a message
+  final String status;
+
+  // 👇 Fields for the 5-Star Rating System 👇
   final double averageRating;
   final int totalReviews;
 
@@ -43,8 +50,10 @@ class UserModel {
     this.profession,
     this.upiId,
     this.vehicleType,
-    this.averageRating = 0.0, // 👈 Default to 0.0
-    this.totalReviews = 0,    // 👈 Default to 0
+    this.licenseDocumentUrl,
+    this.status = 'active', // 👈 NEW: real default is computed in fromMap based on role
+    this.averageRating = 0.0,
+    this.totalReviews = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -66,12 +75,23 @@ class UserModel {
       'profession': profession,
       'upiId': upiId,
       'vehicleType': vehicleType,
-      'averageRating': averageRating, // 👈 Added to map
-      'totalReviews': totalReviews,   // 👈 Added to map
+      'licenseDocumentUrl': licenseDocumentUrl,
+      'status': status, // 👈 NEW: added to map
+      'averageRating': averageRating,
+      'totalReviews': totalReviews,
     };
   }
 
   factory UserModel.fromMap(Map<String, dynamic> map, String documentId) {
+    final String roleValue = (map['role'] ?? 'user').toString().toLowerCase();
+
+    // 👇 NEW: Matches the admin panel's default logic exactly — ngo and
+    // volunteer accounts are 'pending' until an admin reviews their
+    // uploaded document, unless Firestore already has an explicit status.
+    final bool requiresVerification = roleValue == 'ngo' || roleValue == 'volunteer';
+    final String resolvedStatus = (map['status'] as String?)?.toLowerCase() ??
+        (requiresVerification ? 'pending' : 'active');
+
     return UserModel(
       uid: documentId,
       name: map['name'] ?? '',
@@ -91,9 +111,9 @@ class UserModel {
       favorites: List<String>.from(map['favorites'] ?? []),
       profession: map['profession'], 
       upiId: map['upiId'],
-      vehicleType: map['vehicleType'],           
-      
-      // 👇 Safely parse rating data from Firebase 👇
+      vehicleType: map['vehicleType'],
+      licenseDocumentUrl: map['licenseDocumentUrl'],
+      status: resolvedStatus, // 👈 NEW
       averageRating: (map['averageRating'] as num?)?.toDouble() ?? 0.0,
       totalReviews: (map['totalReviews'] as num?)?.toInt() ?? 0,
     );

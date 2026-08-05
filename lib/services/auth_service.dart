@@ -19,6 +19,18 @@ class AuthService {
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
+  // 👇 NEW: single source of truth for "what status does a brand-new user
+  // start with". ngo/volunteer accounts require admin document review and
+  // must start 'pending'; everyone else starts 'active'. Both signup paths
+  // below (email/password AND Google) call this instead of relying on
+  // UserModel's constructor default (which was always 'active' and was
+  // silently writing 'active' to Firestore for every new signup — that's
+  // why the pending screen and admin Approve/Reject buttons never showed).
+  String _initialStatusForRole(String role) {
+    final r = role.toLowerCase();
+    return (r == 'ngo' || r == 'volunteer') ? 'pending' : 'active';
+  }
+
   // ================= SIGN UP =================
 
   Future<UserModel?> signUpWithEmailAndPassword({
@@ -47,6 +59,7 @@ class AuthService {
           location: location,
           profileImage: '',
           createdAt: DateTime.now(),
+          status: _initialStatusForRole(role), // 👈 FIX
         );
 
         await _firestore.collection('users').doc(user.uid).set(newUser.toMap());
@@ -202,6 +215,7 @@ class AuthService {
         location: '',
         profileImage: user.photoURL ?? '',
         createdAt: DateTime.now(),
+        status: _initialStatusForRole(role), // 👈 FIX
       );
       await docRef.set(newUser.toMap());
       return newUser;

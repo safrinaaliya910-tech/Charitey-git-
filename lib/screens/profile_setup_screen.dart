@@ -11,6 +11,9 @@ import 'package:flutter/foundation.dart';
 import '../services/storage_service.dart';
 import '../services/fare_calculator.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:qr_flutter/qr_flutter.dart'; // 👈 for the UPI QR preview in the confirmation dialog
+import 'pending_verification_screen.dart'; // 👈 NEW: "awaiting admin verification" screen
 
 class ProfileSetupScreen extends StatefulWidget {
   final String role;
@@ -45,6 +48,26 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   bool agreedToTerms = false;
   final Color themeColor = const Color(0xFFB56F76);
 
+  // Verification document (PDF) for NGO license / volunteer driving license.
+  // Required so an admin can manually verify the physical ID in the admin
+  // panel — the regex on the text field alone can't confirm it's genuine.
+  File? _licenseDocumentFile;
+  Uint8List? _licenseDocumentBytes;
+  String? _licenseDocumentFileName;
+  int? _licenseDocumentSizeBytes;
+  String? _licenseDocumentUrl;
+  bool _isUploadingLicenseDoc = false;
+  double _uploadProgress = 0.0;
+  String? _uploadError;
+
+  static const int _maxDocumentSizeBytes = 5 * 1024 * 1024; // 5 MB
+
+  bool get _requiresLicenseDocument =>
+      widget.role == 'ngo' || widget.role == 'volunteer';
+
+  bool get _isLicenseDocumentValid =>
+      !_requiresLicenseDocument || _licenseDocumentUrl != null;
+
   @override
   void dispose() {
     _pageController.dispose();
@@ -58,10 +81,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     super.dispose();
   }
 
-  // 👇 UPDATED: Volunteers now have 8 pages (Image, Name, Profession, Phone,
-  // UPI ID, Vehicle, Location, License). Travel agency stays at 7 (no
-  // Profession step). Vehicle step is now shared by BOTH roles, right after
-  // the UPI step, matching the flow order Raj wants.
+  // 👇 Volunteers have 8 pages (Image, Name, Profession, Phone, UPI ID,
+  // Vehicle, Location, License). Travel agency stays at 7 (no Profession
+  // step). Vehicle step is shared by BOTH roles, right after the UPI step.
   int get _totalPages {
     if (widget.role == "volunteer") {
       return 8; // Image, Name, Profession, Phone, UPI, Vehicle, Location, License
@@ -112,8 +134,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     return value.isNotEmpty;
   }
 
-  // 👇 UPDATED: volunteer branch now has a Vehicle step at index 5, pushing
-  // Location to 6 and License to 7 (previously 5 and 6).
+  // 👇 volunteer branch has a Vehicle step at index 5, pushing Location to 6
+  // and License to 7.
   bool get _isCurrentPageValid {
     bool isValid = true;
 
@@ -136,11 +158,12 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       } else if (_currentPage == 4) {
         isValid = _isUpiFormatValid; // Validates UPI ID page
       } else if (_currentPage == 5) {
-        isValid = _selectedVehicle != null; // 👈 NEW: Vehicle step
+        isValid = _selectedVehicle != null; // Vehicle step
       } else if (_currentPage == 6) {
         isValid = addressController.text.trim().isNotEmpty; // shifted from 5
       } else if (_currentPage == 7) {
-        isValid = _isLicenseFormatValid; // shifted from 6
+        // 👇 UPDATED: also requires the verification PDF to finish uploading
+        isValid = _isLicenseFormatValid && _isLicenseDocumentValid;
       }
     } else if (widget.role == 'travel_agency') {
       if (_currentPage == 2) {
@@ -160,7 +183,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       } else if (_currentPage == 3) {
         isValid = addressController.text.trim().isNotEmpty;
       } else if (_currentPage == 4) {
-        isValid = _isLicenseFormatValid;
+        // 👇 UPDATED: also requires the verification PDF to finish uploading
+        isValid = _isLicenseFormatValid && _isLicenseDocumentValid;
       }
     } else {
       if (_currentPage == 2) {
@@ -181,7 +205,19 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   }
 
   // Confirmation Dialog for UPI ID
+  // Shows a live QR preview built from the entered VPA so the volunteer can
+  // scan it with their OWN UPI app before confirming. Real UPI apps resolve
+  // the VPA and display the actual bank-registered account name during the
+  // scan preview — genuine name verification straight from NPCI, at zero
+  // cost, and catches subtle typos the regex alone can't.
   Future<bool> _showUpiConfirmationDialog(String upiId) async {
+    String safeName = Uri.encodeComponent(nameController.text.trim().isNotEmpty
+        ? nameController.text.trim()
+        : "Charitey User");
+    // No 'am' (amount) included on purpose — this QR is only for identity
+    // verification, not an actual payment request.
+    String previewUri = "upi://pay?pa=$upiId&pn=$safeName&cu=INR";
+
     return await showDialog<bool>(
           context: context,
           barrierDismissible: false,
@@ -194,80 +230,117 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
               elevation: 10,
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: themeColor.withOpacity(0.1),
-                        shape: BoxShape.circle,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: themeColor.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.account_balance_wallet_rounded,
+                            color: themeColor, size: 36),
                       ),
-                      child: Icon(Icons.account_balance_wallet_rounded,
-                          color: themeColor, size: 36),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      "Confirm Payment UPI ID",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                        color: Color(0xFF2D3142),
+                      const SizedBox(height: 16),
+                      const Text(
+                        "Confirm Payment UPI ID",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: Color(0xFF2D3142),
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    RichText(
-                      textAlign: TextAlign.center,
-                      text: TextSpan(
-                        style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.4),
-                        children: [
-                          const TextSpan(text: "All donor delivery fee payments will be sent directly to:\n\n"),
-                          TextSpan(
-                            text: upiId,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              color: themeColor,
-                            ),
-                          ),
-                          const TextSpan(text: "\n\nPlease ensure this address is active and accurate."),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            child: Text(
-                              "Edit ID",
+                      const SizedBox(height: 12),
+                      RichText(
+                        textAlign: TextAlign.center,
+                        text: TextSpan(
+                          style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.4),
+                          children: [
+                            const TextSpan(text: "All donor delivery fee payments will be sent directly to:\n\n"),
+                            TextSpan(
+                              text: upiId,
                               style: TextStyle(
-                                color: Colors.grey.shade600,
                                 fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: themeColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Column(
+                          children: [
+                            QrImageView(
+                              data: previewUri,
+                              version: QrVersions.auto,
+                              size: 140,
+                              gapless: false,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              "Scan this with your own UPI app.\nCheck the name it shows matches you, then tap Confirm.",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: Colors.grey.shade600,
+                                fontWeight: FontWeight.w600,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "Please ensure this address is active and accurate.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: Text(
+                                "Edit ID",
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: themeColor,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () => Navigator.pop(context, true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: themeColor,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                               ),
+                              child: const Text("Confirm"),
                             ),
-                            child: const Text("Confirm"),
                           ),
-                        ),
-                      ],
-                    )
-                  ],
+                        ],
+                      )
+                    ],
+                  ),
                 ),
               ),
             );
@@ -328,8 +401,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       setState(() => _isCheckingUsername = false);
     }
 
-    // 👇 UPDATED: UPI confirmation dialog trigger — volunteer's UPI page is
-    // now index 4 (unchanged), travel_agency's is index 3 (unchanged).
+    // UPI confirmation dialog trigger — volunteer's UPI page is index 4,
+    // travel_agency's is index 3.
     if ((widget.role == 'volunteer' && _currentPage == 4) ||
         (widget.role == 'travel_agency' && _currentPage == 3)) {
       bool confirmed = await _showUpiConfirmationDialog(upiController.text.trim().toLowerCase());
@@ -337,8 +410,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     }
 
     if (_currentPage < _totalPages - 1) {
-      // 👇 UPDATED: Vehicle validation now checked for BOTH roles —
-      // travel_agency at index 4, volunteer at index 5.
+      // Vehicle validation checked for BOTH roles — travel_agency at index
+      // 4, volunteer at index 5.
       if (((widget.role == 'travel_agency' && _currentPage == 4) ||
               (widget.role == 'volunteer' && _currentPage == 5)) &&
           _selectedVehicle == null) {
@@ -356,7 +429,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
         curve: Curves.easeInOutQuart,
       );
     } else {
-      // 👇 UPDATED: final-page vehicle guard now covers both roles.
+      // Final-page vehicle guard covers both roles.
       if ((widget.role == 'travel_agency' || widget.role == 'volunteer') &&
           _selectedVehicle == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -709,7 +782,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                               ),
                             ),
                             onPressed:
-                                (_isCurrentPageValid && !_isCheckingUsername)
+                                (_isCurrentPageValid && !_isCheckingUsername && !_isUploadingLicenseDoc)
                                     ? _nextPage
                                     : null,
                             child: _isCheckingUsername
@@ -751,8 +824,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     return "CONTINUE";
   }
 
-  // 👇 UPDATED: Vehicle step now added for BOTH 'volunteer' and
-  // 'travel_agency' roles, immediately after the UPI step and before Address.
+  // 👇 Vehicle step added for BOTH 'volunteer' and 'travel_agency' roles,
+  // immediately after the UPI step and before Address.
   List<Widget> _buildPages() {
     List<Widget> pages = [
       _buildImageStep(),
@@ -769,7 +842,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       pages.add(_buildUpiStep());
     }
     if (widget.role == "volunteer" || widget.role == "travel_agency") {
-      pages.add(_buildVehicleTypeStep()); // 👈 now shared by both roles
+      pages.add(_buildVehicleTypeStep());
     }
 
     pages.add(_buildAddressStep());
@@ -860,6 +933,106 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
         });
       }
     }
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return "$bytes B";
+    if (bytes < 1024 * 1024) return "${(bytes / 1024).toStringAsFixed(1)} KB";
+    return "${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB";
+  }
+
+  Future<void> _pickAndUploadLicenseDocument() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        withData: kIsWeb, // need raw bytes on web; path is enough on mobile
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      final picked = result.files.single;
+      final int sizeBytes = picked.size;
+
+      if (sizeBytes > _maxDocumentSizeBytes) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                "That PDF is ${_formatFileSize(sizeBytes)}. Please upload a file under ${_formatFileSize(_maxDocumentSizeBytes)}.",
+              ),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+
+      setState(() {
+        _licenseDocumentFileName = picked.name;
+        _licenseDocumentSizeBytes = sizeBytes;
+        _licenseDocumentUrl = null;
+        _uploadError = null;
+        if (kIsWeb) {
+          _licenseDocumentBytes = picked.bytes;
+          _licenseDocumentFile = null;
+        } else {
+          _licenseDocumentFile = File(picked.path!);
+          _licenseDocumentBytes = null;
+        }
+      });
+
+      await _uploadLicenseDocument();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Couldn't open file picker: $e")),
+        );
+      }
+    }
+  }
+
+  Future<void> _uploadLicenseDocument() async {
+    setState(() {
+      _isUploadingLicenseDoc = true;
+      _uploadProgress = 0.0;
+      _uploadError = null;
+    });
+
+    final String docLabel = widget.role == 'volunteer' ? 'driving_license' : 'ngo_license';
+    final String safeFileName = '${docLabel}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+
+    final String? url = await StorageService().uploadDocument(
+      file: _licenseDocumentFile,
+      bytes: _licenseDocumentBytes,
+      fileName: safeFileName,
+      folder: 'charitey_uploads/license_documents',
+      onProgress: (progress) {
+        if (mounted) setState(() => _uploadProgress = progress);
+      },
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _isUploadingLicenseDoc = false;
+      if (url != null) {
+        _licenseDocumentUrl = url;
+      } else {
+        _uploadError = "Upload failed. Check your connection and try again.";
+      }
+    });
+  }
+
+  void _removeLicenseDocument() {
+    setState(() {
+      _licenseDocumentFile = null;
+      _licenseDocumentBytes = null;
+      _licenseDocumentFileName = null;
+      _licenseDocumentSizeBytes = null;
+      _licenseDocumentUrl = null;
+      _uploadError = null;
+      _uploadProgress = 0.0;
+    });
   }
 
   Widget _buildImageStep() {
@@ -1033,7 +1206,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
           _buildProfessionOption("Student", Icons.school_rounded),
           const SizedBox(height: 12),
           _buildProfessionOption("Professional", Icons.business_center_rounded),
-          
+
           AnimatedSize(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
@@ -1330,6 +1503,145 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
               ),
             ),
           ],
+          if (_requiresLicenseDocument) ...[
+            const SizedBox(height: 20),
+            _buildLicenseDocumentUploadCard(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLicenseDocumentUploadCard() {
+    final String docTitle = widget.role == 'volunteer'
+        ? "Driving License (PDF)"
+        : "NGO License Certificate (PDF)";
+
+    if (_licenseDocumentFileName == null) {
+      return GestureDetector(
+        onTap: _pickAndUploadLicenseDocument,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: themeColor.withOpacity(0.4), width: 1.4),
+          ),
+          child: Column(
+            children: [
+              Icon(Icons.upload_file_rounded, color: themeColor, size: 32),
+              const SizedBox(height: 10),
+              Text(
+                "Upload $docTitle",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "PDF only • Max ${_formatFileSize(_maxDocumentSizeBytes)}",
+                style: TextStyle(fontSize: 11.5, color: Colors.grey.shade500),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _uploadError != null
+              ? Colors.red.shade200
+              : (_licenseDocumentUrl != null ? Colors.green.shade200 : Colors.grey.shade200),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: (_uploadError != null
+                      ? Colors.red
+                      : (_licenseDocumentUrl != null ? Colors.green : themeColor))
+                  .withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.picture_as_pdf_rounded,
+              color: _uploadError != null
+                  ? Colors.red.shade400
+                  : (_licenseDocumentUrl != null ? Colors.green.shade600 : themeColor),
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _licenseDocumentFileName!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                const SizedBox(height: 4),
+                if (_isUploadingLicenseDoc) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: _uploadProgress > 0 ? _uploadProgress : null,
+                      minHeight: 5,
+                      backgroundColor: Colors.grey.shade200,
+                      valueColor: AlwaysStoppedAnimation(themeColor),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Uploading… ${(100 * _uploadProgress).toStringAsFixed(0)}%",
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                  ),
+                ] else if (_uploadError != null) ...[
+                  Text(
+                    _uploadError!,
+                    style: TextStyle(fontSize: 11.5, color: Colors.red.shade400, fontWeight: FontWeight.w600),
+                  ),
+                ] else if (_licenseDocumentUrl != null) ...[
+                  Row(
+                    children: [
+                      Icon(Icons.check_circle_rounded, color: Colors.green.shade600, size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        "${_licenseDocumentSizeBytes != null ? _formatFileSize(_licenseDocumentSizeBytes!) : ''} • Uploaded",
+                        style: TextStyle(fontSize: 11.5, color: Colors.green.shade700, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (_uploadError != null)
+            IconButton(
+              icon: Icon(Icons.refresh_rounded, color: themeColor),
+              onPressed: _uploadLicenseDocument,
+              tooltip: "Retry upload",
+            )
+          else if (!_isUploadingLicenseDoc)
+            IconButton(
+              icon: Icon(Icons.close_rounded, color: Colors.grey.shade400),
+              onPressed: _removeLicenseDocument,
+              tooltip: "Remove",
+            ),
         ],
       ),
     );
@@ -1356,6 +1668,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       );
     }
 
+    // 👇 NEW: If this role requires admin verification (ngo / volunteer) and
+    // the account isn't already approved/active (e.g. re-editing profile
+    // after approval), mark it 'pending' — this is what makes the admin
+    // panel pick it up in the review queue AND routes the user to the
+    // "awaiting verification" screen below instead of the home screen.
+    final String? currentStatus = authProvider.currentUserModel?.status;
+    final bool alreadyVerified = currentStatus == 'approved' || currentStatus == 'active';
+    final bool needsVerification = _requiresLicenseDocument && !alreadyVerified;
+
     await authProvider.updateProfile(
       name: nameController.text.trim().isNotEmpty
           ? nameController.text.trim()
@@ -1373,24 +1694,33 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       profileImage: profileImageUrl,
       profession: finalProfession,
 
-      // Pass upiId to AuthProvider / Firestore UserModel
       upiId: (widget.role == 'volunteer' || widget.role == 'travel_agency') &&
               upiController.text.trim().isNotEmpty
           ? upiController.text.trim().toLowerCase()
           : null,
 
-      // 👇 UPDATED: vehicleType now saved for BOTH volunteer and travel_agency
       vehicleType: (widget.role == 'volunteer' || widget.role == 'travel_agency') &&
               _selectedVehicle != null
           ? _selectedVehicle!.name
           : null,
+
+      licenseDocumentUrl: _requiresLicenseDocument ? _licenseDocumentUrl : null,
+      status: needsVerification ? 'pending' : null, // 👈 NEW
     );
 
     if (mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const AuthWrapper()),
-        (Route<dynamic> route) => false,
-      );
+      if (needsVerification) {
+        // 👇 NEW: NGO / Volunteer → wait for admin approval first
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const PendingVerificationScreen()),
+          (Route<dynamic> route) => false,
+        );
+      } else {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const AuthWrapper()),
+          (Route<dynamic> route) => false,
+        );
+      }
     }
   }
 }
