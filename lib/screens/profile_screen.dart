@@ -3817,7 +3817,7 @@ class VolunteerShareTemplate extends StatelessWidget {
                 Icon(Icons.volunteer_activism, color: themeColor, size: 28),
                 const SizedBox(width: 10),
                 Text(
-                  "CHARITEY",
+                  "Fourth Idly",
                   style: TextStyle(
                     color: themeColor,
                     fontWeight: FontWeight.bold,
@@ -4351,7 +4351,7 @@ class DonationShareTemplate extends StatelessWidget {
                 Icon(Icons.volunteer_activism, color: themeColor, size: 28),
                 const SizedBox(width: 10),
                 Text(
-                  "CHARITEY",
+                  "Fourth idly",
                   style: TextStyle(
                     color: themeColor,
                     fontWeight: FontWeight.bold,
