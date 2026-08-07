@@ -1,5 +1,3 @@
-ios/ Runner/ Info.plist:
-
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -9,7 +7,7 @@ ios/ Runner/ Info.plist:
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Charity</string>
+	<string>Fourth Idly</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -17,7 +15,7 @@ ios/ Runner/ Info.plist:
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Charity</string>
+	<string>Fourth Idly</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -31,13 +29,13 @@ ios/ Runner/ Info.plist:
 
 	<!-- Permission usage descriptions — all top-level, each key followed by exactly one value -->
 	<key>NSCameraUsageDescription</key>
-	<string>Charitey needs camera access to take photos and videos in chat.</string>
+	<string>Fourth Idly needs camera access to take photos and videos in chat.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Charitey needs microphone access to record videos and voice messages in chat.</string>
+	<string>Fourth Idly needs microphone access to record videos and voice messages in chat.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Charitey needs permission to save photos and videos you download.</string>
+	<string>Fourth Idly needs permission to save photos and videos you download.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Charitey needs access to your photo library to select and share images.</string>
+	<string>Fourth Idly needs access to your photo library to select and share images.</string>
 
 	<key>UIApplicationSceneManifest</key>
 	<dict>

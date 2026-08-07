@@ -14,6 +14,8 @@ import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/notification_model.dart';
 import 'rating_dialog.dart';
+import 'package:gal/gal.dart'; // add this import at the top with the others
+
 
 class VolunteerPaymentScreen extends StatefulWidget {
   final String donationId;
@@ -154,29 +156,27 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
   // 👇 NEW: captures the QR code widget as a PNG image and hands it to the
   // OS share sheet so the donor can save it to their gallery/files or open
   // it directly in any UPI/scanner app.
-  Future<void> _downloadQrCode() async {
-    try {
-      RenderRepaintBoundary boundary =
-          _qrKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      Uint8List pngBytes = byteData!.buffer.asUint8List();
+ Future<void> _downloadQrCode() async {
+  try {
+    RenderRepaintBoundary boundary =
+        _qrKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+    ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+    ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    Uint8List pngBytes = byteData!.buffer.asUint8List();
 
-      final tempDir = await getTemporaryDirectory();
-      final file = await File('${tempDir.path}/upi_qr_$_txnRef.png').create();
-      await file.writeAsBytes(pngBytes);
+    await Gal.putImageBytes(pngBytes, name: 'upi_qr_$_txnRef');
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: 'Scan this QR to pay ₹${_feeAmount.toStringAsFixed(0)} via UPI',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not save QR code. Please try again.'), backgroundColor: Colors.red),
-      );
-    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('QR code saved to your gallery.'), backgroundColor: Colors.green),
+    );
+  } catch (e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Could not save QR code. Please try again.'), backgroundColor: Colors.red),
+    );
   }
+}
 
   // 👇 NEW: donor confirms manually after scanning the QR with their own
   // phone. There's no app-launch callback for a scan, so this is how the

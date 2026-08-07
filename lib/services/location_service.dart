@@ -1,4 +1,4 @@
-//lib/services/location_service.dart
+//location_service.dart
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -49,7 +49,7 @@ class LocationHelperService {
   }
 
   /// Gets the driving route distance between two coordinates using
-  /// Google Directions API.
+  /// Google Routes API (computeRoutes).
   ///
   /// Returns kilometers, or null if the API call fails.
   static Future<double?> getRouteDistanceKm({
@@ -60,42 +60,109 @@ class LocationHelperService {
   }) async {
     try {
       final apiKey = DefaultFirebaseOptions.currentPlatform.apiKey;
+
       final Uri uri = Uri.https(
-        'maps.googleapis.com',
-        '/maps/api/directions/json',
-        {
-          'origin': '$originLat,$originLng',
-          'destination': '$destLat,$destLng',
-          'mode': 'driving',
-          'units': 'metric',
-          'key': apiKey,
-        },
+        'routes.googleapis.com',
+        '/directions/v2:computeRoutes',
       );
 
-      final response = await http.get(uri);
-      if (response.statusCode != 200) return null;
+      final requestBody = json.encode({
+        'origin': {
+          'location': {
+            'latLng': {'latitude': originLat, 'longitude': originLng}
+          }
+        },
+        'destination': {
+          'location': {
+            'latLng': {'latitude': destLat, 'longitude': destLng}
+          }
+        },
+        'travelMode': 'DRIVE',
+        'units': 'METRIC',
+      });
 
-      final data = json.decode(response.body) as Map<String, dynamic>;
-      if (data['status'] != 'OK') return null;
+      final headers = {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey ?? '',
+        'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration',
+      };
 
-      final routes = data['routes'] as List<dynamic>?;
-      if (routes == null || routes.isEmpty) return null;
-
-      final firstRoute = routes.first as Map<String, dynamic>;
-      final legs = firstRoute['legs'] as List<dynamic>?;
-      if (legs == null || legs.isEmpty) return null;
-
-      num totalDistance = 0;
-      for (final leg in legs) {
-        final distance = (leg as Map<String, dynamic>)['distance'] as Map<String, dynamic>?;
-        if (distance == null) return null;
-        final value = distance['value'] as num?;
-        if (value == null) return null;
-        totalDistance += value;
+      final response = await http.post(uri, headers: headers, body: requestBody);
+      if (response.statusCode != 200) {
+        debugPrint('Routes API HTTP error: ${response.statusCode}');
+        debugPrint('Routes API body: ${response.body}');
+        return null;
       }
 
-      return totalDistance.toDouble() / 1000.0;
-    } catch (_) {
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final routes = data['routes'] as List<dynamic>?;
+      if (routes == null || routes.isEmpty) {
+        debugPrint('Routes API returned no routes: ${response.body}');
+        return null;
+      }
+
+      final first = routes.first as Map<String, dynamic>;
+
+      // Extract distanceMeters
+      num? distanceMeters;
+      if (first['distanceMeters'] is num) {
+        distanceMeters = first['distanceMeters'] as num;
+      } else if (first['legs'] is List) {
+        num total = 0;
+        for (final leg in (first['legs'] as List)) {
+          if (leg is Map<String, dynamic>) {
+            if (leg['distanceMeters'] is num) {
+              total += leg['distanceMeters'] as num;
+            } else if (leg['distance'] is Map && leg['distance']['value'] is num) {
+              total += leg['distance']['value'] as num;
+            }
+          }
+        }
+        if (total > 0) distanceMeters = total;
+      }
+
+      // Extract duration in seconds (may be string like "1234s" or map)
+      int? durationSeconds;
+      dynamic dur = first['duration'];
+      if (dur is String) {
+        // e.g. "1234s"
+        final m = RegExp(r"^(\d+)").firstMatch(dur);
+        if (m != null) durationSeconds = int.tryParse(m.group(1)!);
+      } else if (dur is Map) {
+        if (dur['seconds'] is num) {
+          durationSeconds = (dur['seconds'] as num).toInt();
+        } else if (dur['nanos'] is num && dur['seconds'] is num) {
+          durationSeconds = (dur['seconds'] as num).toInt();
+        }
+      } else if (first['legs'] is List) {
+        int totalSec = 0;
+        bool found = false;
+        for (final leg in (first['legs'] as List)) {
+          if (leg is Map<String, dynamic>) {
+            final ldur = leg['duration'];
+            if (ldur is String) {
+              final m = RegExp(r"^(\d+)").firstMatch(ldur);
+              if (m != null) {
+                totalSec += int.tryParse(m.group(1)!) ?? 0;
+                found = true;
+              }
+            } else if (ldur is Map && ldur['seconds'] is num) {
+              totalSec += (ldur['seconds'] as num).toInt();
+              found = true;
+            }
+          }
+        }
+        if (found) durationSeconds = totalSec;
+      }
+
+      debugPrint('Routes API distanceMeters: $distanceMeters, durationSeconds: $durationSeconds');
+
+      if (distanceMeters != null) return distanceMeters.toDouble() / 1000.0;
+      debugPrint('Routes API response missing distance: ${response.body}');
+      return null;
+    } catch (e, st) {
+      debugPrint('Routes API call failed: $e');
+      debugPrint('$st');
       return null;
     }
   }

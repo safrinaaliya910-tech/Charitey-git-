@@ -10,7 +10,6 @@ dependencies:
   flutter:
     sdk: flutter
   url_launcher: ^6.3.2
-  image_gallery_saver: ^2.0.3
   qr_flutter: ^4.1.0
   cupertino_icons: ^1.0.8
   firebase_core: ^4.5.0
@@ -66,6 +65,7 @@ flutter:
     - assets/google logo.png
     - assets/hero_banner.jpg
     - assets/dove_icons.png
+    - assets/logo.png
 
  #  fonts:
 #    - family: Poppins

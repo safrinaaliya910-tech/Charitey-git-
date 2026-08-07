@@ -244,25 +244,22 @@ class HomeScreenState extends State<HomeScreen> {
         centerTitle: false,
         titleSpacing: 0, // 👈 CRUCIAL: Removes default alignment padding and snaps layout to the left
         title: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const SizedBox(width: 16), // 👈 Provides a clean, standardized margin from the screen edge
+            const SizedBox(width: 12), // 👈 Provides a clean, standardized margin from the screen edge
            Container(
-              height: 44, // Slightly larger for a premium feel
-              width: 44,
+              height: 32,
+              width: 32,
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
-                // 👇 We removed the shadow and background color so it blends flawlessly into the AppBar
               ),
-              clipBehavior: Clip.hardEdge, // 👇 This guarantees a perfect circular crop
-              child: Transform.scale(
-                scale: 1.15, // 👇 This slight zoom removes the logo's inner background border!
-                child: Image.asset(
-                  'assets/app_logo.png',
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const Icon(Icons.broken_image, size: 20, color: Colors.grey);
-                  },
-                ),
+              clipBehavior: Clip.hardEdge,
+              child: Image.asset(
+                'assets/app_logo.png',
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return const Icon(Icons.broken_image, size: 18, color: Colors.grey);
+                },
               ),
             ),
             const SizedBox(width: 8), // 👈 Snaps the text close right next to the bird icon
@@ -270,7 +267,7 @@ class HomeScreenState extends State<HomeScreen> {
             "Fourth Idly",
             style: TextStyle(
               color: Color(0xFF6F313E), // Premium dark burgundy to match the hero image
-              fontSize: 22,             // Increased size for a better logo presence
+              fontSize: 20,             // Increased size for a better logo presence
               fontWeight: FontWeight.w900, // Heavy, bold weight for the whole text
               letterSpacing: 0.5,
               fontFamily: 'serif', 

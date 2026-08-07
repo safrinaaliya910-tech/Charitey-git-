@@ -78,6 +78,15 @@ class _BaseRegisterScreenState extends State<BaseRegisterScreen> with SingleTick
     }
   }
 
+  /// Checks password strength:
+  /// - At least 6 characters
+  /// - At least one special character
+  bool _isStrongPassword(String password) {
+    if (password.length < 6) return false;
+    final specialCharRegex = RegExp(r'[!@#$%^&*(),.?":{}|<>_\-+=~`\[\]\\/;]');
+    return specialCharRegex.hasMatch(password);
+  }
+
   void _register() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     String name = _nameController.text.trim();
@@ -91,9 +100,13 @@ class _BaseRegisterScreenState extends State<BaseRegisterScreen> with SingleTick
       return;
     }
 
-    if (password.length < 6) {
+    if (!_isStrongPassword(password)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password must be at least 6 characters long.')),
+        const SnackBar(
+          content: Text(
+            'Weak password. Use at least 6 characters with 1 special character.',
+          ),
+        ),
       );
       return;
     }
@@ -117,7 +130,11 @@ class _BaseRegisterScreenState extends State<BaseRegisterScreen> with SingleTick
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registration failed. Email might already be in use.')),
+        const SnackBar(
+          content: Text(
+            'This email is already registered. Please log in instead.',
+          ),
+        ),
       );
     }
   }
@@ -264,7 +281,18 @@ class _BaseRegisterScreenState extends State<BaseRegisterScreen> with SingleTick
                                 ),
                                 const SizedBox(height: 10),
                                 _buildPasswordField(),
-                                const SizedBox(height: 24),
+                                const SizedBox(height: 6),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    'Min 6 characters, at least 1 special character.',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 18),
                                 Container(
                                   width: double.infinity,
                                   height: 52,

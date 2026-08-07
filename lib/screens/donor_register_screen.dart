@@ -43,6 +43,15 @@ class _DonorRegisterScreenState extends State<DonorRegisterScreen>
     super.dispose();
   }
 
+  /// Checks password strength:
+  /// - At least 6 characters
+  /// - At least one special character
+  bool _isStrongPassword(String password) {
+    if (password.length < 6) return false;
+    final specialCharRegex = RegExp(r'[!@#$%^&*(),.?":{}|<>_\-+=~`\[\]\\/;]');
+    return specialCharRegex.hasMatch(password);
+  }
+
   void _register() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
@@ -57,9 +66,13 @@ class _DonorRegisterScreenState extends State<DonorRegisterScreen>
       return;
     }
 
-    if (password.length < 6) {
+    if (!_isStrongPassword(password)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password must be at least 6 characters long.')),
+        const SnackBar(
+          content: Text(
+            'Weak password. Use at least 6 characters with 1 special character.',
+          ),
+        ),
       );
       return;
     }
@@ -83,7 +96,11 @@ class _DonorRegisterScreenState extends State<DonorRegisterScreen>
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registration failed. Email might already be in use.')),
+        const SnackBar(
+          content: Text(
+            'This email is already registered. Please log in instead.',
+          ),
+        ),
       );
     }
   }
@@ -244,6 +261,19 @@ class _DonorRegisterScreenState extends State<DonorRegisterScreen>
 
                     // Password
                     _buildPasswordField(),
+                    const SizedBox(height: 4),
+
+                    // Password hint
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Min 6 characters, at least 1 special character.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                    ),
                     const SizedBox(height: 2),
 
                     // Forgot Password
