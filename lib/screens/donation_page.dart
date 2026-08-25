@@ -1,3 +1,4 @@
+//screens/donation_page.dart
 // donation_page.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -200,14 +201,15 @@ class _DonationPageState extends State<DonationPage> {
         );
 
         final double straightDistanceKm = distanceMeters / 1000;
-        final double? routeDistanceKm = await LocationHelperService.getRouteDistanceKm(
+        final routeInfo = await LocationHelperService.getRouteInfo(
           originLat: _donorLatLng!.latitude,
           originLng: _donorLatLng!.longitude,
           destLat: widget.listing.pickupLat!,
           destLng: widget.listing.pickupLng!,
         );
 
-        final double distanceKm = routeDistanceKm ?? straightDistanceKm;
+        final double distanceKm = routeInfo?.distanceKm ?? straightDistanceKm;
+        final double durationMinutes = routeInfo?.durationMinutes ?? (straightDistanceKm / 30.0) * 60.0;
         _distanceKm = distanceKm;
 
         // Use the shared vehicle fare calculator so volunteer pricing stays
@@ -217,6 +219,7 @@ class _DonationPageState extends State<DonationPage> {
         _calculatedFee = FareCalculator.calculate(
           vehicle: VehicleType.bike,
           distanceKm: distanceKm,
+          durationMinutes: durationMinutes,
         );
       }
     }

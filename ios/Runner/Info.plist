@@ -33,7 +33,7 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Fourth Idly needs microphone access to record videos and voice messages in chat.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Fourth Idly needs permission to save photos and videos you download.</string>
+<string>Save UPI QR code to your photo library</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Fourth Idly needs access to your photo library to select and share images.</string>
 

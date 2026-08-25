@@ -1,3 +1,4 @@
+//android/app/build.gradle.kts
 import java.util.Properties // 👈 THE MISSING PIECE: Tells Kotlin what 'Properties' is!
 
 plugins {

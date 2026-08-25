@@ -1,8 +1,10 @@
 //profile_setup_screen.dart
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:flutter/services.dart';
 import '../providers/auth_provider.dart';
 import '../main.dart';
@@ -13,7 +15,7 @@ import '../services/fare_calculator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart'; // 👈 for the UPI QR preview in the confirmation dialog
-import 'pending_verification_screen.dart'; // 👈 NEW: "awaiting admin verification" screen
+import 'pending_verification_screen.dart'; // 👈 "awaiting admin verification" screen
 
 class ProfileSetupScreen extends StatefulWidget {
   final String role;
@@ -49,8 +51,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   final Color themeColor = const Color(0xFFB56F76);
 
   // Verification document (PDF) for NGO license / volunteer driving license.
-  // Required so an admin can manually verify the physical ID in the admin
-  // panel — the regex on the text field alone can't confirm it's genuine.
   File? _licenseDocumentFile;
   Uint8List? _licenseDocumentBytes;
   String? _licenseDocumentFileName;
@@ -68,6 +68,26 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   bool get _isLicenseDocumentValid =>
       !_requiresLicenseDocument || _licenseDocumentUrl != null;
 
+  // 👇 NEW: Phone OTP verification state.
+  // Phone entry + OTP verification is now always the LAST step, for every
+  // role. Verifying last — right before "Complete Setup" — means we only
+  // ever send a billed SMS to someone who is actually finishing signup,
+  // instead of burning SMS credit on people who abandon the form midway.
+  final TextEditingController otpController = TextEditingController();
+  String? _verificationId;
+  int? _resendToken;
+  bool _isSendingOtp = false;
+  bool _isVerifyingOtp = false;
+  bool _otpSent = false;
+  bool _isPhoneVerified = false;
+  int _resendSecondsLeft = 0;
+  Timer? _resendTimer;
+  String? _otpError;
+  // 👇 NEW: shown under the "SEND OTP" button itself (before the OTP field
+  // even appears), so a send-time failure is visible on-screen even when
+  // there's no USB cable connected to read the VS Code debug console.
+  String? _sendOtpError;
+
   @override
   void dispose() {
     _pageController.dispose();
@@ -78,24 +98,39 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     licenseController.dispose();
     professionController.dispose();
     upiController.dispose();
+    otpController.dispose();
+    _resendTimer?.cancel();
     super.dispose();
   }
 
-  // 👇 Volunteers have 8 pages (Image, Name, Profession, Phone, UPI ID,
-  // Vehicle, Location, License). Travel agency stays at 7 (no Profession
-  // step). Vehicle step is shared by BOTH roles, right after the UPI step.
-  int get _totalPages {
-    if (widget.role == "volunteer") {
-      return 8; // Image, Name, Profession, Phone, UPI, Vehicle, Location, License
+  // 👇 NEW: page order is now expressed as a list of keys instead of magic
+  // index numbers. This is what decides both _buildPages() and
+  // _isCurrentPageValid — so the two can never drift out of sync, and the
+  // "phone_otp" step is guaranteed to always be last for every role.
+  List<String> get _pageKeys {
+    final List<String> keys = ['image', 'name'];
+
+    if (widget.role == 'volunteer') {
+      keys.add('profession');
     }
-    if (widget.role == "travel_agency") {
-      return 7; // Image, Name, Phone, UPI, Vehicle, Location, License
+    if (widget.role == 'volunteer' || widget.role == 'travel_agency') {
+      keys.add('upi');
+      keys.add('vehicle');
     }
-    if (widget.role == "ngo") {
-      return 5; // Image, Name, Phone, Location, License
+
+    keys.add('address');
+
+    if (widget.role == 'ngo' ||
+        widget.role == 'travel_agency' ||
+        widget.role == 'volunteer') {
+      keys.add('license');
     }
-    return 4; // Donors: Image, Name, Phone, Location
+
+    keys.add('phone_otp'); // 👈 Always the final step, for every role.
+    return keys;
   }
+
+  int get _totalPages => _pageKeys.length;
 
   bool _isValidNGOLicense(String value) {
     final cleaned = value.trim().toUpperCase();
@@ -134,18 +169,20 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     return value.isNotEmpty;
   }
 
-  // 👇 volunteer branch has a Vehicle step at index 5, pushing Location to 6
-  // and License to 7.
+  // 👇 UPDATED: validity is now looked up by page KEY, not by page index.
   bool get _isCurrentPageValid {
-    bool isValid = true;
+    final String key = _pageKeys[_currentPage];
+    bool isValid;
 
-    if (_currentPage == 0) {
-      isValid = true;
-    } else if (_currentPage == 1) {
-      isValid = nameController.text.trim().isNotEmpty &&
-          usernameController.text.trim().isNotEmpty;
-    } else if (widget.role == 'volunteer') {
-      if (_currentPage == 2) {
+    switch (key) {
+      case 'image':
+        isValid = true;
+        break;
+      case 'name':
+        isValid = nameController.text.trim().isNotEmpty &&
+            usernameController.text.trim().isNotEmpty;
+        break;
+      case 'profession':
         if (_selectedProfessionType == 'Student') {
           isValid = true;
         } else if (_selectedProfessionType == 'Professional') {
@@ -153,45 +190,26 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
         } else {
           isValid = false;
         }
-      } else if (_currentPage == 3) {
-        isValid = phoneController.text.trim().length == 10;
-      } else if (_currentPage == 4) {
-        isValid = _isUpiFormatValid; // Validates UPI ID page
-      } else if (_currentPage == 5) {
-        isValid = _selectedVehicle != null; // Vehicle step
-      } else if (_currentPage == 6) {
-        isValid = addressController.text.trim().isNotEmpty; // shifted from 5
-      } else if (_currentPage == 7) {
-        // 👇 UPDATED: also requires the verification PDF to finish uploading
-        isValid = _isLicenseFormatValid && _isLicenseDocumentValid;
-      }
-    } else if (widget.role == 'travel_agency') {
-      if (_currentPage == 2) {
-        isValid = phoneController.text.trim().length == 10;
-      } else if (_currentPage == 3) {
+        break;
+      case 'upi':
         isValid = _isUpiFormatValid;
-      } else if (_currentPage == 4) {
+        break;
+      case 'vehicle':
         isValid = _selectedVehicle != null;
-      } else if (_currentPage == 5) {
+        break;
+      case 'address':
         isValid = addressController.text.trim().isNotEmpty;
-      } else if (_currentPage == 6) {
-        isValid = _isLicenseFormatValid;
-      }
-    } else if (widget.role == 'ngo') {
-      if (_currentPage == 2) {
-        isValid = phoneController.text.trim().length == 10;
-      } else if (_currentPage == 3) {
-        isValid = addressController.text.trim().isNotEmpty;
-      } else if (_currentPage == 4) {
-        // 👇 UPDATED: also requires the verification PDF to finish uploading
+        break;
+      case 'license':
         isValid = _isLicenseFormatValid && _isLicenseDocumentValid;
-      }
-    } else {
-      if (_currentPage == 2) {
-        isValid = phoneController.text.trim().length == 10;
-      } else if (_currentPage == 3) {
-        isValid = addressController.text.trim().isNotEmpty;
-      }
+        break;
+      case 'phone_otp':
+        // 👇 The final step only counts as valid once the OTP has actually
+        // been verified — not just once a 10-digit number is typed in.
+        isValid = _isPhoneVerified;
+        break;
+      default:
+        isValid = true;
     }
 
     if (_currentPage == _totalPages - 1) {
@@ -205,17 +223,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   }
 
   // Confirmation Dialog for UPI ID
-  // Shows a live QR preview built from the entered VPA so the volunteer can
-  // scan it with their OWN UPI app before confirming. Real UPI apps resolve
-  // the VPA and display the actual bank-registered account name during the
-  // scan preview — genuine name verification straight from NPCI, at zero
-  // cost, and catches subtle typos the regex alone can't.
   Future<bool> _showUpiConfirmationDialog(String upiId) async {
     String safeName = Uri.encodeComponent(nameController.text.trim().isNotEmpty
         ? nameController.text.trim()
-        : "Charitey User");
-    // No 'am' (amount) included on purpose — this QR is only for identity
-    // verification, not an actual payment request.
+        : "Fourth Idly User");
     String previewUri = "upi://pay?pa=$upiId&pn=$safeName&cu=INR";
 
     return await showDialog<bool>(
@@ -349,9 +360,12 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
         false;
   }
 
+  // 👇 UPDATED: driven by page KEY instead of hardcoded per-role indices.
   Future<void> _nextPage() async {
-    // Username Check
-    if (_currentPage == 1) {
+    final String key = _pageKeys[_currentPage];
+
+    // Username availability check (Name step)
+    if (key == 'name') {
       String desiredUsername = usernameController.text.trim().toLowerCase();
       bool hasLetter = RegExp(r'[a-z]').hasMatch(desiredUsername);
       bool hasNumber = RegExp(r'[0-9]').hasMatch(desiredUsername);
@@ -401,45 +415,22 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       setState(() => _isCheckingUsername = false);
     }
 
-    // UPI confirmation dialog trigger — volunteer's UPI page is index 4,
-    // travel_agency's is index 3.
-    if ((widget.role == 'volunteer' && _currentPage == 4) ||
-        (widget.role == 'travel_agency' && _currentPage == 3)) {
+    // UPI confirmation dialog trigger
+    if (key == 'upi') {
       bool confirmed = await _showUpiConfirmationDialog(upiController.text.trim().toLowerCase());
       if (!confirmed) return; // Stay on page if user clicks "Edit ID"
     }
 
     if (_currentPage < _totalPages - 1) {
-      // Vehicle validation checked for BOTH roles — travel_agency at index
-      // 4, volunteer at index 5.
-      if (((widget.role == 'travel_agency' && _currentPage == 4) ||
-              (widget.role == 'volunteer' && _currentPage == 5)) &&
-          _selectedVehicle == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Please select the vehicle you'll use for deliveries."),
-            duration: Duration(seconds: 3),
-          ),
-        );
-        return;
-      }
       FocusScope.of(context).unfocus();
       _pageController.nextPage(
         duration: const Duration(milliseconds: 400),
         curve: Curves.easeInOutQuart,
       );
     } else {
-      // Final-page vehicle guard covers both roles.
-      if ((widget.role == 'travel_agency' || widget.role == 'volunteer') &&
-          _selectedVehicle == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Please select the vehicle you'll use for deliveries."),
-            duration: Duration(seconds: 3),
-          ),
-        );
-        return;
-      }
+      // Last page is always 'phone_otp'; _isCurrentPageValid already
+      // guarantees _isPhoneVerified and agreedToTerms are both true before
+      // this button is even tappable.
       _saveProfile();
     }
   }
@@ -452,6 +443,196 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
         curve: Curves.easeInOutQuart,
       );
     }
+  }
+
+  // ============================================================
+  // 👇 NEW: Phone OTP verification logic (Firebase Phone Auth)
+  // ============================================================
+
+  Future<void> _sendOtp() async {
+    final String phone = phoneController.text.trim();
+    if (phone.length != 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Enter a valid 10-digit mobile number.")),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSendingOtp = true;
+      _otpError = null;
+      _sendOtpError = null;
+    });
+
+    final String fullPhoneNumber = "+91$phone";
+
+    await FirebaseAuth.instance.verifyPhoneNumber(
+      phoneNumber: fullPhoneNumber,
+      // 👇 UPDATED: 120 seconds instead of 60 — gives slow-delivery Indian
+      // carrier routes more room before the verification session expires,
+      // and reduces the chance of a stale/mismatched verificationId if the
+      // SMS arrives late.
+      timeout: const Duration(seconds: 120),
+      forceResendingToken: _resendToken,
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        // Android auto-retrieval: the code was confirmed automatically in
+        // the background without the user typing anything.
+        await _linkPhoneCredential(credential, autoVerified: true);
+      },
+      verificationFailed: (FirebaseAuthException e) {
+        if (!mounted) return;
+        String message = "Couldn't send the OTP. Please try again.";
+        if (e.code == 'invalid-phone-number') {
+          message = "That doesn't look like a valid phone number.";
+        } else if (e.code == 'too-many-requests') {
+          message = "Too many attempts. Please wait a while before trying again.";
+        } else if (e.code == 'quota-exceeded') {
+          message = "SMS limit reached for now. Please try again later.";
+        }
+        // 👇 NEW: append the raw Firebase error code so it's visible right
+        // on the screen — no cable/debug console needed to diagnose it.
+        final String detailedMessage = "$message\n(code: ${e.code})";
+        setState(() {
+          _isSendingOtp = false;
+          _sendOtpError = detailedMessage;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(detailedMessage)));
+      },
+      codeSent: (String verificationId, int? resendToken) {
+        if (!mounted) return;
+        setState(() {
+          _verificationId = verificationId;
+          _resendToken = resendToken;
+          _otpSent = true;
+          _isSendingOtp = false;
+          _otpError = null;
+        });
+        _startResendTimer();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("A 6-digit code has been sent to +91 $phone via SMS.")),
+        );
+      },
+      codeAutoRetrievalTimeout: (String verificationId) {
+        _verificationId = verificationId;
+      },
+    );
+  }
+
+  void _startResendTimer() {
+    _resendTimer?.cancel();
+    // 👇 UPDATED: matches the 120-second verification window above, so
+    // "Resend" only becomes available once the previous session has fully
+    // expired — avoids creating a second, stale verificationId while the
+    // first one is still valid.
+    setState(() => _resendSecondsLeft = 120);
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_resendSecondsLeft <= 1) {
+        timer.cancel();
+        setState(() => _resendSecondsLeft = 0);
+      } else {
+        setState(() => _resendSecondsLeft -= 1);
+      }
+    });
+  }
+
+  Future<void> _verifyOtp() async {
+    final String smsCode = otpController.text.trim();
+    if (smsCode.length != 6 || _verificationId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Enter the 6-digit code sent to your phone.")),
+      );
+      return;
+    }
+
+    setState(() {
+      _isVerifyingOtp = true;
+      _otpError = null;
+    });
+
+    final credential = PhoneAuthProvider.credential(
+      verificationId: _verificationId!,
+      smsCode: smsCode,
+    );
+
+    await _linkPhoneCredential(credential, autoVerified: false);
+  }
+
+  // Attaches the verified phone number to the CURRENT signed-in account
+  // (rather than creating a brand-new account), so phone OTP acts purely as
+  // a verification step on top of however the user already signed up.
+  Future<void> _linkPhoneCredential(
+    PhoneAuthCredential credential, {
+    required bool autoVerified,
+  }) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception("No signed-in user found.");
+      }
+
+      await user.linkWithCredential(credential);
+
+      if (!mounted) return;
+      setState(() {
+        _isSendingOtp = false;
+        _isVerifyingOtp = false;
+        _isPhoneVerified = true;
+        _otpError = null;
+      });
+      _resendTimer?.cancel();
+
+      if (!autoVerified) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Phone number verified successfully.")),
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      String message = "Verification failed. Please try again.";
+      if (e.code == 'invalid-verification-code') {
+        message = "That code is incorrect. Please check and try again.";
+      } else if (e.code == 'session-expired') {
+        message = "This code has expired. Please request a new one.";
+      } else if (e.code == 'credential-already-in-use') {
+        message = "This phone number is already linked to another account.";
+      } else if (e.code == 'invalid-verification-id') {
+        message = "That code no longer matches this session. Tap Resend and use the newest code.";
+      }
+      // 👇 NEW: raw Firebase error code shown on-screen — visible without a
+      // cable/debug console, so you can tell us exactly what's happening.
+      final String detailedMessage = "$message\n(code: ${e.code})";
+      setState(() {
+        _isSendingOtp = false;
+        _isVerifyingOtp = false;
+        _otpError = detailedMessage;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(detailedMessage)));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSendingOtp = false;
+        _isVerifyingOtp = false;
+        _otpError = "Something went wrong.\n($e)";
+      });
+    }
+  }
+
+  void _changePhoneNumber() {
+    setState(() {
+      _otpSent = false;
+      _isPhoneVerified = false;
+      _verificationId = null;
+      _resendToken = null;
+      otpController.clear();
+      _otpError = null;
+      _sendOtpError = null;
+      _resendTimer?.cancel();
+      _resendSecondsLeft = 0;
+    });
   }
 
   String _getTermsText() {
@@ -781,10 +962,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                                 borderRadius: BorderRadius.circular(30),
                               ),
                             ),
-                            onPressed:
-                                (_isCurrentPageValid && !_isCheckingUsername && !_isUploadingLicenseDoc)
-                                    ? _nextPage
-                                    : null,
+                            onPressed: (_isCurrentPageValid &&
+                                    !_isCheckingUsername &&
+                                    !_isUploadingLicenseDoc)
+                                ? _nextPage
+                                : null,
                             child: _isCheckingUsername
                                 ? const SizedBox(
                                     height: 20,
@@ -816,43 +998,44 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     );
   }
 
+  // 👇 UPDATED: now also nudges the user toward the in-page Send/Verify OTP
+  // buttons while they're on the final step and not yet verified.
   String _getButtonText() {
     if (_currentPage == 0 &&
         _selectedImage == null &&
         _selectedImageBytes == null) return "SKIP PHOTO";
+
+    final String key = _pageKeys[_currentPage];
+    if (key == 'phone_otp' && !_isPhoneVerified) return "VERIFY TO CONTINUE";
     if (_currentPage == _totalPages - 1) return "COMPLETE SETUP";
     return "CONTINUE";
   }
 
-  // 👇 Vehicle step added for BOTH 'volunteer' and 'travel_agency' roles,
-  // immediately after the UPI step and before Address.
+  // 👇 UPDATED: pages are now built by mapping over _pageKeys, so the page
+  // WIDGETS list and the page VALIDATION logic can never fall out of sync.
   List<Widget> _buildPages() {
-    List<Widget> pages = [
-      _buildImageStep(),
-      _buildNameStep(),
-    ];
-
-    if (widget.role == "volunteer") {
-      pages.add(_buildProfessionStep());
-    }
-
-    pages.add(_buildPhoneStep());
-
-    if (widget.role == "volunteer" || widget.role == "travel_agency") {
-      pages.add(_buildUpiStep());
-    }
-    if (widget.role == "volunteer" || widget.role == "travel_agency") {
-      pages.add(_buildVehicleTypeStep());
-    }
-
-    pages.add(_buildAddressStep());
-
-    if (widget.role == "ngo" ||
-        widget.role == "travel_agency" ||
-        widget.role == "volunteer") {
-      pages.add(_buildLicenseStep());
-    }
-    return pages;
+    return _pageKeys.map((key) {
+      switch (key) {
+        case 'image':
+          return _buildImageStep();
+        case 'name':
+          return _buildNameStep();
+        case 'profession':
+          return _buildProfessionStep();
+        case 'upi':
+          return _buildUpiStep();
+        case 'vehicle':
+          return _buildVehicleTypeStep();
+        case 'address':
+          return _buildAddressStep();
+        case 'license':
+          return _buildLicenseStep();
+        case 'phone_otp':
+          return _buildPhoneOtpStep();
+        default:
+          return const SizedBox.shrink();
+      }
+    }).toList();
   }
 
   Widget _buildStepContainer({
@@ -1005,7 +1188,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       file: _licenseDocumentFile,
       bytes: _licenseDocumentBytes,
       fileName: safeFileName,
-      folder: 'charitey_uploads/license_documents',
+      folder: 'license_documents',
       onProgress: (progress) {
         if (mounted) setState(() => _uploadProgress = progress);
       },
@@ -1105,6 +1288,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     );
   }
 
+  // 👇 UPDATED: added an optional `onChanged` override so the phone field
+  // (on the new phone_otp step) can reset OTP state when the number is
+  // edited, while every other field keeps using the default _onFieldChanged.
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -1113,6 +1299,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     TextInputType keyboardType = TextInputType.text,
     int? maxLength,
     List<TextInputFormatter>? inputFormatters,
+    ValueChanged<String>? onChanged,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -1128,7 +1315,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       ),
       child: TextField(
         controller: controller,
-        onChanged: _onFieldChanged,
+        onChanged: onChanged ?? _onFieldChanged,
         keyboardType: keyboardType,
         maxLength: maxLength,
         inputFormatters: inputFormatters,
@@ -1273,23 +1460,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
               Icon(Icons.check_circle_rounded, color: themeColor),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildPhoneStep() {
-    return _buildStepContainer(
-      title: "Phone Number",
-      subtitle: "We'll use this to keep your account secure and for contact",
-      icon: Icons.phone_android_rounded,
-      child: _buildTextField(
-        controller: phoneController,
-        label: "Phone Number",
-        hint: "Enter 10-digit Mobile Number",
-        icon: Icons.phone_outlined,
-        keyboardType: TextInputType.phone,
-        maxLength: 10,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       ),
     );
   }
@@ -1647,6 +1817,222 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     );
   }
 
+  // ============================================================
+  // 👇 NEW: Phone number + OTP verification step (always the LAST page,
+  // for donor, ngo, volunteer, and travel_agency alike).
+  // ============================================================
+  Widget _buildPhoneOtpStep() {
+    return _buildStepContainer(
+      title: "Verify Your Phone",
+      subtitle: "We'll send a one-time code to confirm this number is yours",
+      icon: Icons.sms_rounded,
+      child: Column(
+        children: [
+          _buildTextField(
+            controller: phoneController,
+            label: "Phone Number",
+            hint: "Enter 10-digit Mobile Number",
+            icon: Icons.phone_outlined,
+            keyboardType: TextInputType.phone,
+            maxLength: 10,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onChanged: (value) {
+              setState(() {
+                // Editing the number after it's been sent/verified must
+                // invalidate the old OTP session — it was tied to the
+                // previous number.
+                if (_isPhoneVerified || _otpSent) {
+                  _isPhoneVerified = false;
+                  _otpSent = false;
+                  _verificationId = null;
+                  otpController.clear();
+                  _otpError = null;
+                  _sendOtpError = null;
+                  _resendTimer?.cancel();
+                  _resendSecondsLeft = 0;
+                }
+              });
+            },
+          ),
+
+          if (_isPhoneVerified) ...[
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle_rounded, color: Colors.green.shade600),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      "+91 ${phoneController.text.trim()} is verified.",
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.green.shade800,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _changePhoneNumber,
+                    child: Text(
+                      "Change",
+                      style: TextStyle(color: themeColor, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (!_otpSent) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: ElevatedButton(
+                onPressed: (_isSendingOtp || phoneController.text.trim().length != 10)
+                    ? null
+                    : _sendOtp,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: themeColor,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey.shade300,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                child: _isSendingOtp
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
+                    : const Text("SEND OTP", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Standard SMS charges may apply. Please double-check the number above.",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+            ),
+            if (_sendOtpError != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Text(
+                  _sendOtpError!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 11.5, color: Colors.red.shade600, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ] else ...[
+            const SizedBox(height: 16),
+            Text(
+              "Enter the 6-digit code sent to +91 ${phoneController.text.trim()}",
+              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            _buildTextField(
+              controller: otpController,
+              label: "OTP Code",
+              hint: "6-digit code",
+              icon: Icons.lock_clock_rounded,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: (value) {
+                setState(() {
+                  if (_otpError != null) _otpError = null;
+                });
+              },
+            ),
+            if (_otpError != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                _otpError!,
+                style: TextStyle(fontSize: 11, color: Colors.red.shade400, fontWeight: FontWeight.w600),
+              ),
+            ],
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: ElevatedButton(
+                onPressed: (_isVerifyingOtp || otpController.text.trim().length != 6)
+                    ? null
+                    : _verifyOtp,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: themeColor,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey.shade300,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                child: _isVerifyingOtp
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
+                    : const Text("VERIFY OTP", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 6,
+              children: [
+                Text(
+                  _resendSecondsLeft > 0
+                      ? "Resend code in ${_resendSecondsLeft}s"
+                      : "Didn't get the code?",
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                ),
+                if (_resendSecondsLeft == 0)
+                  GestureDetector(
+                    onTap: _isSendingOtp ? null : _sendOtp,
+                    child: Text(
+                      "Resend",
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: themeColor),
+                    ),
+                  ),
+                const SizedBox(width: 6),
+                Text("•", style: TextStyle(color: Colors.grey.shade400)),
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: _changePhoneNumber,
+                  child: Text(
+                    "Change number",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade500,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   void _saveProfile() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     String finalUsername = usernameController.text.trim().toLowerCase();
@@ -1668,11 +2054,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       );
     }
 
-    // 👇 NEW: If this role requires admin verification (ngo / volunteer) and
-    // the account isn't already approved/active (e.g. re-editing profile
-    // after approval), mark it 'pending' — this is what makes the admin
-    // panel pick it up in the review queue AND routes the user to the
-    // "awaiting verification" screen below instead of the home screen.
+    // If this role requires admin verification (ngo / volunteer) and the
+    // account isn't already approved/active, mark it 'pending' — this is
+    // what makes the admin panel pick it up in the review queue AND routes
+    // the user to the "awaiting verification" screen below instead of the
+    // home screen.
     final String? currentStatus = authProvider.currentUserModel?.status;
     final bool alreadyVerified = currentStatus == 'approved' || currentStatus == 'active';
     final bool needsVerification = _requiresLicenseDocument && !alreadyVerified;
@@ -1682,6 +2068,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
           ? nameController.text.trim()
           : null,
       username: finalUsername.isNotEmpty ? finalUsername : null,
+      // 👇 By this point _isPhoneVerified is guaranteed true (the button
+      // that calls _saveProfile is disabled otherwise), so this number has
+      // actually been confirmed via OTP, not just typed in.
       phone: phoneController.text.trim().isNotEmpty
           ? phoneController.text.trim()
           : null,
@@ -1705,12 +2094,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
           : null,
 
       licenseDocumentUrl: _requiresLicenseDocument ? _licenseDocumentUrl : null,
-      status: needsVerification ? 'pending' : null, // 👈 NEW
+      status: needsVerification ? 'pending' : null,
     );
 
     if (mounted) {
       if (needsVerification) {
-        // 👇 NEW: NGO / Volunteer → wait for admin approval first
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => const PendingVerificationScreen()),
           (Route<dynamic> route) => false,

@@ -9,7 +9,7 @@ import 'chat_screen.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'volunteer_payment_screen.dart';
-import 'volunteer_dashboard.dart'; // 👈 NEW
+import 'volunteer_dashboard.dart';
 
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
@@ -679,62 +679,51 @@ class NotificationsScreen extends StatelessWidget {
     );
   }
 
-  // 👇 NEW: VOLUNTEER VERIFICATION DIALOG 👇
-  void _showVerifyPaymentDialog(BuildContext context, NotificationModel notif, Color themeColor) {
+  void _showVerifyPaymentDialog(
+      BuildContext context, NotificationModel notif, Color themeColor) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
+        title: const Row(
           children: [
-            const Icon(Icons.currency_rupee_rounded, color: Colors.blue),
-            const SizedBox(width: 8),
-            const Text("Verify Payment", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 18)),
+            Icon(Icons.currency_rupee_rounded, color: Colors.blue),
+            SizedBox(width: 8),
+            Text("Verify Payment",
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue,
+                    fontSize: 18)),
           ],
         ),
         content: Text(
-          notif.message + "\n\nIf you select 'Yes', the donor's screen will unlock.",
+          "${notif.message}\n\nIf you select 'Yes, Received', the donor's screen will unlock immediately.",
           style: const TextStyle(fontSize: 15, height: 1.4),
         ),
         actions: [
           TextButton(
-            onPressed: () async {
+            onPressed: () {
               Navigator.pop(ctx);
-              // Tell database payment failed, revert donor's screen
-              await FirebaseFirestore.instance.collection('donations').doc(notif.relatedItemId).update({
-                'status': 'completed_awaiting_payment'
-              });
-              
-              // Notify donor
-              String notifId = FirebaseFirestore.instance.collection('notifications').doc().id;
-              NotificationModel returnNotif = NotificationModel(
-                id: notifId,
-                receiverId: notif.senderId,
-                senderId: notif.receiverId,
-                senderName: 'Volunteer',
-                type: 'payment_rejected',
-                title: 'Payment Not Received',
-                message: 'The volunteer reported they did not receive your payment. Please try again.',
-                relatedItemId: notif.relatedItemId,
-                createdAt: DateTime.now(),
-                isRead: false,
-              );
-              await FirestoreService().sendNotification(returnNotif);
+              _showNotReceivedConfirmation(context, notif, themeColor);
             },
-            child: Text("Not Received", style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.bold)),
+            child: Text("Not Received",
+                style: TextStyle(
+                    color: Colors.red.shade700, fontWeight: FontWeight.bold)),
           ),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              // Verify payment! Donor's screen will automatically unlock via StreamBuilder.
-              await FirebaseFirestore.instance.collection('donations').doc(notif.relatedItemId).update({
+              await FirebaseFirestore.instance
+                  .collection('donations')
+                  .doc(notif.relatedItemId)
+                  .update({
                 'status': 'fully_completed',
-                'paymentStatus': 'paid'
+                'paymentStatus': 'paid',
               });
-              
-              // Notify donor
-              String notifId = FirebaseFirestore.instance.collection('notifications').doc().id;
+
+              String notifId =
+                  FirebaseFirestore.instance.collection('notifications').doc().id;
               NotificationModel returnNotif = NotificationModel(
                 id: notifId,
                 receiverId: notif.senderId,
@@ -742,19 +731,145 @@ class NotificationsScreen extends StatelessWidget {
                 senderName: 'Volunteer',
                 type: 'payment_verified',
                 title: 'Payment Verified! 🎉',
-                message: 'Thank you! The volunteer confirmed receipt of your delivery fee.',
+                message:
+                    'Thank you! The volunteer confirmed receipt of your delivery fee.',
                 relatedItemId: notif.relatedItemId,
                 createdAt: DateTime.now(),
                 isRead: false,
               );
               await FirestoreService().sendNotification(returnNotif);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-            child: const Text("Yes, Received", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text("Yes, Received",
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
+  }
+
+  void _showNotReceivedConfirmation(
+      BuildContext context, NotificationModel notif, Color themeColor) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          "Confirm – Payment Not Received?",
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+        ),
+        content: const Text(
+          "Are you sure you have not received this payment?\n\n"
+          "If you confirm, our admin team will verify the transaction using the Reference ID provided by the donor and will contact both parties if needed.",
+          style: TextStyle(height: 1.45, fontSize: 15),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+
+              await FirebaseFirestore.instance
+                  .collection('donations')
+                  .doc(notif.relatedItemId)
+                  .update({
+                'status': 'admin_verification_pending',
+                'paymentStatus': 'disputed',
+                'paymentDisputedAt': FieldValue.serverTimestamp(),
+              });
+
+              String donorNotifId =
+                  FirebaseFirestore.instance.collection('notifications').doc().id;
+              NotificationModel donorNotif = NotificationModel(
+                id: donorNotifId,
+                receiverId: notif.senderId,
+                senderId: notif.receiverId,
+                senderName: 'Volunteer',
+                type: 'payment_rejected',
+                title: 'Payment Under Admin Review',
+                message:
+                    'The volunteer reported they did not receive your payment. Our admin team is verifying the transaction using your Reference ID. You will be notified once the check is complete.',
+                relatedItemId: notif.relatedItemId,
+                createdAt: DateTime.now(),
+                isRead: false,
+              );
+              await FirestoreService().sendNotification(donorNotif);
+
+              await _notifyAdminsOfDispute(notif);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text("Yes, Still Not Received",
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _notifyAdminsOfDispute(NotificationModel originalNotif) async {
+    try {
+      final donationSnap = await FirebaseFirestore.instance
+          .collection('donations')
+          .doc(originalNotif.relatedItemId)
+          .get();
+
+      final donationData = donationSnap.data() ?? {};
+      final ref = donationData['paymentReference'] ?? 'Not provided';
+      final fee = (donationData['deliveryFee'] as num?)?.toDouble() ?? 0;
+
+      String volunteerName = 'Volunteer';
+      final volSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(originalNotif.receiverId)
+          .get();
+      if (volSnap.exists) {
+        volunteerName = volSnap.data()?['name'] ?? 'Volunteer';
+      }
+
+      final adminQuery = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'admin')
+          .get();
+
+      for (var adminDoc in adminQuery.docs) {
+        String notifId =
+            FirebaseFirestore.instance.collection('notifications').doc().id;
+        NotificationModel adminNotif = NotificationModel(
+          id: notifId,
+          receiverId: adminDoc.id,
+          senderId: originalNotif.receiverId,
+          senderName: volunteerName,
+          type: 'payment_dispute',
+          title: 'Payment Dispute – Action Required',
+          message:
+              'Volunteer "$volunteerName" reported NON-RECEIPT of ₹${fee.toStringAsFixed(0)}.\n\n'
+              'Donor: ${originalNotif.senderName}\n'
+              'Reference ID: $ref\n'
+              'Donation ID: ${originalNotif.relatedItemId}\n\n'
+              'Please verify and unlock the donor phone if the payment is genuine.',
+          relatedItemId: originalNotif.relatedItemId,
+          createdAt: DateTime.now(),
+          isRead: false,
+        );
+        await FirestoreService().sendNotification(adminNotif);
+      }
+    } catch (e) {
+      debugPrint('Error notifying admins: $e');
+    }
   }
 
   @override
@@ -839,7 +954,10 @@ class NotificationsScreen extends StatelessWidget {
               bool isDeliveryArrived = notif.type == 'delivery_arrived';
               bool isPaymentPending = notif.type == 'payment_pending';
               bool isVerifyPayment = notif.type == 'verify_payment';
-              bool isNewTask = notif.type == 'new_task_available'; // 👈 NEW
+
+              // 👇 BOTH new_task_available AND urgent_task
+              bool isTaskNotification = notif.type == 'new_task_available' ||
+                  notif.type == 'urgent_task';
 
               return Container(
                 margin: const EdgeInsets.symmetric(
@@ -867,7 +985,7 @@ class NotificationsScreen extends StatelessWidget {
                             ? Colors.orange.shade50
                             : (isPaymentPending || isVerifyPayment
                                 ? Colors.blue.shade50
-                                : (isNewTask
+                                : (isTaskNotification
                                     ? Colors.deepPurple.shade50
                                     : themeColor.withOpacity(0.1)))),
                     child: Icon(
@@ -881,22 +999,26 @@ class NotificationsScreen extends StatelessWidget {
                                       ? Icons.payment_rounded
                                       : isVerifyPayment
                                           ? Icons.currency_rupee_rounded
-                                          : isNewTask
-                                              ? Icons.two_wheeler_rounded // 👈 NEW
+                                          : isTaskNotification
+                                              ? Icons.two_wheeler_rounded
                                               : (isTag
                                                   ? Icons.photo_library_rounded
                                                   : (isMessage
                                                       ? Icons.message_rounded
                                                       : (isVolunteerAccepted
-                                                          ? Icons.directions_car_rounded
-                                                          : Icons.volunteer_activism))),
+                                                          ? Icons
+                                                              .directions_car_rounded
+                                                          : Icons
+                                                              .volunteer_activism))),
                       color: isCancellation
                           ? Colors.red
                           : (isExpiration
                               ? Colors.orange
                               : (isPaymentPending || isVerifyPayment
                                   ? Colors.blue
-                                  : (isNewTask ? Colors.deepPurple : themeColor))),
+                                  : (isTaskNotification
+                                      ? Colors.deepPurple
+                                      : themeColor))),
                     ),
                   ),
                   title: Text(
@@ -935,11 +1057,13 @@ class NotificationsScreen extends StatelessWidget {
                     if (!notif.isRead) {
                       firestoreService.markNotificationAsRead(notif.id);
                     }
+
                     if (isDeliveryArrived) {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => PendingReceiptsScreen(ngoId: user.uid),
+                          builder: (_) =>
+                              PendingReceiptsScreen(ngoId: user.uid),
                         ),
                       );
                     } else if (isPaymentPending) {
@@ -952,14 +1076,19 @@ class NotificationsScreen extends StatelessWidget {
                         ),
                       );
                     } else if (isVerifyPayment) {
-                      // 👇 TRIGGERS VOLUNTEER VERIFICATION DIALOG 👇
                       _showVerifyPaymentDialog(context, notif, themeColor);
-                    } else if (isNewTask) {
-                      // 👇 NEW: Takes the volunteer straight to the Task page 👇
+                    } else if (isTaskNotification) {
+                      // 👇 BOTH new_task_available & urgent_task → go to Tasks
+                      // NO Contact Details popup
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const VolunteerDashboard(),
+                          builder: (context) => VolunteerDashboard(
+                            highlightDonationId:
+                                notif.relatedItemId.isNotEmpty
+                                    ? notif.relatedItemId
+                                    : null,
+                          ),
                         ),
                       );
                     } else if (isTag) {

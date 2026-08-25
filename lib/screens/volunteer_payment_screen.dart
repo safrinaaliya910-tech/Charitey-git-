@@ -1,21 +1,16 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/notification_model.dart';
 import 'rating_dialog.dart';
-import 'package:gal/gal.dart'; // add this import at the top with the others
-
+import 'package:gal/gal.dart';
 
 class VolunteerPaymentScreen extends StatefulWidget {
   final String donationId;
@@ -30,6 +25,7 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
   bool _isLoading = true;
   bool _hasAttemptedPayment = false;
   bool _isWaitingForVolunteer = false;
+  bool _isAdminReview = false;
 
   double _feeAmount = 0.0;
   String _volunteerId = "";
@@ -37,19 +33,15 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
   String _volunteerUpi = "";
   String _itemName = "Delivery Item";
 
-  // 👇 NEW: unique transaction reference generated once per screen load,
-  // so the QR and the "Open UPI App" fallback both point to the same
-  // payment attempt instead of generating a new tr= each rebuild.
   late final String _txnRef;
-
-  // 👇 NEW: key used to capture the QR code widget as an image for download.
-  final GlobalKey _qrKey = GlobalKey();
+  final TextEditingController _refController = TextEditingController();
 
   StreamSubscription<DocumentSnapshot>? _donationSubscription;
 
   @override
   void initState() {
     super.initState();
+    // Keep tr short & alphanumeric (some UPI apps reject long / special refs)
     _txnRef = DateTime.now().millisecondsSinceEpoch.toString();
     _fetchInitialDetails();
     _listenToDonationStatus();
@@ -57,7 +49,10 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
 
   Future<void> _fetchInitialDetails() async {
     try {
-      var donSnap = await FirebaseFirestore.instance.collection('donations').doc(widget.donationId).get();
+      var donSnap = await FirebaseFirestore.instance
+          .collection('donations')
+          .doc(widget.donationId)
+          .get();
       if (!donSnap.exists) return;
 
       var donData = donSnap.data() as Map<String, dynamic>;
@@ -66,11 +61,19 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
       _itemName = donData['items'] ?? donData['itemName'] ?? 'Delivery Item';
 
       if (_volunteerId.isNotEmpty) {
-        var volSnap = await FirebaseFirestore.instance.collection('users').doc(_volunteerId).get();
+        var volSnap = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(_volunteerId)
+            .get();
         if (volSnap.exists) {
           var volData = volSnap.data() as Map<String, dynamic>;
-          _volunteerName = volData['name'] ?? 'Volunteer';
-          _volunteerUpi = volData['upiId'] ?? '';
+          _volunteerName = (volData['name'] ?? 'Volunteer').toString().trim();
+          // Critical: clean UPI exactly like profile setup stores it
+          _volunteerUpi = (volData['upiId'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase()
+              .replaceAll(' ', '');
         }
       }
       setState(() => _isLoading = false);
@@ -79,7 +82,6 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
     }
   }
 
-  // 👇 REAL-TIME LISTENER: Automatically unlocks when Volunteer approves 👇
   void _listenToDonationStatus() {
     _donationSubscription = FirebaseFirestore.instance
         .collection('donations')
@@ -91,9 +93,8 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
         String status = data['status'] ?? '';
 
         if (status == 'fully_completed') {
-          // Volunteer clicked YES! Unlock and show rating!
           _donationSubscription?.cancel();
-          Navigator.pop(context); // Close the lock screen
+          Navigator.pop(context);
           showDialog(
             context: context,
             barrierDismissible: false,
@@ -104,12 +105,20 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
             ),
           );
         } else if (status == 'payment_verification_pending') {
-          setState(() => _isWaitingForVolunteer = true);
+          setState(() {
+            _isWaitingForVolunteer = true;
+            _isAdminReview = false;
+          });
+        } else if (status == 'admin_verification_pending') {
+          setState(() {
+            _isWaitingForVolunteer = true;
+            _isAdminReview = true;
+          });
         } else if (status == 'completed_awaiting_payment') {
-          // Volunteer clicked NO. Reset back to payment buttons.
           setState(() {
             _isWaitingForVolunteer = false;
             _hasAttemptedPayment = false;
+            _isAdminReview = false;
           });
         }
       }
@@ -119,85 +128,164 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
   @override
   void dispose() {
     _donationSubscription?.cancel();
+    _refController.dispose();
     super.dispose();
   }
 
-  // 👇 NEW: single source of truth for the UPI URI, used by both the QR
-  // code and the "Open UPI App" fallback button. am is fixed to 2 decimals
-  // and a stable tr= reference is included, both of which reduce false
-  // "risky payment" rejections in GPay/PhonePe/Paytm fraud checks.
+  /// NPCI-compliant UPI deep-link (same style as profile-setup preview).
+  /// Uses Uri.queryParameters so encoding is correct and consistent.
   String _buildUpiUri() {
-    String safeName = Uri.encodeComponent(_volunteerName);
-    String safeNote = Uri.encodeComponent("Fourth Idly Delivery Fee");
-    return "upi://pay?pa=${_volunteerUpi.trim()}&pn=$safeName&am=${_feeAmount.toStringAsFixed(2)}&cu=INR&tn=$safeNote&tr=$_txnRef";
+    final pa = _volunteerUpi.trim().toLowerCase().replaceAll(' ', '');
+    final pn = _volunteerName.trim().isEmpty ? 'Volunteer' : _volunteerName.trim();
+    final am = _feeAmount.toStringAsFixed(2); // e.g. 1450.00
+    final tn = 'Fourth Idly Delivery Fee';
+
+    // Build with Uri so special chars in name/note are encoded once, correctly.
+    // Omit 'tr' — some apps (esp. GPay) are picky; pa+pn+am+cu+tn is enough for P2P.
+    final uri = Uri(
+      scheme: 'upi',
+      host: 'pay',
+      queryParameters: {
+        'pa': pa,
+        'pn': pn,
+        'am': am,
+        'cu': 'INR',
+        'tn': tn,
+      },
+    );
+    return uri.toString();
+  }
+
+  bool get _isUpiValid {
+    final upi = _volunteerUpi.trim().toLowerCase();
+    final re = RegExp(r'^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$');
+    return re.hasMatch(upi);
   }
 
   Future<void> _launchUPI() async {
-    if (_volunteerUpi.isEmpty) {
+    if (!_isUpiValid) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Volunteer has not set a UPI ID. You can skip payment.'), backgroundColor: Colors.orange),
+        const SnackBar(
+          content: Text('Volunteer has not set a valid UPI ID. You can skip payment.'),
+          backgroundColor: Colors.orange,
+        ),
       );
       setState(() => _hasAttemptedPayment = true);
       return;
     }
 
     try {
-      bool launched = await launchUrl(Uri.parse(_buildUpiUri()), mode: LaunchMode.externalApplication);
-      if (!launched) throw Exception("Could not launch");
+      final launched = await launchUrl(
+        Uri.parse(_buildUpiUri()),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched) throw Exception('Could not launch');
       setState(() => _hasAttemptedPayment = true);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No UPI App found. Please check your apps.'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('No UPI App found. Please check your apps.'),
+          backgroundColor: Colors.red,
+        ),
       );
       setState(() => _hasAttemptedPayment = true);
     }
   }
 
-  // 👇 NEW: captures the QR code widget as a PNG image and hands it to the
-  // OS share sheet so the donor can save it to their gallery/files or open
-  // it directly in any UPI/scanner app.
- Future<void> _downloadQrCode() async {
-  try {
-    RenderRepaintBoundary boundary =
-        _qrKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-    ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-    ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    Uint8List pngBytes = byteData!.buffer.asUint8List();
-
-    await Gal.putImageBytes(pngBytes, name: 'upi_qr_$_txnRef');
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('QR code saved to your gallery.'), backgroundColor: Colors.green),
+  Future<Uint8List> _generateQrPngBytes() async {
+    final painter = QrPainter(
+      data: _buildUpiUri(),
+      version: QrVersions.auto,
+      gapless: true,
+      errorCorrectionLevel: QrErrorCorrectLevel.M,
+      color: const Color(0xFF000000),
+      emptyColor: const Color(0xFFFFFFFF),
     );
-  } catch (e) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Could not save QR code. Please try again.'), backgroundColor: Colors.red),
-    );
+
+    final ui.Image image = await painter.toImage(1024);
+    final ByteData? byteData =
+        await image.toByteData(format: ui.ImageByteFormat.png);
+    if (byteData == null) {
+      throw Exception('Failed to create QR image');
+    }
+    return byteData.buffer.asUint8List();
   }
-}
 
-  // 👇 NEW: donor confirms manually after scanning the QR with their own
-  // phone. There's no app-launch callback for a scan, so this is how the
-  // QR path feeds into the same "Did the payment succeed?" step below.
+  Future<void> _downloadQrCode() async {
+    try {
+      final hasAccess = await Gal.hasAccess(toAlbum: true);
+      if (!hasAccess) {
+        final granted = await Gal.requestAccess(toAlbum: true);
+        if (!granted) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Gallery permission is required to save the QR code.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
+      }
+
+      final Uint8List pngBytes = await _generateQrPngBytes();
+
+      await Gal.putImageBytes(
+        pngBytes,
+        name: 'FourthIdly_UPI_QR_$_txnRef',
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('QR code saved to your gallery ✓'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not save QR code: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   void _confirmQrPaymentAttempted() {
     setState(() => _hasAttemptedPayment = true);
   }
 
-  // 👇 NOTIFIES VOLUNTEER FOR VERIFICATION INSTEAD OF UNLOCKING 👇
   Future<void> _notifyVolunteerForVerification() async {
+    final ref = _refController.text.trim();
+    if (ref.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter the Transaction / UPI Reference ID'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isWaitingForVolunteer = true);
 
     try {
-      await FirebaseFirestore.instance.collection('donations').doc(widget.donationId).update({
+      await FirebaseFirestore.instance
+          .collection('donations')
+          .doc(widget.donationId)
+          .update({
         'status': 'payment_verification_pending',
+        'paymentReference': ref,
+        'paymentSubmittedAt': FieldValue.serverTimestamp(),
       });
 
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final currentUser = authProvider.currentUserModel!;
 
-      String notifId = FirebaseFirestore.instance.collection('notifications').doc().id;
+      String notifId =
+          FirebaseFirestore.instance.collection('notifications').doc().id;
       NotificationModel notif = NotificationModel(
         id: notifId,
         receiverId: _volunteerId,
@@ -205,7 +293,8 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
         senderName: currentUser.name,
         type: 'verify_payment',
         title: 'Payment Verification Required',
-        message: 'Donor ${currentUser.name} says they have paid the ₹${_feeAmount.toStringAsFixed(0)} delivery fee for $_itemName. Please confirm if you received it.',
+        message:
+            'Donor ${currentUser.name} says they have paid ₹${_feeAmount.toStringAsFixed(0)} for $_itemName.\n\nReference ID: $ref\n\nPlease confirm if you received it.',
         relatedItemId: widget.donationId,
         createdAt: DateTime.now(),
         isRead: false,
@@ -213,14 +302,19 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
       await FirestoreService().sendNotification(notif);
     } catch (e) {
       setState(() => _isWaitingForVolunteer = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error contacting volunteer. Try again.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error contacting volunteer. Try again.')),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Scaffold(backgroundColor: Colors.white, body: Center(child: CircularProgressIndicator(color: themeColor)));
+      return Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(child: CircularProgressIndicator(color: themeColor)),
+      );
     }
 
     return PopScope(
@@ -231,7 +325,7 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 24),
             padding: const EdgeInsets.all(28),
-            constraints: const BoxConstraints(maxHeight: 640),
+            constraints: const BoxConstraints(maxHeight: 680),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(28),
@@ -244,27 +338,51 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
                   Container(
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: _isWaitingForVolunteer ? Colors.blue.shade50 : Colors.red.shade50,
+                      color: _isAdminReview
+                          ? Colors.orange.shade50
+                          : (_isWaitingForVolunteer
+                              ? Colors.blue.shade50
+                              : Colors.red.shade50),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      _isWaitingForVolunteer ? Icons.hourglass_top_rounded : Icons.lock_rounded,
-                      color: _isWaitingForVolunteer ? Colors.blue : Colors.red,
+                      _isAdminReview
+                          ? Icons.support_agent_rounded
+                          : (_isWaitingForVolunteer
+                              ? Icons.hourglass_top_rounded
+                              : Icons.lock_rounded),
+                      color: _isAdminReview
+                          ? Colors.orange
+                          : (_isWaitingForVolunteer ? Colors.blue : Colors.red),
                       size: 36,
                     ),
                   ),
                   const SizedBox(height: 20),
                   Text(
-                    _isWaitingForVolunteer ? "Awaiting Verification" : "Action Required",
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.black87),
+                    _isAdminReview
+                        ? "Admin is Reviewing"
+                        : (_isWaitingForVolunteer
+                            ? "Awaiting Verification"
+                            : "Action Required"),
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.black87,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    _isWaitingForVolunteer
-                        ? "We have notified $_volunteerName. \nYour screen will unlock automatically the moment they confirm receipt."
-                        : "Your delivery has been safely completed by $_volunteerName!\n\nPlease clear the delivery fee to unlock full access.",
+                    _isAdminReview
+                        ? "The volunteer reported they did not receive the payment.\n\nOur admin team is verifying the transaction using your Reference ID.\nYou will be notified once they unlock your screen."
+                        : (_isWaitingForVolunteer
+                            ? "We have notified $_volunteerName.\nYour screen will unlock automatically the moment they confirm receipt."
+                            : "Your delivery has been safely completed by $_volunteerName!\n\nPlease clear the delivery fee to unlock full access."),
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600, height: 1.4),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
+                      height: 1.4,
+                    ),
                   ),
                   const SizedBox(height: 24),
 
@@ -280,16 +398,28 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text("Delivery Fee Due:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
-                          Text("₹${_feeAmount.toStringAsFixed(0)}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.green)),
+                          const Text(
+                            "Delivery Fee Due:",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          Text(
+                            "₹${_feeAmount.toStringAsFixed(0)}",
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.green,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 24),
 
                     if (!_hasAttemptedPayment) ...[
-                      // 👇 QR is the primary payment path.
-                      if (_volunteerUpi.isNotEmpty) ...[
+                      if (_isUpiValid) ...[
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
@@ -299,45 +429,75 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
                           ),
                           child: Column(
                             children: [
-                              RepaintBoundary(
-                                key: _qrKey,
-                                child: QrImageView(
-                                  data: _buildUpiUri(),
-                                  version: QrVersions.auto,
-                                  size: 190,
-                                  gapless: false,
-                                ),
+                              QrImageView(
+                                data: _buildUpiUri(),
+                                version: QrVersions.auto,
+                                size: 190,
+                                gapless: true,
+                                backgroundColor: Colors.white,
                               ),
                               const SizedBox(height: 10),
                               Text(
                                 "Scan with any UPI app to pay ₹${_feeAmount.toStringAsFixed(0)}",
-                                style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              // Show UPI so donor can verify payee
+                              Text(
+                                _volunteerUpi,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: themeColor,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                               const SizedBox(height: 4),
-                              // 👇 NEW: lets donors know a screenshot works just as well
-                              // as downloading the QR, especially for same-device payments.
+                              Text(
+                                "Payee: $_volunteerName",
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade500,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
                               Text(
                                 "You can also take a screenshot and pay",
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontStyle: FontStyle.italic),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade500,
+                                  fontStyle: FontStyle.italic,
+                                ),
                               ),
                             ],
                           ),
                         ),
                         const SizedBox(height: 16),
-                        // 👇 NEW: replaces the old Copy ID / Open UPI App row.
-                        // Captures the QR as an image and hands it to the OS share
-                        // sheet so the donor can save it or open it in any app.
                         SizedBox(
                           width: double.infinity,
                           height: 48,
                           child: OutlinedButton.icon(
                             onPressed: _downloadQrCode,
-                            icon: Icon(Icons.download_rounded, size: 18, color: themeColor),
-                            label: Text("Download QR Code", style: TextStyle(color: themeColor, fontWeight: FontWeight.w600)),
+                            icon: Icon(Icons.download_rounded,
+                                size: 18, color: themeColor),
+                            label: Text(
+                              "Download QR Code",
+                              style: TextStyle(
+                                color: themeColor,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                             style: OutlinedButton.styleFrom(
-                              side: BorderSide(color: themeColor.withOpacity(0.5)),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              side: BorderSide(
+                                  color: themeColor.withOpacity(0.5)),
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
                             ),
                           ),
                         ),
@@ -347,32 +507,98 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
                           height: 48,
                           child: ElevatedButton.icon(
                             onPressed: _confirmQrPaymentAttempted,
-                            icon: const Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 20),
-                            label: const Text("I've Paid via QR", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
+                            icon: const Icon(
+                              Icons.check_circle_outline_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            label: const Text(
+                              "I've Paid via QR",
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: themeColor,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
                             ),
                           ),
                         ),
                       ] else ...[
-                        // No UPI ID on file at all — same behavior as before.
+                        // Invalid / missing UPI
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.orange.shade200),
+                          ),
+                          child: Text(
+                            _volunteerUpi.isEmpty
+                                ? "Volunteer has not set a UPI ID yet."
+                                : "Volunteer UPI ID looks invalid: $_volunteerUpi",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.orange.shade900,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
                         SizedBox(
                           width: double.infinity,
                           height: 50,
                           child: ElevatedButton.icon(
                             onPressed: _launchUPI,
-                            icon: const Icon(Icons.payment_rounded, color: Colors.white),
-                            label: Text("Pay ₹${_feeAmount.toStringAsFixed(0)} via UPI", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                            icon: const Icon(Icons.payment_rounded,
+                                color: Colors.white),
+                            label: Text(
+                              "Pay ₹${_feeAmount.toStringAsFixed(0)} via UPI",
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: themeColor,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
                             ),
                           ),
                         ),
                       ],
                     ] else ...[
-                      const Text("Did the payment succeed?", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      const Text(
+                        "Did the payment succeed?",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _refController,
+                        decoration: InputDecoration(
+                          labelText: "Transaction / UPI Reference ID *",
+                          hintText: "Enter the 12-digit reference number",
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          prefixIcon: const Icon(Icons.receipt_long_rounded),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                        ),
+                        textCapitalization: TextCapitalization.characters,
+                      ),
                       const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
@@ -381,19 +607,31 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
                           onPressed: _notifyVolunteerForVerification,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.green,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
                           ),
-                          child: const Text("Yes, Payment Completed", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                          child: const Text(
+                            "Yes, Payment Completed",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
                       TextButton(
-                        onPressed: () => setState(() => _hasAttemptedPayment = false),
-                        child: const Text("No, let me try again", style: TextStyle(color: Colors.redAccent)),
+                        onPressed: () =>
+                            setState(() => _hasAttemptedPayment = false),
+                        child: const Text(
+                          "No, let me try again",
+                          style: TextStyle(color: Colors.redAccent),
+                        ),
                       )
                     ]
                   ] else ...[
-                    // Showing waiting spinner
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 20.0),
                       child: CircularProgressIndicator(color: Colors.blue),

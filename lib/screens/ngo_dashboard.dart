@@ -387,15 +387,29 @@ class PostCardWidget extends StatefulWidget {
 }
 
 class _PostCardWidgetState extends State<PostCardWidget> {
-  bool _isLiked = false;
   bool _isSharing = false;
+  bool _isLiked = false;
 
-  void _toggleLike() {
-    setState(() => _isLiked = !_isLiked);
-    FirebaseFirestore.instance
+
+  Future<void> _toggleLike() async {
+    final postRef = FirebaseFirestore.instance
         .collection('posts')
-        .doc(widget.post.postId)
-        .update({'likes': FieldValue.increment(_isLiked ? 1 : -1)});
+        .doc(widget.post.postId);
+
+    final bool isCurrentlyLiked =
+        widget.post.likedBy.contains(widget.currentUserId);
+
+    if (isCurrentlyLiked) {
+      await postRef.update({
+        'likedBy': FieldValue.arrayRemove([widget.currentUserId]),
+        'likes': FieldValue.increment(-1),
+      });
+    } else {
+      await postRef.update({
+        'likedBy': FieldValue.arrayUnion([widget.currentUserId]),
+        'likes': FieldValue.increment(1),
+      });
+    }
   }
 
   Future<void> _sharePost() async {
@@ -440,7 +454,7 @@ class _PostCardWidgetState extends State<PostCardWidget> {
         textToShare += "✨ ${mentions.join(' ')}\n\n";
       }
 
-      textToShare += "Shared via Charitey App❤️";
+      textToShare += "Shared via Fourth Idly App❤️";
 
       await Share.shareXFiles([XFile(path)], text: textToShare);
     } catch (e) {
@@ -757,7 +771,7 @@ class _PostCardWidgetState extends State<PostCardWidget> {
             ),
             child: Row(
               children: [
-                GestureDetector(
+                                GestureDetector(
                   onTap: _toggleLike,
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
@@ -768,15 +782,21 @@ class _PostCardWidgetState extends State<PostCardWidget> {
                         child: child,
                       );
                     },
-                    child: Icon(
-                      _isLiked
-                          ? Icons.favorite_rounded
-                          : Icons.favorite_border_rounded,
-                      key: ValueKey<bool>(_isLiked),
-                      size: 30,
-                      color: _isLiked
-                          ? const Color(0xFFE63946)
-                          : Colors.grey.shade800,
+                    child: Builder(
+                      builder: (context) {
+                        final bool isLiked = widget.post.likedBy
+                            .contains(widget.currentUserId);
+                        return Icon(
+                          isLiked
+                              ? Icons.favorite_rounded
+                              : Icons.favorite_border_rounded,
+                          key: ValueKey<bool>(isLiked),
+                          size: 30,
+                          color: isLiked
+                              ? const Color(0xFFE63946)
+                              : Colors.grey.shade800,
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -808,8 +828,8 @@ class _PostCardWidgetState extends State<PostCardWidget> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  "${widget.post.likes} likes",
+                                Text(
+                  "${widget.post.likedBy.length} likes",
                   style: const TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 14.5,

@@ -256,7 +256,18 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
           child: Consumer<AuthProvider>(
             builder: (context, authProvider, child) {
               final userRole = authProvider.currentUserModel?.role;
-              
+
+              // ── Button label based on role ──
+              final String buttonLabel;
+              if (userRole == 'volunteer') {
+                buttonLabel = "Browse Tasks";
+              } else if (userRole == 'ngo') {
+                buttonLabel = "Browse Requests";
+              } else {
+                // donor (and any other / null)
+                buttonLabel = "Browse Donations";
+              }
+
               if (userRole == 'volunteer') {
                 return ScaleTransition(
                   scale: _buttonPulseAnimation,
@@ -305,10 +316,10 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
                           )
                         ],
                       ),
-                      child: const Center(
+                      child: Center(
                         child: Text(
-                          "Tasks",
-                          style: TextStyle(
+                          buttonLabel, // "Browse Tasks"
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -350,17 +361,20 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
                           ),
                         ],
                       ),
-                      child: const Center(
+                      child: Center(
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.volunteer_activism, color: Colors.white, size: 22),
-                            SizedBox(width: 10),
-                            Text("Browse Donation",
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.bold)),
+                            const Icon(Icons.volunteer_activism, color: Colors.white, size: 22),
+                            const SizedBox(width: 10),
+                            Text(
+                              buttonLabel, // "Browse Donations" or "Browse Requests"
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ],
                         ),
                       ),

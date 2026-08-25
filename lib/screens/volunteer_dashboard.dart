@@ -518,18 +518,21 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       double? ngoLng = (listingData['pickupLng'] as num?)?.toDouble();
 
       double distanceKm = storedDistanceKm ?? 0.0;
+      double durationMinutes = (distanceKm / 30.0) * 60.0;
       if (distanceKm <= 0 && donorLat != null && donorLng != null && ngoLat != null && ngoLng != null) {
-        final double? routeKm = await LocationHelperService.getRouteDistanceKm(
+        final routeInfo = await LocationHelperService.getRouteInfo(
           originLat: donorLat,
           originLng: donorLng,
           destLat: ngoLat,
           destLng: ngoLng,
         );
-        if (routeKm != null && routeKm > 0) {
-          distanceKm = routeKm;
+        if (routeInfo != null && routeInfo.distanceKm > 0) {
+          distanceKm = routeInfo.distanceKm;
+          durationMinutes = routeInfo.durationMinutes;
         } else {
           double distMeters = Geolocator.distanceBetween(donorLat, donorLng, ngoLat, ngoLng);
           distanceKm = (distMeters / 1000.0);
+          durationMinutes = (distanceKm / 30.0) * 60.0;
         }
       }
 
@@ -540,7 +543,11 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       // accepted the donation's stored deliveryFee is authoritative and
       // remains unchanged.
       if (!isAcceptedByMe) {
-        deliveryFee = FareCalculator.calculate(vehicle: myVehicleType, distanceKm: distanceKm);
+        deliveryFee = FareCalculator.calculate(
+          vehicle: myVehicleType,
+          distanceKm: distanceKm,
+          durationMinutes: durationMinutes,
+        );
       }
 
       // For "Available" (not-yet-accepted) tasks, show the badge using MY
@@ -761,7 +768,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16), // slightly tighter padding helps on small screens
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -769,7 +776,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
             if (isHighlighted)
               Container(
                 width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 14),
+                margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.symmetric(vertical: 7),
                 decoration: BoxDecoration(
                   color: Colors.red.shade600,
@@ -780,117 +787,185 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                   children: const [
                     Icon(Icons.warning_amber_rounded, color: Colors.white, size: 16),
                     SizedBox(width: 6),
-                    Text(
-                      "URGENT — THIS IS THE TASK FROM YOUR ALERT",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                        letterSpacing: 0.3,
+                    Flexible(
+                      child: Text(
+                        "URGENT — THIS IS THE TASK FROM YOUR ALERT",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                          letterSpacing: 0.3,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
                 ),
               ),
+
+            // ── STATUS + PAY BADGE (fixed overflow) ──────────────────────────
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: isCompleted ? Colors.green.shade50 : (isPendingNGO ? Colors.orange.shade50 : themeColor.withValues(alpha: 0.1)),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: isCompleted ? Colors.green.shade200 : (isPendingNGO ? Colors.orange.shade200 : Colors.transparent)),
-                  ),
-                  child: Text(
-                    isCompleted ? "Completed" : (isPendingNGO ? "Waiting for NGO" : (isAcceptedByMe ? "In Transit" : "Pickup Needed")),
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: isCompleted ? Colors.green.shade700 : (isPendingNGO ? Colors.orange.shade700 : themeColor),
+                // Status badge – flexible so it can shrink if needed
+                Flexible(
+                  flex: 2,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: isCompleted
+                          ? Colors.green.shade50
+                          : (isPendingNGO ? Colors.orange.shade50 : themeColor.withValues(alpha: 0.1)),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isCompleted
+                            ? Colors.green.shade200
+                            : (isPendingNGO ? Colors.orange.shade200 : Colors.transparent),
+                      ),
+                    ),
+                    child: Text(
+                      isCompleted
+                          ? "Completed"
+                          : (isPendingNGO
+                              ? "Waiting for NGO"
+                              : (isAcceptedByMe ? "In Transit" : "Pickup Needed")),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: isCompleted
+                            ? Colors.green.shade700
+                            : (isPendingNGO ? Colors.orange.shade700 : themeColor),
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
 
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1B5E20).withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF2E7D32).withValues(alpha: 0.3), width: 1.2),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.account_balance_wallet_rounded, color: Color(0xFF2E7D32), size: 16),
-                      const SizedBox(width: 6),
-                      Text(
-                        "₹${deliveryFee.toStringAsFixed(0)} Pay",
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF2E7D32),
-                          fontSize: 15,
+                const SizedBox(width: 8),
+
+                // Pay + vehicle + distance – flexible + FittedBox prevents overflow
+                Flexible(
+                  flex: 3,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1B5E20).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: const Color(0xFF2E7D32).withValues(alpha: 0.3),
+                          width: 1.2,
                         ),
                       ),
-                      if (vehicleType != null && vehicleType.isNotEmpty) ...[
-                        const SizedBox(width: 6),
-                        _buildVehicleBadge(vehicleType),
-                      ],
-                      if (distanceKm > 0) ...[
-                        const SizedBox(width: 4),
-                        Text(
-                          "(${distanceKm.toStringAsFixed(1)} km)",
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.green.shade800,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.account_balance_wallet_rounded,
+                                color: Color(0xFF2E7D32), size: 14),
+                            const SizedBox(width: 4),
+                            Text(
+                              "₹${deliveryFee.toStringAsFixed(0)} Pay",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF2E7D32),
+                                fontSize: 13,
+                              ),
+                            ),
+                            if (vehicleType != null && vehicleType.isNotEmpty) ...[
+                              const SizedBox(width: 4),
+                              _buildVehicleBadge(vehicleType),
+                            ],
+                            if (distanceKm > 0) ...[
+                              const SizedBox(width: 4),
+                              Text(
+                                "(${distanceKm.toStringAsFixed(1)} km)",
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.green.shade800,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
-                      ],
-                    ],
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+
+            const SizedBox(height: 14),
+
+            // ── ITEM NAME + QUANTITY ─────────────────────────────────────────
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Text(
                     itemName,
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                const SizedBox(width: 8),
                 Text(
                   quantity,
-                  style: TextStyle(fontWeight: FontWeight.bold, color: themeColor, fontSize: 16),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: themeColor,
+                    fontSize: 15,
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+
+            const SizedBox(height: 6),
+
+            // ── REQUIRED BY ──────────────────────────────────────────────────
             Row(
               children: [
-                Icon(Icons.calendar_month_outlined, size: 16, color: Colors.grey.shade500),
-                const SizedBox(width: 8),
+                Icon(Icons.calendar_month_outlined, size: 15, color: Colors.grey.shade500),
+                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     "Required by: $availability",
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade700,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
             ),
+
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
+              padding: EdgeInsets.symmetric(vertical: 12),
               child: Divider(height: 1),
             ),
+
+            // ── PICKUP + DELIVER BOXES ───────────────────────────────────────
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: Colors.grey.shade50,
                       borderRadius: BorderRadius.circular(12),
@@ -901,26 +976,29 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                       children: [
                         Text(
                           "PICKUP FROM (DONOR)",
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: themeColor, letterSpacing: 0.5),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: themeColor,
+                            letterSpacing: 0.4,
+                          ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 6),
                         _buildDetailRow(Icons.person_outline, donorName),
-
                         if (isAcceptedByMe) ...[
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 3),
                           _buildDetailRow(Icons.phone_outlined, donorPhone),
                         ],
-
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 3),
                         _buildDetailRow(Icons.location_on_outlined, donorLocation),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: Colors.grey.shade50,
                       borderRadius: BorderRadius.circular(12),
@@ -931,17 +1009,20 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                       children: [
                         Text(
                           "DELIVER TO (NGO)",
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: themeColor, letterSpacing: 0.5),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: themeColor,
+                            letterSpacing: 0.4,
+                          ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 6),
                         _buildDetailRow(Icons.account_balance_outlined, ngoName),
-
                         if (isAcceptedByMe) ...[
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 3),
                           _buildDetailRow(Icons.phone_outlined, ngoPhone),
                         ],
-
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 3),
                         _buildDetailRow(Icons.location_on_outlined, ngoLocation),
                       ],
                     ),
@@ -949,8 +1030,10 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
 
+            const SizedBox(height: 16),
+
+            // ── ACTION BUTTONS / STATUS MESSAGES ─────────────────────────────
             if (!isAcceptedByMe)
               SizedBox(
                 width: double.infinity,
@@ -967,13 +1050,17 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: isHighlighted ? Colors.red.shade600 : themeColor,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                     elevation: 0,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   child: Text(
                     "Accept Task (Earn ₹${deliveryFee.toStringAsFixed(0)})",
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
                 ),
               )
@@ -985,69 +1072,84 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         onPressed: () async {
-                           bool confirm = await showDialog(
-                             context: context,
-                             builder: (ctx) => AlertDialog(
-                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                               title: Row(
-                                 children: [
-                                   Icon(Icons.check_circle_outline, color: Colors.green.shade600, size: 24),
-                                   const SizedBox(width: 8),
-                                   Text("Confirm Drop-off", style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold, fontSize: 20)),
-                                 ],
-                               ),
-                               content: const Text(
-                                 "Have you physically handed over the items to the NGO?\n\nPlease only confirm if the handover is fully complete.",
-                                 style: TextStyle(height: 1.5, fontSize: 15, color: Colors.black87),
-                               ),
-                               actions: [
-                                 TextButton(
-                                   onPressed: () => Navigator.pop(ctx, false),
-                                   child: Text("Cancel", style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
-                                 ),
-                                 ElevatedButton(
-                                   onPressed: () => Navigator.pop(ctx, true),
-                                   style: ElevatedButton.styleFrom(
-                                     backgroundColor: Colors.green.shade600,
-                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                   ),
-                                   child: const Text("Yes, Dropped Off", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                 ),
-                               ],
-                             ),
-                           ) ?? false;
+                          bool confirm = await showDialog(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  title: Row(
+                                    children: [
+                                      Icon(Icons.check_circle_outline, color: Colors.green.shade600, size: 24),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        "Confirm Drop-off",
+                                        style: TextStyle(
+                                          color: Colors.green.shade700,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 20,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  content: const Text(
+                                    "Have you physically handed over the items to the NGO?\n\nPlease only confirm if the handover is fully complete.",
+                                    style: TextStyle(height: 1.5, fontSize: 15, color: Colors.black87),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, false),
+                                      child: Text(
+                                        "Cancel",
+                                        style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                    ElevatedButton(
+                                      onPressed: () => Navigator.pop(ctx, true),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green.shade600,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      child: const Text(
+                                        "Yes, Dropped Off",
+                                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ) ??
+                              false;
 
-                           if (!confirm) return;
+                          if (!confirm) return;
 
-                           await FirebaseFirestore.instance.collection('donations').doc(donationId).update({
-                              'status': 'pending_ngo_confirmation'
-                           });
+                          await FirebaseFirestore.instance.collection('donations').doc(donationId).update({
+                            'status': 'pending_ngo_confirmation'
+                          });
 
-                           final authProvider = Provider.of<AuthProvider>(context, listen: false);
-                           final currentUserId = authProvider.currentFirebaseUser?.uid;
-                           final currentUserName = authProvider.currentUserModel?.name ?? 'Volunteer';
+                          final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                          final currentUserId = authProvider.currentFirebaseUser?.uid;
+                          final currentUserName = authProvider.currentUserModel?.name ?? 'Volunteer';
 
-                           String notifIdNgo = FirebaseFirestore.instance.collection('notifications').doc().id;
-                           NotificationModel ngoNotif = NotificationModel(
-                             id: notifIdNgo,
-                             receiverId: ngoId,
-                             senderId: currentUserId!,
-                             senderName: currentUserName,
-                             type: 'delivery_arrived',
-                             title: 'Delivery Arrived! 📦',
-                             message: '$currentUserName has dropped off $itemName. Please open your profile and confirm receipt to release their payment.',
-                             relatedItemId: donationId,
-                             createdAt: DateTime.now(),
-                             isRead: false,
-                           );
-                           await FirestoreService().sendNotification(ngoNotif);
+                          String notifIdNgo = FirebaseFirestore.instance.collection('notifications').doc().id;
+                          NotificationModel ngoNotif = NotificationModel(
+                            id: notifIdNgo,
+                            receiverId: ngoId,
+                            senderId: currentUserId!,
+                            senderName: currentUserName,
+                            type: 'delivery_arrived',
+                            title: 'Delivery Arrived! 📦',
+                            message:
+                                '$currentUserName has dropped off $itemName. Please open your profile and confirm receipt to release their payment.',
+                            relatedItemId: donationId,
+                            createdAt: DateTime.now(),
+                            isRead: false,
+                          );
+                          await FirestoreService().sendNotification(ngoNotif);
 
-                           if (context.mounted) {
-                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                               content: Text('NGO Notified! Awaiting their confirmation.'),
-                               backgroundColor: Colors.orange,
-                             ));
-                           }
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text('NGO Notified! Awaiting their confirmation.'),
+                              backgroundColor: Colors.orange,
+                            ));
+                          }
                         },
                         icon: const Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
                         label: const Text(
@@ -1065,16 +1167,48 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                   else if (isPendingNGO)
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.orange.shade200)),
-                      child: Center(child: Text("Waiting for NGO to confirm receipt...", style: TextStyle(color: Colors.orange.shade900, fontWeight: FontWeight.bold))),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
+                      child: Center(
+                        child: Text(
+                          "Waiting for NGO to confirm receipt...",
+                          style: TextStyle(
+                            color: Colors.orange.shade900,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     )
                   else if (status == 'completed_awaiting_payment')
-                     Container(
+                    Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.blue.shade200)),
-                      child: Center(child: Text("Delivery Verified! Awaiting Payment from Donor.", style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold))),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.blue.shade200),
+                      ),
+                      child: Center(
+                        child: Text(
+                          "Delivery Verified! Awaiting Payment from Donor.",
+                          style: TextStyle(
+                            color: Colors.blue.shade900,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     )
                   else
                     SizedBox(
@@ -1093,6 +1227,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
 
                   const SizedBox(height: 10),
 
+                  // Donor / NGO chat buttons
                   Row(
                     children: [
                       Expanded(
@@ -1108,10 +1243,10 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                           icon: Icon(Icons.chat_bubble_outline_rounded, color: themeColor, size: 16),
                           label: Text(
                             "Donor",
-                            style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 14),
+                            style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 13),
                           ),
                           style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            padding: const EdgeInsets.symmetric(vertical: 11),
                             side: BorderSide(color: themeColor.withValues(alpha: 0.5), width: 1.5),
                             backgroundColor: themeColor.withValues(alpha: 0.05),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1132,10 +1267,14 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                           icon: Icon(Icons.chat_bubble_outline_rounded, color: Colors.blueGrey.shade700, size: 16),
                           label: Text(
                             "NGO",
-                            style: TextStyle(color: Colors.blueGrey.shade700, fontWeight: FontWeight.bold, fontSize: 14),
+                            style: TextStyle(
+                              color: Colors.blueGrey.shade700,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
                           ),
                           style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            padding: const EdgeInsets.symmetric(vertical: 11),
                             side: BorderSide(color: Colors.blueGrey.shade300, width: 1.5),
                             backgroundColor: Colors.blueGrey.shade50,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1175,19 +1314,19 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     };
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
         color: themeColor.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: themeColor, size: 14),
-          const SizedBox(width: 4),
+          Icon(icon, color: themeColor, size: 12),
+          const SizedBox(width: 3),
           Text(
             vehicleType,
-            style: TextStyle(color: themeColor, fontSize: 11, fontWeight: FontWeight.bold),
+            style: TextStyle(color: themeColor, fontSize: 10, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -1198,12 +1337,12 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 14, color: Colors.grey.shade500),
-        const SizedBox(width: 6),
+        Icon(icon, size: 13, color: Colors.grey.shade500),
+        const SizedBox(width: 5),
         Expanded(
           child: Text(
             text,
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade800, height: 1.2),
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade800, height: 1.25),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),

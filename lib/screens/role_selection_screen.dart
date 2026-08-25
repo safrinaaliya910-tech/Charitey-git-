@@ -74,7 +74,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
       // Material Icons, so home_rounded reads more clearly at small button size)
       _RoleData(
         title: "Receiver",
-        subtitle: "NGOs/ Orphans",
+        subtitle: "NGOs/ Orphanages",
         icon: Icons
             .home_rounded, // 👈 CHANGED: was holiday_village_rounded — clearer at small size
         onTap: () => Navigator.push(

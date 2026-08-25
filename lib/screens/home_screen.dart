@@ -1,9 +1,10 @@
 //home_screen.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:url_launcher/url_launcher.dart'; 
+import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
@@ -19,9 +20,9 @@ import 'hero_page.dart';
 import 'notifications_screen.dart';
 import 'chat_screen.dart';
 import 'travel_agency_dashboard.dart';
-import 'volunteer_dashboard.dart'; 
-import 'rating_dialog.dart'; 
-import 'volunteer_payment_screen.dart'; // 👇 ADD THIS// 👇 FIX: ADDED THIS MISSING IMPORT!
+import 'volunteer_dashboard.dart';
+import 'rating_dialog.dart';
+import 'volunteer_payment_screen.dart';
 
 // ==========================================
 // 1. HOME SCREEN
@@ -30,72 +31,152 @@ class HomeScreen extends StatefulWidget {
   final int initialIndex;
   final String? targetPostId;
   const HomeScreen({Key? key, this.initialIndex = 0, this.targetPostId})
-    : super(key: key);
+      : super(key: key);
 
   @override
   State<HomeScreen> createState() => HomeScreenState();
 }
 
-class HomeScreenState extends State<HomeScreen> {
+class HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   late int _currentIndex;
   String? targetPostId;
-  
-  // 👇 Tracks if payment lock dialog is currently shown to prevent duplicate popups
+
+  // Tracks if payment lock dialog is currently shown to prevent duplicate popups
   bool _isPaymentLockShown = false;
+
+  bool _hasInitializedForUser = false;
+
+  StreamSubscription<QuerySnapshot>? _pendingPaymentSub;
+
+  // 👇 All statuses that must keep the donor phone locked
+  static const List<String> _lockStatuses = [
+    'completed_awaiting_payment',
+    'payment_verification_pending',
+    'admin_verification_pending',
+  ];
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
     targetPostId = widget.targetPostId;
+    WidgetsBinding.instance.addObserver(this);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initUserDependentLogic();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _initUserDependentLogic();
+  }
+
+  void _initUserDependentLogic() {
+    if (_hasInitializedForUser) return;
+    final user = Provider.of<AuthProvider>(
+      context,
+      listen: false,
+    ).currentUserModel;
+    if (user == null) return;
+
+    _hasInitializedForUser = true;
+
+    if (user.role == 'ngo') {
+      FirestoreService().cleanUpExpiredRequests(user.uid);
+    }
+    if (user.role == 'donor') {
+      _listenForPendingPayments(user.uid);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
       final user = Provider.of<AuthProvider>(
         context,
         listen: false,
       ).currentUserModel;
-      if (user != null) {
-        if (user.role == 'ngo') {
-          FirestoreService().cleanUpExpiredRequests(user.uid);
-        }
-        // 👇 Start listening for pending delivery fee payments if user is a donor 👇
-        if (user.role == 'donor') {
-          _listenForPendingPayments(user.uid);
-        }
+      if (user != null && user.role == 'donor') {
+        _checkPendingPaymentOnce(user.uid);
       }
-    });
+    }
   }
 
- void _listenForPendingPayments(String donorUid) {
-    FirebaseFirestore.instance
+  // 👇 Strong one-time check (also used on app resume)
+  Future<void> _checkPendingPaymentOnce(String donorUid) async {
+    if (_isPaymentLockShown || !mounted) return;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('donations')
+          .where('donorId', isEqualTo: donorUid)
+          .where('status', whereIn: _lockStatuses)
+          .limit(1)
+          .get();
+
+      if (snap.docs.isNotEmpty && !_isPaymentLockShown && mounted) {
+        _showPaymentLock(snap.docs.first.id);
+      }
+    } catch (e) {
+      debugPrint('Pending payment re-check failed: $e');
+    }
+  }
+
+  // 👇 Continuous real-time listener – now watches ALL lock statuses
+  void _listenForPendingPayments(String donorUid) {
+    _pendingPaymentSub?.cancel(); // safety
+
+    _pendingPaymentSub = FirebaseFirestore.instance
         .collection('donations')
         .where('donorId', isEqualTo: donorUid)
-        .where('status', isEqualTo: 'completed_awaiting_payment')
+        .where('status', whereIn: _lockStatuses)
         .snapshots()
         .listen((snapshot) {
       if (snapshot.docs.isNotEmpty && !_isPaymentLockShown && mounted) {
-        setState(() => _isPaymentLockShown = true); // Mark as shown
-        String donationId = snapshot.docs.first.id;
-        
-        // Push the new standalone payment screen
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => VolunteerPaymentScreen(donationId: donationId),
-          ),
-        ).then((_) {
-          // When they finish and it pops back, reset the flag
-          if (mounted) setState(() => _isPaymentLockShown = false);
-        });
+        _showPaymentLock(snapshot.docs.first.id);
+      }
+    }, onError: (e) {
+      debugPrint('Pending payment listener error: $e');
+    });
+  }
+
+  void _showPaymentLock(String donationId) {
+    if (!mounted) return;
+    setState(() => _isPaymentLockShown = true);
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VolunteerPaymentScreen(donationId: donationId),
+      ),
+    ).then((_) {
+      // After the screen is closed we re-check immediately.
+      // If the status is still one of the lock statuses, the lock will
+      // appear again. This prevents any “escape” by force-closing the app.
+      if (mounted) {
+        setState(() => _isPaymentLockShown = false);
+        final user = Provider.of<AuthProvider>(context, listen: false)
+            .currentUserModel;
+        if (user != null && user.role == 'donor') {
+          _checkPendingPaymentOnce(user.uid);
+        }
       }
     });
   }
 
- 
   void switchTab(int index, {String? postId}) {
     setState(() {
       _currentIndex = index;
       targetPostId = postId;
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pendingPaymentSub?.cancel();
+    super.dispose();
   }
 
   @override
@@ -172,7 +253,7 @@ class HomeScreenState extends State<HomeScreen> {
         ),
       ];
     }
-    // 👇 3. NEW: VOLUNTEER ROLE 👇
+    // 👇 3. VOLUNTEER ROLE 👇
     else if (user.role == 'volunteer') {
       screens = [
         const HeroPage(),
@@ -242,12 +323,12 @@ class HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: false,
-        titleSpacing: 0, // 👈 CRUCIAL: Removes default alignment padding and snaps layout to the left
+        titleSpacing: 0,
         title: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const SizedBox(width: 12), // 👈 Provides a clean, standardized margin from the screen edge
-           Container(
+            const SizedBox(width: 12),
+            Container(
               height: 32,
               width: 32,
               decoration: const BoxDecoration(
@@ -258,21 +339,22 @@ class HomeScreenState extends State<HomeScreen> {
                 'assets/app_logo.png',
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
-                  return const Icon(Icons.broken_image, size: 18, color: Colors.grey);
+                  return const Icon(Icons.broken_image,
+                      size: 18, color: Colors.grey);
                 },
               ),
             ),
-            const SizedBox(width: 8), // 👈 Snaps the text close right next to the bird icon
-          const Text(
-            "Fourth Idly",
-            style: TextStyle(
-              color: Color(0xFF6F313E), // Premium dark burgundy to match the hero image
-              fontSize: 20,             // Increased size for a better logo presence
-              fontWeight: FontWeight.w900, // Heavy, bold weight for the whole text
-              letterSpacing: 0.5,
-              fontFamily: 'serif', 
+            const SizedBox(width: 8),
+            const Text(
+              "Fourth Idly",
+              style: TextStyle(
+                color: Color(0xFF6F313E),
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.5,
+                fontFamily: 'serif',
+              ),
             ),
-          ),
           ],
         ),
         actions: [
@@ -459,9 +541,6 @@ class HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: screens[_currentIndex],
-      // ==========================================
-      // CUSTOM ARCHED OVERFLOW FLOATING NAV BAR
-      // ==========================================
       bottomNavigationBar: SafeArea(
         child: Container(
           margin: const EdgeInsets.only(left: 16, right: 16, bottom: 12),
@@ -553,9 +632,8 @@ class HomeScreenState extends State<HomeScreen> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(
-                              0xFF7D444C,
-                            ).withValues(alpha: 0.35),
+                            color: const Color(0xFF7D444C)
+                                .withValues(alpha: 0.35),
                             blurRadius: 12,
                             offset: const Offset(0, 6),
                           ),
@@ -982,7 +1060,6 @@ class FeedbackScreen extends StatefulWidget {
 }
 
 class _FeedbackScreenState extends State<FeedbackScreen> {
-  // Empty strings mean unanswered
   Map<int, String> answers = {1: '', 2: '', 3: '', 4: '', 5: ''};
   final Color themeColor = const Color(0xFF7D444C);
   final Color cardColor = const Color(0xFFFFF0F1);
@@ -1078,7 +1155,6 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   }
 
   Future<void> _submitFeedback() async {
-    // 1. Validate that all questions have been answered
     if (answers.values.contains('')) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1092,7 +1168,6 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      // 2. Safely grab the current user's data
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final user = authProvider.currentUserModel;
 
@@ -1100,7 +1175,6 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         throw Exception("User not found. Please log in again.");
       }
 
-      // 3. Package the data for the Admin Panel
       Map<String, dynamic> feedbackData = {
         'userId': user.uid,
         'userName': user.name,
@@ -1114,12 +1188,10 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         'submittedAt': FieldValue.serverTimestamp(),
       };
 
-      // 4. Send to Firebase
       await FirestoreService().submitFeedback(feedbackData);
 
       if (!mounted) return;
 
-      // 5. Success UI
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Feedback Submitted! Thank you.'),

@@ -8,6 +8,13 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../firebase_options.dart';
 
+class RouteInfo {
+  final double distanceKm;
+  final double durationMinutes;
+
+  RouteInfo({required this.distanceKm, required this.durationMinutes});
+}
+
 class LocationHelperService {
   /// Requests hardware permissions and grabs the exact live coordinates
   static Future<Position?> determinePosition(BuildContext context) async {
@@ -51,8 +58,8 @@ class LocationHelperService {
   /// Gets the driving route distance between two coordinates using
   /// Google Routes API (computeRoutes).
   ///
-  /// Returns kilometers, or null if the API call fails.
-  static Future<double?> getRouteDistanceKm({
+  /// Returns route distance and traffic-aware duration, or null if the API call fails.
+  static Future<RouteInfo?> getRouteInfo({
     required double originLat,
     required double originLng,
     required double destLat,
@@ -78,12 +85,14 @@ class LocationHelperService {
           }
         },
         'travelMode': 'DRIVE',
+        'routingPreference': 'TRAFFIC_AWARE',
+        'departureTime': DateTime.now().toUtc().add(const Duration(minutes: 1)).toIso8601String(),
         'units': 'METRIC',
       });
 
       final headers = {
         'Content-Type': 'application/json',
-        'X-Goog-Api-Key': apiKey ?? '',
+        'X-Goog-Api-Key': apiKey,
         'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration',
       };
 
@@ -157,8 +166,13 @@ class LocationHelperService {
 
       debugPrint('Routes API distanceMeters: $distanceMeters, durationSeconds: $durationSeconds');
 
-      if (distanceMeters != null) return distanceMeters.toDouble() / 1000.0;
-      debugPrint('Routes API response missing distance: ${response.body}');
+      if (distanceMeters != null && durationSeconds != null) {
+        return RouteInfo(
+          distanceKm: distanceMeters.toDouble() / 1000.0,
+          durationMinutes: durationSeconds / 60.0,
+        );
+      }
+      debugPrint('Routes API response missing distance or duration: ${response.body}');
       return null;
     } catch (e, st) {
       debugPrint('Routes API call failed: $e');

@@ -1,3 +1,4 @@
+//donor_listing_screen.dart
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -521,13 +522,29 @@ class _DonorListingScreenState extends State<DonorListingScreen> {
                 ),
               ],
             ),
-            if (listing.type == 'product') ...[
+                        if (listing.type == 'product') ...[
               const SizedBox(height: 14),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('$fulfilledQty donated out of $totalQty', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.green.shade700)),
-                  Text('$remainingQty needed', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: themeColor)),
+                  Flexible(
+                    child: Text(
+                      '$fulfilledQty donated out of $totalQty',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.green.shade700),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      '$remainingQty needed',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: themeColor),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
+                      textAlign: TextAlign.end,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),

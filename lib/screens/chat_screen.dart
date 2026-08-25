@@ -62,14 +62,16 @@ class ChatScreenState extends State<ChatScreen> {
 
   String? _otherUsername;
 
-  @override
+   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _listenToBlockStatus();
-      _markAsRead();
-    });
     _fetchOtherUsername();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _listenToBlockStatus();
+        _markAsRead();
+      }
+    });
   }
 
   Future<void> _fetchOtherUsername() async {
@@ -91,10 +93,20 @@ class ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _listenToBlockStatus() {
+    void _listenToBlockStatus() {
+    // Cancel any previous subscriptions before re-subscribing
+    _blockedByMeSub?.cancel();
+    _blockedThemSub?.cancel();
+
     final user =
         Provider.of<AuthProvider>(context, listen: false).currentUserModel;
-    if (user == null) return;
+    if (user == null) {
+      // Retry once after a short delay if user isn't ready yet
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) _listenToBlockStatus();
+      });
+      return;
+    }
 
     _blockedByMeSub = _chatService
         .isBlockedByMe(user.uid, widget.otherUserId)
@@ -1207,14 +1219,14 @@ class ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildInputArea() {
-    if (_isBlockedByMe || _amIBlockedByThem) {
+        if (_isBlockedByMe || _amIBlockedByThem) {
       return Container(
         padding: const EdgeInsets.all(16),
         color: Colors.grey.shade200,
         child: Text(
           _isBlockedByMe
               ? 'You have blocked this user. Unblock to send messages.'
-              : 'You cannot reply to this conversation.',
+              : 'You can\'t send messages to this person right now.',
           textAlign: TextAlign.center,
           style: const TextStyle(color: Colors.black54),
         ),

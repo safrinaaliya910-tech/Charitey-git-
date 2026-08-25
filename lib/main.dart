@@ -1,3 +1,4 @@
+//lib/main.dart
 //main.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -8,6 +9,7 @@ import 'screens/home_screen.dart';
 import 'screens/profile_setup_screen.dart';
 import 'providers/auth_provider.dart';
 import 'services/notification_service.dart';
+import 'services/navigation_keys.dart';
 import 'package:flutter/foundation.dart';
 import 'screens/pending_verification_screen.dart';
 
@@ -18,26 +20,41 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  if (!kIsWeb) {
-    final notificationService = NotificationService();
-    await notificationService.initNotifications();
-  }
+  final authProvider = AuthProvider();
 
   runApp(
     MultiProvider(
-      providers: [ChangeNotifierProvider(create: (_) => AuthProvider())],
+      providers: [ChangeNotifierProvider.value(value: authProvider)],
       child: const MyApp(),
     ),
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final NotificationService _notificationService = NotificationService();
+
+  @override
+  void initState() {
+    super.initState();
+    if (!kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _notificationService.initNotifications();
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Fourth Idly',
+      navigatorKey: appNavigatorKey,
       theme: ThemeData(
         primaryColor: const Color(0xFFB56F76),
         colorScheme: ColorScheme.fromSeed(
