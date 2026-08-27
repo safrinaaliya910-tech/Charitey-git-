@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart'; 
-import 'package:geocoding/geocoding.dart'; 
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geocoding/geocoding.dart';
 
 import '../models/ngo_listing_model.dart';
 import '../services/firestore_service.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_text_field.dart';
-import 'home_screen.dart'; 
-import 'location_picker_screen.dart'; 
+import 'home_screen.dart';
+import 'location_picker_screen.dart';
 
 class CreateListingScreen extends StatefulWidget {
   const CreateListingScreen({Key? key}) : super(key: key);
@@ -22,34 +22,57 @@ class CreateListingScreen extends StatefulWidget {
 class CreateListingScreenState extends State<CreateListingScreen> {
   final FirestoreService firestoreService = FirestoreService();
   String _listingType = 'food';
-  bool isStep1 = true; 
-  
+  bool isStep1 = true;
+
   // Volunteer Availability & Location State
   bool? isVolunteerAvailable;
-  LatLng? _pickupLatLng; 
-  String? _pickupAddressText; 
-  
+  LatLng? _pickupLatLng;
+  String? _pickupAddressText;
+
+  // 👇 FIX: keep real DateTime so liveUntil is never wrong (AM/PM safe)
+  DateTime? _liveUntilDateTime;
+
   final TextEditingController _foodTypeController = TextEditingController();
   final TextEditingController _quantityController = TextEditingController();
-  
+
   String _foodUnit = 'kg';
   String _productUnit = 'items';
-  
+
   final TextEditingController _categoryController = TextEditingController();
   final TextEditingController productNameController = TextEditingController();
   final TextEditingController availabilityController = TextEditingController();
-  final TextEditingController _descriptionController = TextEditingController(); 
-  
+  final TextEditingController _descriptionController = TextEditingController();
+
   bool isLoading = false;
-  final Color themeColor = const Color(0xFF7D444C); 
-  
+  final Color themeColor = const Color(0xFF7D444C);
+
   static const List<String> foodSuggestions = [
-    'Biriyani', 'Chappathi', 'Curry', 'Dal', 'Dosa', 'Idli', 'Meals',
-    'Parotta', 'Pongal', 'Puri', 'Rice', 'Roll', 'Sambar', 'Sandwich'
+    'Biriyani',
+    'Chappathi',
+    'Curry',
+    'Dal',
+    'Dosa',
+    'Idli',
+    'Meals',
+    'Parotta',
+    'Pongal',
+    'Puri',
+    'Rice',
+    'Roll',
+    'Sambar',
+    'Sandwich'
   ];
   static const List<String> _productSuggestions = [
-    'Blankets', 'Books', 'Clothes', 'Footwear', 'Furniture',
-    'Medicines', 'School Supplies', 'Stationery', 'Toys', 'Utensils',
+    'Blankets',
+    'Books',
+    'Clothes',
+    'Footwear',
+    'Furniture',
+    'Medicines',
+    'School Supplies',
+    'Stationery',
+    'Toys',
+    'Utensils',
     'Winter Wear'
   ];
 
@@ -60,11 +83,10 @@ class CreateListingScreenState extends State<CreateListingScreen> {
     _categoryController.dispose();
     productNameController.dispose();
     availabilityController.dispose();
-    _descriptionController.dispose(); 
+    _descriptionController.dispose();
     super.dispose();
   }
 
-  // Open Map and get coordinates 
   Future<void> _selectLocation() async {
     final LatLng? picked = await Navigator.push(
       context,
@@ -76,19 +98,18 @@ class CreateListingScreenState extends State<CreateListingScreen> {
     }
   }
 
-  // Convert coordinates to clean readable address 
   Future<void> _getAddressFromCoordinates(LatLng coords) async {
     try {
-      List<Placemark> placemarks = await placemarkFromCoordinates(coords.latitude, coords.longitude);
+      List<Placemark> placemarks =
+          await placemarkFromCoordinates(coords.latitude, coords.longitude);
       if (placemarks.isNotEmpty) {
         final p = placemarks.first;
         setState(() {
-          // Extracts just the area/city (e.g., "RS Puram, Coimbatore")
           _pickupAddressText = [p.subLocality, p.locality]
               .where((e) => e != null && e.isNotEmpty)
               .join(", ");
           if (_pickupAddressText!.isEmpty) {
-             _pickupAddressText = p.name ?? "Selected Location";
+            _pickupAddressText = p.name ?? "Selected Location";
           }
         });
       }
@@ -145,11 +166,21 @@ class CreateListingScreenState extends State<CreateListingScreen> {
       );
 
       if (pickedTime != null) {
+        // 👇 Store real DateTime (hour is already 0–23 from TimeOfDay)
+        final selected = DateTime(
+          pickedDate.year,
+          pickedDate.month,
+          pickedDate.day,
+          pickedTime.hour,
+          pickedTime.minute,
+        );
+
         setState(() {
-          String day = pickedDate.day.toString().padLeft(2, '0');
-          String month = pickedDate.month.toString().padLeft(2, '0');
-          String year = pickedDate.year.toString();
-          String time = pickedTime.format(context);
+          _liveUntilDateTime = selected;
+          final day = pickedDate.day.toString().padLeft(2, '0');
+          final month = pickedDate.month.toString().padLeft(2, '0');
+          final year = pickedDate.year.toString();
+          final time = pickedTime.format(context);
           availabilityController.text = "$day-$month-$year $time";
         });
       }
@@ -164,7 +195,8 @@ class CreateListingScreenState extends State<CreateListingScreen> {
       return;
     }
     if (_listingType == 'product' &&
-        (_categoryController.text.trim().isEmpty || productNameController.text.trim().isEmpty)) {
+        (_categoryController.text.trim().isEmpty ||
+            productNameController.text.trim().isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter Category and Product Name')),
       );
@@ -190,7 +222,8 @@ class CreateListingScreenState extends State<CreateListingScreen> {
       );
       return;
     }
-    if (availabilityController.text.trim().isEmpty) {
+    if (_liveUntilDateTime == null ||
+        availabilityController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select Date & Time')),
       );
@@ -198,15 +231,28 @@ class CreateListingScreenState extends State<CreateListingScreen> {
     }
     if (isVolunteerAvailable == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select your volunteer availability.')),
+        const SnackBar(
+            content: Text('Please select your volunteer availability.')),
       );
       return;
     }
-    
-    // Force location if no volunteer 
+
     if (isVolunteerAvailable == false && _pickupLatLng == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please pin a pickup location for the platform volunteer.')),
+        const SnackBar(
+            content: Text(
+                'Please pin a pickup location for the platform volunteer.')),
+      );
+      return;
+    }
+
+    // Must be in the future (full date + time)
+    if (!_liveUntilDateTime!.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a future date and time.'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
@@ -218,51 +264,36 @@ class CreateListingScreenState extends State<CreateListingScreen> {
     setState(() => isLoading = true);
 
     try {
-      String listingId = FirebaseFirestore.instance.collection('ngo_listings').doc().id;
-      final selectedText = availabilityController.text.trim();
-      final parts = selectedText.split(' ');
-      final datePart = parts[0]; 
-      final timePart = "${parts[1]} ${parts[2]}"; 
+      String listingId =
+          FirebaseFirestore.instance.collection('ngo_listings').doc().id;
 
-      final datePieces = datePart.split('-');
-      final day = int.parse(datePieces[0]);
-      final month = int.parse(datePieces[1]);
-      final year = int.parse(datePieces[2]);
-
-      final parsedTime = TimeOfDay(
-        hour: int.parse(timePart.split(':')[0]),
-        minute: int.parse(timePart.split(':')[1].split(' ')[0]),
-      );
-
-      DateTime selectedDateTime = DateTime(
-        year,
-        month,
-        day,
-        parsedTime.hour,
-        parsedTime.minute,
-      );
+      // 👇 Use stored DateTime — no string parse, no AM/PM bug
+      final DateTime selectedDateTime = _liveUntilDateTime!;
 
       NgoListingModel newListing = NgoListingModel(
         listingId: listingId,
         ngoId: user.uid,
         ngoName: user.name,
         ngoLocation: user.location,
-        ngoProfileImage: user.profileImage, 
+        ngoProfileImage: user.profileImage,
         type: _listingType,
-        imageUrl: null, 
-        foodType: _listingType == 'food' ? _foodTypeController.text.trim() : null,
+        imageUrl: null,
+        foodType:
+            _listingType == 'food' ? _foodTypeController.text.trim() : null,
         quantity: int.parse(_quantityController.text.trim()),
         unit: _listingType == 'food' ? _foodUnit : _productUnit,
-        category: _listingType == 'product' ? _categoryController.text.trim() : null,
-        productName: _listingType == 'product' ? productNameController.text.trim() : null,
+        category:
+            _listingType == 'product' ? _categoryController.text.trim() : null,
+        productName:
+            _listingType == 'product' ? productNameController.text.trim() : null,
         availability: availabilityController.text.trim(),
         liveUntil: selectedDateTime,
         createdAt: DateTime.now(),
         status: 'open',
         isVolunteerAvailable: isVolunteerAvailable,
-        description: _descriptionController.text.trim().isNotEmpty ? _descriptionController.text.trim() : null, 
-        
-        // 👇 FIXED: UNCOMMENTED SO FIREBASE SAVES THE EXACT LOCATION 👇
+        description: _descriptionController.text.trim().isNotEmpty
+            ? _descriptionController.text.trim()
+            : null,
         pickupLat: _pickupLatLng?.latitude,
         pickupLng: _pickupLatLng?.longitude,
         pickupAddress: _pickupAddressText,
@@ -308,36 +339,61 @@ class CreateListingScreenState extends State<CreateListingScreen> {
           return const Iterable<String>.empty();
         }
         String query = textEditingValue.text.toLowerCase();
-        var startsWithMatches = suggestions.where((option) => option.toLowerCase().startsWith(query)).toList();
-        var containsMatches = suggestions.where((option) => option.toLowerCase().contains(query) && !option.toLowerCase().startsWith(query)).toList();
+        var startsWithMatches = suggestions
+            .where((option) => option.toLowerCase().startsWith(query))
+            .toList();
+        var containsMatches = suggestions
+            .where((option) =>
+                option.toLowerCase().contains(query) &&
+                !option.toLowerCase().startsWith(query))
+            .toList();
         return [...startsWithMatches, ...containsMatches];
       },
       onSelected: (String selection) {
         controller.text = selection;
       },
-      fieldViewBuilder: (BuildContext context, TextEditingController fieldTextEditingController, FocusNode fieldFocusNode, VoidCallback onFieldSubmitted) {
+      fieldViewBuilder: (BuildContext context,
+          TextEditingController fieldTextEditingController,
+          FocusNode fieldFocusNode,
+          VoidCallback onFieldSubmitted) {
         return TextFormField(
           controller: fieldTextEditingController,
           focusNode: fieldFocusNode,
           enabled: isEnabled,
-          style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87),
+          style: const TextStyle(
+              fontWeight: FontWeight.w600, color: Colors.black87),
           onChanged: (value) {
             controller.text = value;
           },
           decoration: InputDecoration(
             hintText: hintText,
-            hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.w500),
+            hintStyle: TextStyle(
+                color: Colors.grey.shade400, fontWeight: FontWeight.w500),
             filled: true,
-            fillColor: isEnabled ? Colors.white.withOpacity(0.9) : Colors.white.withOpacity(0.5),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: themeColor.withOpacity(0.5), width: 1.5)),
-            disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+            fillColor: isEnabled
+                ? Colors.white.withOpacity(0.9)
+                : Colors.white.withOpacity(0.5),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide:
+                    BorderSide(color: themeColor.withOpacity(0.5), width: 1.5)),
+            disabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none),
           ),
         );
       },
-      optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<String> onSelected, Iterable<String> options) {
+      optionsViewBuilder: (BuildContext context,
+          AutocompleteOnSelected<String> onSelected,
+          Iterable<String> options) {
         return Align(
           alignment: Alignment.topLeft,
           child: Material(
@@ -360,8 +416,12 @@ class CreateListingScreenState extends State<CreateListingScreen> {
                   return InkWell(
                     onTap: () => onSelected(option),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                      child: Text(option, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 14),
+                      child: Text(option,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87)),
                     ),
                   );
                 },
@@ -373,7 +433,8 @@ class CreateListingScreenState extends State<CreateListingScreen> {
     );
   }
 
-  Widget _buildVolunteerToggle(String text, bool isSelected, VoidCallback onTap) {
+  Widget _buildVolunteerToggle(
+      String text, bool isSelected, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -420,12 +481,16 @@ class CreateListingScreenState extends State<CreateListingScreen> {
           elevation: 0,
           centerTitle: false,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 22, color: Colors.black87),
+            icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                size: 22, color: Colors.black87),
             onPressed: navigateSafelyHome,
           ),
           title: const Text(
             "Create Request",
-            style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w900, fontSize: 22),
+            style: TextStyle(
+                color: Colors.black87,
+                fontWeight: FontWeight.w900,
+                fontSize: 22),
           ),
         ),
         extendBodyBehindAppBar: true,
@@ -449,7 +514,8 @@ class CreateListingScreenState extends State<CreateListingScreen> {
             SafeArea(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -480,30 +546,41 @@ class CreateListingScreenState extends State<CreateListingScreen> {
                               children: [
                                 Expanded(
                                   child: GestureDetector(
-                                    onTap: isStep1 ? () {
-                                      setState(() {
-                                        _listingType = 'food';
-                                      });
-                                    } : null,
+                                    onTap: isStep1
+                                        ? () {
+                                            setState(() {
+                                              _listingType = 'food';
+                                            });
+                                          }
+                                        : null,
                                     child: AnimatedContainer(
-                                      duration: const Duration(milliseconds: 250),
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
+                                      duration:
+                                          const Duration(milliseconds: 250),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 14),
                                       decoration: BoxDecoration(
-                                        color: _listingType == 'food' ? themeColor : Colors.transparent,
+                                        color: _listingType == 'food'
+                                            ? themeColor
+                                            : Colors.transparent,
                                         borderRadius: BorderRadius.circular(30),
-                                        boxShadow: _listingType == 'food' ? [
-                                          BoxShadow(
-                                            color: themeColor.withOpacity(0.3),
-                                            blurRadius: 8,
-                                            offset: const Offset(0, 4),
-                                          )
-                                        ] : [],
+                                        boxShadow: _listingType == 'food'
+                                            ? [
+                                                BoxShadow(
+                                                  color: themeColor
+                                                      .withOpacity(0.3),
+                                                  blurRadius: 8,
+                                                  offset: const Offset(0, 4),
+                                                )
+                                              ]
+                                            : [],
                                       ),
                                       child: Center(
                                         child: Text(
                                           "Food",
                                           style: TextStyle(
-                                            color: _listingType == 'food' ? Colors.white : Colors.grey.shade600,
+                                            color: _listingType == 'food'
+                                                ? Colors.white
+                                                : Colors.grey.shade600,
                                             fontWeight: FontWeight.w800,
                                           ),
                                         ),
@@ -513,30 +590,41 @@ class CreateListingScreenState extends State<CreateListingScreen> {
                                 ),
                                 Expanded(
                                   child: GestureDetector(
-                                    onTap: isStep1 ? () {
-                                      setState(() {
-                                        _listingType = 'product';
-                                      });
-                                    } : null,
+                                    onTap: isStep1
+                                        ? () {
+                                            setState(() {
+                                              _listingType = 'product';
+                                            });
+                                          }
+                                        : null,
                                     child: AnimatedContainer(
-                                      duration: const Duration(milliseconds: 250),
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
+                                      duration:
+                                          const Duration(milliseconds: 250),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 14),
                                       decoration: BoxDecoration(
-                                        color: _listingType == 'product' ? themeColor : Colors.transparent,
+                                        color: _listingType == 'product'
+                                            ? themeColor
+                                            : Colors.transparent,
                                         borderRadius: BorderRadius.circular(30),
-                                        boxShadow: _listingType == 'product' ? [
-                                          BoxShadow(
-                                            color: themeColor.withOpacity(0.3),
-                                            blurRadius: 8,
-                                            offset: const Offset(0, 4),
-                                          )
-                                        ] : [],
+                                        boxShadow: _listingType == 'product'
+                                            ? [
+                                                BoxShadow(
+                                                  color: themeColor
+                                                      .withOpacity(0.3),
+                                                  blurRadius: 8,
+                                                  offset: const Offset(0, 4),
+                                                )
+                                              ]
+                                            : [],
                                       ),
                                       child: Center(
                                         child: Text(
                                           "Product",
                                           style: TextStyle(
-                                            color: _listingType == 'product' ? Colors.white : Colors.grey.shade600,
+                                            color: _listingType == 'product'
+                                                ? Colors.white
+                                                : Colors.grey.shade600,
                                             fontWeight: FontWeight.w800,
                                           ),
                                         ),
@@ -588,14 +676,20 @@ class CreateListingScreenState extends State<CreateListingScreen> {
                                 onPressed: goToNextStep,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: themeColor,
-                                  padding: const EdgeInsets.symmetric(vertical: 18),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 18),
                                   elevation: 4,
                                   shadowColor: themeColor.withOpacity(0.4),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16)),
                                 ),
                                 child: const Text(
                                   "Continue",
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 0.5),
+                                  style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                      letterSpacing: 0.5),
                                 ),
                               ),
                             ),
@@ -605,7 +699,8 @@ class CreateListingScreenState extends State<CreateListingScreen> {
                             child: isStep1
                                 ? const SizedBox.shrink()
                                 : Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Align(
                                         alignment: Alignment.centerRight,
@@ -615,8 +710,12 @@ class CreateListingScreenState extends State<CreateListingScreen> {
                                               isStep1 = true;
                                             });
                                           },
-                                          icon: Icon(Icons.edit_rounded, size: 16, color: themeColor),
-                                          label: Text("Edit Selection", style: TextStyle(color: themeColor, fontWeight: FontWeight.w800)),
+                                          icon: Icon(Icons.edit_rounded,
+                                              size: 16, color: themeColor),
+                                          label: Text("Edit Selection",
+                                              style: TextStyle(
+                                                  color: themeColor,
+                                                  fontWeight: FontWeight.w800)),
                                         ),
                                       ),
                                       const SizedBox(height: 5),
@@ -627,12 +726,14 @@ class CreateListingScreenState extends State<CreateListingScreen> {
                                             child: Container(
                                               decoration: BoxDecoration(
                                                 color: Colors.grey.shade50,
-                                                borderRadius: BorderRadius.circular(16),
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
                                               ),
                                               child: CustomTextField(
                                                 controller: _quantityController,
                                                 hintText: "Quantity",
-                                                keyboardType: TextInputType.number,
+                                                keyboardType:
+                                                    TextInputType.number,
                                               ),
                                             ),
                                           ),
@@ -640,18 +741,41 @@ class CreateListingScreenState extends State<CreateListingScreen> {
                                           Expanded(
                                             flex: 1,
                                             child: Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 16,
+                                                      vertical: 4),
                                               decoration: BoxDecoration(
                                                 color: Colors.grey.shade50,
-                                                borderRadius: BorderRadius.circular(16),
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
                                               ),
                                               child: DropdownButtonHideUnderline(
                                                 child: DropdownButton<String>(
-                                                  value: _listingType == 'food' ? _foodUnit : _productUnit,
+                                                  value: _listingType == 'food'
+                                                      ? _foodUnit
+                                                      : _productUnit,
                                                   isExpanded: true,
-                                                  icon: Icon(Icons.keyboard_arrow_down_rounded, color: themeColor),
-                                                  style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87, fontSize: 15),
-                                                  items: (_listingType == 'food' ? ['kg', 'packs', 'members'] : ['items', 'sets/pairs', 'boxes/cartons'])
+                                                  icon: Icon(
+                                                      Icons
+                                                          .keyboard_arrow_down_rounded,
+                                                      color: themeColor),
+                                                  style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: Colors.black87,
+                                                      fontSize: 15),
+                                                  items: (_listingType == 'food'
+                                                          ? [
+                                                              'kg',
+                                                              'packs',
+                                                              'members'
+                                                            ]
+                                                          : [
+                                                              'items',
+                                                              'sets/pairs',
+                                                              'boxes/cartons'
+                                                            ])
                                                       .map((value) {
                                                     return DropdownMenuItem(
                                                       value: value,
@@ -660,7 +784,8 @@ class CreateListingScreenState extends State<CreateListingScreen> {
                                                   }).toList(),
                                                   onChanged: (value) {
                                                     setState(() {
-                                                      if (_listingType == 'food') {
+                                                      if (_listingType ==
+                                                          'food') {
                                                         _foodUnit = value!;
                                                       } else {
                                                         _productUnit = value!;
@@ -678,46 +803,85 @@ class CreateListingScreenState extends State<CreateListingScreen> {
                                         controller: availabilityController,
                                         readOnly: true,
                                         onTap: () => selectDateTime(context),
-                                        style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.black87),
                                         decoration: InputDecoration(
                                           hintText: "Select Date & Time",
-                                          hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.w500),
+                                          hintStyle: TextStyle(
+                                              color: Colors.grey.shade400,
+                                              fontWeight: FontWeight.w500),
                                           filled: true,
                                           fillColor: Colors.grey.shade50,
-                                          suffixIcon: Icon(Icons.calendar_month_rounded, color: themeColor, size: 22),
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: themeColor.withOpacity(0.5), width: 1.5)),
+                                          suffixIcon: Icon(
+                                              Icons.calendar_month_rounded,
+                                              color: themeColor,
+                                              size: 22),
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                  horizontal: 20, vertical: 18),
+                                          border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                              borderSide: BorderSide.none),
+                                          enabledBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                              borderSide: BorderSide.none),
+                                          focusedBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                              borderSide: BorderSide(
+                                                  color: themeColor
+                                                      .withOpacity(0.5),
+                                                  width: 1.5)),
                                         ),
                                       ),
                                       const SizedBox(height: 24),
                                       TextFormField(
                                         controller: _descriptionController,
                                         maxLines: 3,
-                                        style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.black87),
                                         decoration: InputDecoration(
-                                          hintText: "Add details or description (Optional)",
-                                          hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.w500),
+                                          hintText:
+                                              "Add details or description (Optional)",
+                                          hintStyle: TextStyle(
+                                              color: Colors.grey.shade400,
+                                              fontWeight: FontWeight.w500),
                                           filled: true,
                                           fillColor: Colors.grey.shade50,
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: themeColor.withOpacity(0.5), width: 1.5)),
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                  horizontal: 20, vertical: 18),
+                                          border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                              borderSide: BorderSide.none),
+                                          enabledBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                              borderSide: BorderSide.none),
+                                          focusedBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                              borderSide: BorderSide(
+                                                  color: themeColor
+                                                      .withOpacity(0.5),
+                                                  width: 1.5)),
                                         ),
                                       ),
                                       const SizedBox(height: 24),
-
                                       Row(
                                         children: [
                                           Expanded(
                                             child: _buildVolunteerToggle(
                                               "I have volunteer\nfor pickup",
-                                              isVolunteerAvailable == true, 
+                                              isVolunteerAvailable == true,
                                               () => setState(() {
                                                 isVolunteerAvailable = true;
-                                                _pickupLatLng = null; // Clear map if switching
+                                                _pickupLatLng = null;
                                                 _pickupAddressText = null;
                                               }),
                                             ),
@@ -726,75 +890,99 @@ class CreateListingScreenState extends State<CreateListingScreen> {
                                           Expanded(
                                             child: _buildVolunteerToggle(
                                               "I don't have\nvolunteer",
-                                              isVolunteerAvailable == false, 
-                                              () => setState(() => isVolunteerAvailable = false),
+                                              isVolunteerAvailable == false,
+                                              () => setState(() =>
+                                                  isVolunteerAvailable =
+                                                      false),
                                             ),
                                           ),
                                         ],
                                       ),
-                                     
-                                      // 👇 THE LOCATION PICKER FOR PLATFORM VOLUNTEERS 👇
                                       if (isVolunteerAvailable == false) ...[
                                         const SizedBox(height: 16),
                                         GestureDetector(
                                           onTap: _selectLocation,
                                           child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 20, vertical: 18),
                                             decoration: BoxDecoration(
                                               color: Colors.grey.shade50,
-                                              borderRadius: BorderRadius.circular(16),
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
                                               border: Border.all(
-                                                color: _pickupLatLng == null ? themeColor.withOpacity(0.5) : Colors.green.shade400, 
-                                                width: 1.5
-                                              ),
+                                                  color: _pickupLatLng == null
+                                                      ? themeColor
+                                                          .withOpacity(0.5)
+                                                      : Colors.green.shade400,
+                                                  width: 1.5),
                                             ),
                                             child: Row(
                                               children: [
                                                 Icon(
-                                                  _pickupLatLng == null ? Icons.location_on_rounded : Icons.check_circle_rounded, 
-                                                  color: _pickupLatLng == null ? themeColor : Colors.green, 
-                                                  size: 22
-                                                ),
+                                                    _pickupLatLng == null
+                                                        ? Icons
+                                                            .location_on_rounded
+                                                        : Icons
+                                                            .check_circle_rounded,
+                                                    color: _pickupLatLng == null
+                                                        ? themeColor
+                                                        : Colors.green,
+                                                    size: 22),
                                                 const SizedBox(width: 12),
                                                 Expanded(
                                                   child: Text(
-                                                    _pickupAddressText ?? "Tap to pin pickup location",
+                                                    _pickupAddressText ??
+                                                        "Tap to pin pickup location",
                                                     style: TextStyle(
-                                                      color: _pickupAddressText == null ? Colors.grey.shade500 : Colors.black87,
-                                                      fontWeight: _pickupAddressText == null ? FontWeight.w500 : FontWeight.w600,
+                                                      color: _pickupAddressText ==
+                                                              null
+                                                          ? Colors.grey.shade500
+                                                          : Colors.black87,
+                                                      fontWeight:
+                                                          _pickupAddressText ==
+                                                                  null
+                                                              ? FontWeight.w500
+                                                              : FontWeight.w600,
                                                       fontSize: 15,
                                                     ),
                                                   ),
                                                 ),
-                                                Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey.shade400, size: 16),
+                                                Icon(
+                                                    Icons
+                                                        .arrow_forward_ios_rounded,
+                                                    color: Colors.grey.shade400,
+                                                    size: 16),
                                               ],
                                             ),
                                           ),
                                         ),
-                                        
                                         const SizedBox(height: 16),
                                         Container(
                                           width: double.infinity,
-                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 16, vertical: 14),
                                           decoration: BoxDecoration(
                                             color: themeColor.withOpacity(0.04),
-                                            borderRadius: BorderRadius.circular(12),
-                                            border: Border.all(color: themeColor.withOpacity(0.15), width: 1),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            border: Border.all(
+                                                color: themeColor
+                                                    .withOpacity(0.15),
+                                                width: 1),
                                           ),
                                           child: Text(
                                             "Utilizing platform volunteers may result in a slight pickup delay after a donation is made. You will be notified instantly once a volunteer accepts the task.",
-                                            textAlign: TextAlign.center, 
+                                            textAlign: TextAlign.center,
                                             style: TextStyle(
-                                              color: themeColor.withOpacity(0.9), 
+                                              color: themeColor.withOpacity(0.9),
                                               fontSize: 12.5,
-                                              fontWeight: FontWeight.w500, 
+                                              fontWeight: FontWeight.w500,
                                               height: 1.4,
-                                              letterSpacing: 0.2, 
+                                              letterSpacing: 0.2,
                                             ),
                                           ),
                                         ),
                                       ],
-
                                       const SizedBox(height: 45),
                                       SizedBox(
                                         width: double.infinity,
