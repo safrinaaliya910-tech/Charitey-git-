@@ -1,3 +1,4 @@
+//firestore_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/ngo_listing_model.dart';
 import '../models/donation_model.dart';
@@ -112,7 +113,7 @@ class FirestoreService {
 
         // Verify that another concurrent user hasn't fulfilled this listing mid-process
         if (donation.donatedQuantity > remainingNow) {
-          throw Exception("Only $remainingNow item(s) are still needed.");
+          throw Exception("Only $remainingNow item(s) are still needed."); 
         }
 
         final int newFulfilled = currentFulfilled + donation.donatedQuantity;
@@ -157,6 +158,28 @@ class FirestoreService {
         // f. Write: Create notification record inside the transaction execution block
         transaction.set(notificationRef, notification.toMap()); 
       });
+
+      // NEW: if this donation needs a volunteer pickup, trigger *immediate* broadcast
+      // so every volunteer receives a new_task_available notification via the Cloud Function.
+      final listingDoc = await _firestore.collection('ngo_listings').doc(donation.listingId).get();
+      final listingData = listingDoc.data() ?? {};
+      if (listingData['isVolunteerAvailable'] == false && donation.status == 'pending') {
+        final String itemName = listingData['type'] == 'food' || listingData['type'] == 'FOOD'
+            ? (listingData['foodType'] ?? 'Food')
+            : (listingData['productName'] ?? 'Product');
+
+        final String dropLocation = listingData['pickupAddress'] ??
+            listingData['ngoLocation'] ??
+            'NGO location';
+
+        await broadcastNewTaskToVolunteers(
+          donationId: donation.donationId,
+          itemName: itemName,
+          pickupLocation: donation.donorLocation,
+          dropLocation: dropLocation,
+          deliveryFee: donation.deliveryFee ?? 0.0,
+        );
+      }
     } catch (e) { 
       print('Error processing transactional donation: $e'); 
       rethrow; 

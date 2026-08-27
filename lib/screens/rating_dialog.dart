@@ -1,4 +1,4 @@
-//lib/screens/rating_dialog.dart
+// lib/screens/rating_dialog.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -30,7 +30,7 @@ class _RatingDialogState extends State<RatingDialog> {
     super.dispose();
   }
 
-    Future<void> _submitRating() async {
+  Future<void> _submitRating() async {
     if (_rating == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -47,28 +47,33 @@ class _RatingDialogState extends State<RatingDialog> {
       String volunteerId = widget.volunteerId.trim();
       String donationId = widget.donationId.trim();
 
+      // donationId is always required
       if (donationId.isEmpty) {
         throw Exception('Missing donation id. Cannot save rating.');
       }
 
-      // If volunteerId is missing, resolve it from the donation document
+      // If volunteerId is empty, load it from the donation document
       if (volunteerId.isEmpty) {
         final donSnap = await FirebaseFirestore.instance
             .collection('donations')
             .doc(donationId)
             .get();
+
         if (!donSnap.exists) {
           throw Exception('Donation not found.');
         }
+
         final data = donSnap.data() as Map<String, dynamic>;
         volunteerId = (data['assignedVolunteerId'] ?? '').toString().trim();
       }
 
       if (volunteerId.isEmpty) {
-        throw Exception('Volunteer id is missing. Cannot update rating.');
+        throw Exception(
+          'Volunteer id is missing on this donation. Cannot update rating.',
+        );
       }
 
-      // 1. Update volunteer's average rating
+      // 1. Update volunteer's average rating (path is never empty now)
       final volunteerRef =
           FirebaseFirestore.instance.collection('users').doc(volunteerId);
 
@@ -104,7 +109,8 @@ class _RatingDialogState extends State<RatingDialog> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Thank you! Your feedback helps keep the community safe.'),
+          content:
+              Text('Thank you! Your feedback helps keep the community safe.'),
           backgroundColor: Colors.green,
         ),
       );
@@ -125,6 +131,10 @@ class _RatingDialogState extends State<RatingDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final name = widget.volunteerName.trim().isEmpty
+        ? 'Volunteer'
+        : widget.volunteerName.trim();
+
     return Dialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
@@ -161,18 +171,15 @@ class _RatingDialogState extends State<RatingDialog> {
               ),
             ),
             const SizedBox(height: 20),
-            
             Text(
-              "Rate ${widget.volunteerName}",
+              "Rate $name",
               style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: Colors.black87,
               ),
             ),
-            
             const SizedBox(height: 8),
-            
             Text(
               "How was your delivery experience?",
               style: TextStyle(
@@ -181,10 +188,7 @@ class _RatingDialogState extends State<RatingDialog> {
               ),
               textAlign: TextAlign.center,
             ),
-            
             const SizedBox(height: 24),
-            
-            // 5-Star Interactive Row
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(5, (index) {
@@ -195,7 +199,9 @@ class _RatingDialogState extends State<RatingDialog> {
                     });
                   },
                   icon: Icon(
-                    index < _rating ? Icons.star_rounded : Icons.star_border_rounded,
+                    index < _rating
+                        ? Icons.star_rounded
+                        : Icons.star_border_rounded,
                     color: Colors.amber,
                     size: 40,
                   ),
@@ -204,10 +210,7 @@ class _RatingDialogState extends State<RatingDialog> {
                 );
               }),
             ),
-            
             const SizedBox(height: 24),
-            
-            // Optional Feedback TextField
             TextField(
               controller: _feedbackController,
               maxLines: 2,
@@ -230,9 +233,7 @@ class _RatingDialogState extends State<RatingDialog> {
                 ),
               ),
             ),
-            
             const SizedBox(height: 30),
-            
             SizedBox(
               width: double.infinity,
               height: 50,
@@ -264,10 +265,7 @@ class _RatingDialogState extends State<RatingDialog> {
                       ),
               ),
             ),
-            
             const SizedBox(height: 12),
-            
-            // Skip Option
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: Text(

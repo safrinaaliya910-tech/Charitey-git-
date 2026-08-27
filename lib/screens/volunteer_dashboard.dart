@@ -26,6 +26,7 @@ class VolunteerDashboard extends StatefulWidget {
 class _VolunteerDashboardState extends State<VolunteerDashboard> {
   final Color themeColor = const Color(0xFFB56F76);
   final ScrollController _scrollController = ScrollController();
+  final Map<String, Future<RouteInfo?>> _routeLookupCache = {};
 
   bool showAvailable = true;
 
@@ -270,6 +271,37 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       case VehicleType.lorry:
         return Icons.local_shipping_rounded;
     }
+  }
+
+  Future<RouteInfo?> _getCachedRouteInfo({
+    required String donationId,
+    required double donorLat,
+    required double donorLng,
+    required double ngoLat,
+    required double ngoLng,
+  }) {
+    if (_routeLookupCache.containsKey(donationId)) {
+      print('ROUTE CACHE HIT donationId=$donationId');
+      return _routeLookupCache[donationId]!;
+    }
+
+    print('ROUTE CACHE MISS donationId=$donationId (fresh API call)');
+    final future = LocationHelperService.getRouteInfo(
+      originLat: donorLat,
+      originLng: donorLng,
+      destLat: ngoLat,
+      destLng: ngoLng,
+    ).then((value) {
+      if (value == null) {
+        print('ROUTE LOOKUP FAILED donationId=$donationId (cached as null)');
+      } else {
+        print('ROUTE LOOKUP RESOLVED donationId=$donationId -> distanceKm=${value.distanceKm}, durationMinutes=${value.durationMinutes}');
+      }
+      return value;
+    });
+
+    _routeLookupCache[donationId] = future;
+    return future;
   }
 
   Future<void> _handleExpiredTask(String donationId, String donorId, String ngoId, String itemName) async {
@@ -520,13 +552,17 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       double distanceKm = storedDistanceKm ?? 0.0;
       double durationMinutes = (distanceKm / 30.0) * 60.0;
       if (distanceKm <= 0 && donorLat != null && donorLng != null && ngoLat != null && ngoLng != null) {
-        final routeInfo = await LocationHelperService.getRouteInfo(
-          originLat: donorLat,
-          originLng: donorLng,
-          destLat: ngoLat,
-          destLng: ngoLng,
+        final routeInfo = await _getCachedRouteInfo(
+          donationId: donationId,
+          donorLat: donorLat,
+          donorLng: donorLng,
+          ngoLat: ngoLat,
+          ngoLng: ngoLng,
         );
-        if (routeInfo != null && routeInfo.distanceKm > 0) {
+
+        if (routeInfo != null) {
+          // Zero-distance / zero-duration route results are valid (e.g. same pickup and drop coordinates),
+          // so accept them instead of treating them as a missing-data failure and retrying endlessly.
           distanceKm = routeInfo.distanceKm;
           durationMinutes = routeInfo.durationMinutes;
         } else {

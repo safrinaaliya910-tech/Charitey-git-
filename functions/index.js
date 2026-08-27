@@ -49,6 +49,10 @@ const notificationContent = {
     title: "Payment verified",
     body: (notification) => notification.message || "The volunteer confirmed receipt of payment.",
   },
+  payment_dispute: {
+    title: "Payment dispute raised",
+    body: (notification) => notification.message || "A payment dispute has been raised and needs review.",
+  },
   donation_cancelled: {
     title: "Donation cancelled",
     body: (notification) => notification.message || `${notification.senderName || "The donor"} cancelled the donation.`,

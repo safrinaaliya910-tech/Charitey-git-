@@ -10,7 +10,7 @@ import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'volunteer_payment_screen.dart';
 import 'volunteer_dashboard.dart';
-import 'rating_dialog.dart'; // 👈 required for payment_verified rating
+import 'rating_dialog.dart';
 
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
@@ -240,9 +240,8 @@ class NotificationsScreen extends StatelessWidget {
 
               String buttonText = "Open Chat";
               if (isDonationOffer) {
-                buttonText = amINGO
-                    ? "Accept & Chat with Donor"
-                    : "Chat with NGO";
+                buttonText =
+                    amINGO ? "Accept & Chat with Donor" : "Chat with NGO";
               } else if (isVolunteerAccepted) {
                 buttonText = "Open Chat with Volunteer";
               }
@@ -680,8 +679,6 @@ class NotificationsScreen extends StatelessWidget {
     );
   }
 
-  /// Opens RatingDialog with real volunteerId + donationId from Firestore.
-  /// Fixes: "document path must be a non-empty string"
   Future<void> _openRatingFromPaymentVerified(
     BuildContext context,
     NotificationModel notif,
@@ -715,7 +712,6 @@ class NotificationsScreen extends StatelessWidget {
 
       final data = donSnap.data() as Map<String, dynamic>;
 
-      // Already rated → don't show again
       if (data['isRated'] == true) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -725,7 +721,6 @@ class NotificationsScreen extends StatelessWidget {
         return;
       }
 
-      // Prefer assignedVolunteerId from donation (never empty path)
       String volunteerId =
           (data['assignedVolunteerId'] ?? '').toString().trim();
       if (volunteerId.isEmpty) {
@@ -765,8 +760,97 @@ class NotificationsScreen extends StatelessWidget {
     }
   }
 
-  void _showVerifyPaymentDialog(
-      BuildContext context, NotificationModel notif, Color themeColor) {
+  /// FIX: If volunteer already chose Yes/Not Received, show status only.
+  /// Do NOT show Yes / Not Received buttons again.
+  Future<void> _showVerifyPaymentDialog(
+    BuildContext context,
+    NotificationModel notif,
+    Color themeColor,
+  ) async {
+    try {
+      final donSnap = await FirebaseFirestore.instance
+          .collection('donations')
+          .doc(notif.relatedItemId)
+          .get();
+
+      if (donSnap.exists) {
+        final data = donSnap.data() as Map<String, dynamic>;
+        final status = (data['status'] ?? '').toString();
+        final paymentStatus = (data['paymentStatus'] ?? '').toString();
+
+        final alreadyHandled = status == 'fully_completed' ||
+            status == 'admin_verification_pending' ||
+            paymentStatus == 'paid' ||
+            paymentStatus == 'disputed';
+
+        if (alreadyHandled) {
+          if (!context.mounted) return;
+
+          final wasPaid =
+              status == 'fully_completed' || paymentStatus == 'paid';
+
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: Row(
+                children: [
+                  Icon(
+                    wasPaid
+                        ? Icons.check_circle_rounded
+                        : Icons.support_agent_rounded,
+                    color: wasPaid ? Colors.green : Colors.orange,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      wasPaid ? 'Already Confirmed' : 'Already Reported',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: wasPaid ? Colors.green : Colors.orange,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: Text(
+                wasPaid
+                    ? 'You already confirmed that you received this payment.\n\nThe donor has been notified and their screen is unlocked.'
+                    : 'You already reported that you did not receive this payment.\n\nAdmin is reviewing the transaction. No further action is needed from you.',
+                style: const TextStyle(fontSize: 15, height: 1.4),
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: wasPaid ? Colors.green : Colors.orange,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+          return;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error checking donation before verify dialog: $e');
+    }
+
+    if (!context.mounted) return;
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -776,11 +860,14 @@ class NotificationsScreen extends StatelessWidget {
           children: [
             Icon(Icons.currency_rupee_rounded, color: Colors.blue),
             SizedBox(width: 8),
-            Text("Verify Payment",
-                style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue,
-                    fontSize: 18)),
+            Text(
+              'Verify Payment',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.blue,
+                fontSize: 18,
+              ),
+            ),
           ],
         ),
         content: Text(
@@ -793,9 +880,13 @@ class NotificationsScreen extends StatelessWidget {
               Navigator.pop(ctx);
               _showNotReceivedConfirmation(context, notif, themeColor);
             },
-            child: Text("Not Received",
-                style: TextStyle(
-                    color: Colors.red.shade700, fontWeight: FontWeight.bold)),
+            child: Text(
+              'Not Received',
+              style: TextStyle(
+                color: Colors.red.shade700,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -808,9 +899,9 @@ class NotificationsScreen extends StatelessWidget {
                 'paymentStatus': 'paid',
               });
 
-              String notifId =
+              final notifId =
                   FirebaseFirestore.instance.collection('notifications').doc().id;
-              NotificationModel returnNotif = NotificationModel(
+              final returnNotif = NotificationModel(
                 id: notifId,
                 receiverId: notif.senderId,
                 senderId: notif.receiverId,
@@ -828,11 +919,16 @@ class NotificationsScreen extends StatelessWidget {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
-            child: const Text("Yes, Received",
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'Yes, Received',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -840,7 +936,10 @@ class NotificationsScreen extends StatelessWidget {
   }
 
   void _showNotReceivedConfirmation(
-      BuildContext context, NotificationModel notif, Color themeColor) {
+    BuildContext context,
+    NotificationModel notif,
+    Color themeColor,
+  ) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -873,9 +972,9 @@ class NotificationsScreen extends StatelessWidget {
                 'paymentDisputedAt': FieldValue.serverTimestamp(),
               });
 
-              String donorNotifId =
+              final donorNotifId =
                   FirebaseFirestore.instance.collection('notifications').doc().id;
-              NotificationModel donorNotif = NotificationModel(
+              final donorNotif = NotificationModel(
                 id: donorNotifId,
                 receiverId: notif.senderId,
                 senderId: notif.receiverId,
@@ -895,11 +994,16 @@ class NotificationsScreen extends StatelessWidget {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red.shade700,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
-            child: const Text("Yes, Still Not Received",
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text(
+              "Yes, Still Not Received",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -932,9 +1036,9 @@ class NotificationsScreen extends StatelessWidget {
           .get();
 
       for (var adminDoc in adminQuery.docs) {
-        String notifId =
+        final notifId =
             FirebaseFirestore.instance.collection('notifications').doc().id;
-        NotificationModel adminNotif = NotificationModel(
+        final adminNotif = NotificationModel(
           id: notifId,
           receiverId: adminDoc.id,
           senderId: originalNotif.receiverId,
@@ -969,7 +1073,8 @@ class NotificationsScreen extends StatelessWidget {
       return Scaffold(
         appBar: AppBar(title: const Text("Notifications")),
         body: const Center(
-            child: Text("Please log in to view notifications.")),
+          child: Text("Please log in to view notifications."),
+        ),
       );
     }
 
@@ -994,7 +1099,8 @@ class NotificationsScreen extends StatelessWidget {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Center(
-                child: CircularProgressIndicator(color: themeColor));
+              child: CircularProgressIndicator(color: themeColor),
+            );
           }
           if (snapshot.hasError) {
             return const Center(child: Text("Error loading notifications."));
@@ -1042,13 +1148,11 @@ class NotificationsScreen extends StatelessWidget {
               bool isVerifyPayment = notif.type == 'verify_payment';
               bool isPaymentVerified = notif.type == 'payment_verified';
 
-              // BOTH new_task_available AND urgent_task
               bool isTaskNotification = notif.type == 'new_task_available' ||
                   notif.type == 'urgent_task';
 
               return Container(
-                margin: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 8),
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   color: notif.isRead
                       ? Colors.white
@@ -1093,11 +1197,9 @@ class NotificationsScreen extends StatelessWidget {
                                               : isTaskNotification
                                                   ? Icons.two_wheeler_rounded
                                                   : (isTag
-                                                      ? Icons
-                                                          .photo_library_rounded
+                                                      ? Icons.photo_library_rounded
                                                       : (isMessage
-                                                          ? Icons
-                                                              .message_rounded
+                                                          ? Icons.message_rounded
                                                           : (isVolunteerAccepted
                                                               ? Icons
                                                                   .directions_car_rounded
@@ -1173,7 +1275,6 @@ class NotificationsScreen extends StatelessWidget {
                     } else if (isVerifyPayment) {
                       _showVerifyPaymentDialog(context, notif, themeColor);
                     } else if (isPaymentVerified) {
-                      // 👇 FIX: open rating with real volunteerId from donation
                       _openRatingFromPaymentVerified(context, notif);
                     } else if (isTaskNotification) {
                       Navigator.push(
