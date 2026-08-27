@@ -4,11 +4,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../models/ngo_listing_model.dart';
 import '../screens/chat_screen.dart';
 import '../screens/donation_offer_details_screen.dart';
-import '../screens/donation_page.dart';
+import '../screens/ngo_listing_details_screen.dart';
 import '../screens/notifications_screen.dart';
+import '../screens/home_screen.dart';
+import '../screens/payment_verification_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/volunteer_dashboard.dart';
 import '../screens/volunteer_payment_screen.dart';
@@ -80,14 +81,20 @@ class NotificationService {
 
     // When app is opened from background via notification
     FirebaseMessaging.onMessageOpenedApp.listen((message) async {
+      print('[FCM TAP] LISTENER FIRED - raw message: ${message.data}');
       await _handleNotificationOpened(message);
     });
 
-    // Safer cold-start handling (teammate) – waits until first frame so navigator is ready
+    // Safer cold-start handling (teammate) â€“ waits until first frame so navigator is ready
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final initialMessage = await _firebaseMessaging.getInitialMessage();
       if (initialMessage != null) {
+        print(
+            '[FCM TAP] COLD START HANDLER - raw message: ${initialMessage.data}');
         await _handleNotificationOpened(initialMessage);
+      } else {
+        print(
+            '[FCM TAP] getInitialMessage returned null (no cold-start notification)');
       }
     });
   }
@@ -143,6 +150,7 @@ class NotificationService {
   }
 
   Future<void> _handleNotificationOpened(RemoteMessage message) async {
+    print('[FCM TAP] ============ NOTIFICATION TAP DETECTED ============');
     print('[FCM TAP] messageId=${message.messageId}');
     print('[FCM TAP] rawNotificationData=${message.data}');
     print('[FCM TAP] payloadDebug=' +
@@ -150,10 +158,9 @@ class NotificationService {
             .map((entry) => '${entry.key}=${entry.value}')
             .join(', '));
 
-    final type = (message.data['notificationType'] ??
-            message.data['type'] ??
-            '')
-        .toString();
+    final type =
+        (message.data['notificationType'] ?? message.data['type'] ?? '')
+            .toString();
     final relatedItemId = (message.data['relatedItemId'] ??
             message.data['itemId'] ??
             message.data['id'] ??
@@ -163,6 +170,7 @@ class NotificationService {
 
     print('[FCM TAP] resolvedType=$type');
     print('[FCM TAP] resolvedRelatedItemId=$relatedItemId');
+    print('[FCM TAP] ===== STARTING ROUTE NAVIGATION =====');
 
     await _routeNotification(type, relatedItemId);
   }
@@ -170,19 +178,24 @@ class NotificationService {
   Future<bool> _routeNotification(String type, String relatedItemId) async {
     final navigator = appNavigatorKey.currentState;
     if (navigator == null) {
-      print('[FCM TAP] routeFallback reason=navigatorKey.currentState was null');
+      print('[FCM TAP] âŒ NAVIGATOR NULL - Cannot navigate!');
+      print(
+          '[FCM TAP] routeFallback reason=navigatorKey.currentState was null');
       _showNavigationFailure('navigatorKey.currentState was null');
       return false;
     }
 
+    print('[FCM TAP] âœ“ Navigator is ready');
+
     Future<bool> pushWidget(Widget screen) async {
       if (appNavigatorKey.currentState == null) {
         print(
-            '[FCM TAP] routeFallback reason=navigatorKey.currentState was null before push');
+            '[FCM TAP] âŒ routeFallback reason=navigatorKey.currentState was null before push');
         _showNavigationFailure(
             'navigatorKey.currentState was null before push');
         return false;
       }
+      print('[FCM TAP] âœ“ Pushing widget: ${screen.runtimeType}');
       appNavigatorKey.currentState!.push(
         MaterialPageRoute(builder: (_) => screen),
       );
@@ -192,9 +205,9 @@ class NotificationService {
     try {
       switch (type) {
         case 'new_message':
+          print('[FCM TAP] â†’ Routing to: new_message');
           if (relatedItemId.isEmpty) {
-            print(
-                '[FCM TAP] routeFallback reason=relatedItemId was empty for type=new_message');
+            print('[FCM TAP] âŒ relatedItemId was empty for type=new_message');
             _showNavigationFailure(
                 'relatedItemId was empty for type=new_message');
             await pushWidget(const NotificationsScreen());
@@ -209,8 +222,7 @@ class NotificationService {
             return false;
           }
 
-          final otherUserId =
-              _extractOtherUserId(relatedItemId, currentUserId);
+          final otherUserId = _extractOtherUserId(relatedItemId, currentUserId);
           if (otherUserId == null || otherUserId.isEmpty) {
             _showNavigationFailure(
                 'chat room id could not be resolved to a valid otherUserId for new_message');
@@ -232,37 +244,46 @@ class NotificationService {
           final otherUserName =
               (otherUserData['username'] ?? otherUserData['name'] ?? 'Chat')
                   .toString();
-          final profileImage =
-              (otherUserData['profileImage'] ?? '').toString();
+          final profileImage = (otherUserData['profileImage'] ?? '').toString();
 
           return await pushWidget(
             ChatScreen(
               otherUserId: otherUserId,
               otherUserName: otherUserName,
-              otherUserProfileImage:
-                  profileImage.isEmpty ? null : profileImage,
+              otherUserProfileImage: profileImage.isEmpty ? null : profileImage,
             ),
           );
 
         case 'donation_offer':
+          print('[FCM TAP] â†’ Routing to: donation_offer');
           if (relatedItemId.isEmpty) {
             print(
-                '[FCM TAP] routeFallback reason=relatedItemId was empty for type=donation_offer');
+                '[FCM TAP] âŒ relatedItemId was empty for type=donation_offer');
             _showNavigationFailure(
                 'relatedItemId was empty for type=donation_offer');
             await pushWidget(const NotificationsScreen());
             return false;
           }
-          // Prefer the richer path (your code) that loads full listing → DonationPage.
-          // If you prefer the direct DonationOfferDetailsScreen, swap the call below.
-          return await _openDonationDetails(relatedItemId);
+          print(
+              '[FCM TAP] â†’ Opening DonationOfferDetailsScreen with id=$relatedItemId');
+          return await pushWidget(
+            DonationOfferDetailsScreen(donationId: relatedItemId),
+          );
 
         case 'volunteer_accepted':
           return await pushWidget(
-            VolunteerDashboard(
-              highlightDonationId:
-                  relatedItemId.isNotEmpty ? relatedItemId : null,
-            ),
+            DonationOfferDetailsScreen(donationId: relatedItemId),
+          );
+
+        case 'volunteer_expired':
+        case 'donation_cancelled':
+        case 'payment_verified':
+          if (relatedItemId.isEmpty) {
+            await pushWidget(const NotificationsScreen());
+            return false;
+          }
+          return await pushWidget(
+            DonationOfferDetailsScreen(donationId: relatedItemId),
           );
 
         case 'delivery_arrived':
@@ -278,24 +299,43 @@ class NotificationService {
           return await pushWidget(PendingReceiptsScreen(ngoId: currentUserId));
 
         case 'payment_pending':
-        case 'verify_payment':
         case 'payment_rejected':
           if (relatedItemId.isEmpty) {
             print(
                 '[FCM TAP] routeFallback reason=relatedItemId was empty for type=$type');
-            _showNavigationFailure(
-                'relatedItemId was empty for type=$type');
+            _showNavigationFailure('relatedItemId was empty for type=$type');
             await pushWidget(const NotificationsScreen());
             return false;
           }
           return await pushWidget(
               VolunteerPaymentScreen(donationId: relatedItemId));
 
-        case 'payment_verified':
-          return await pushWidget(const ProfileScreen());
+        case 'verify_payment':
+          if (relatedItemId.isEmpty) {
+            await pushWidget(const NotificationsScreen());
+            return false;
+          }
+          return await pushWidget(
+            PaymentVerificationScreen(donationId: relatedItemId),
+          );
 
-        case 'donation_cancelled':
-          return await pushWidget(const ProfileScreen());
+        case 'tag':
+          if (relatedItemId.isEmpty) {
+            await pushWidget(const NotificationsScreen());
+            return false;
+          }
+          return await pushWidget(
+            HomeScreen(initialIndex: 1, targetPostId: relatedItemId),
+          );
+
+        case 'expired_request':
+          if (relatedItemId.isEmpty) {
+            await pushWidget(const NotificationsScreen());
+            return false;
+          }
+          return await pushWidget(
+            NgoListingDetailsScreen(listingId: relatedItemId),
+          );
 
         case 'new_task_available':
         case 'urgent_task':
@@ -321,62 +361,6 @@ class NotificationService {
       await pushWidget(const NotificationsScreen());
       return false;
     }
-  }
-
-  /// Your original richer path: donation → listing → DonationPage
-  Future<bool> _openDonationDetails(String donationId) async {
-    if (donationId.isEmpty) {
-      _showNavigationFailure('relatedItemId was empty for donation offer');
-      await _pushSafeScreen(const NotificationsScreen());
-      return false;
-    }
-
-    try {
-      final donationSnap =
-          await _firestore.collection('donations').doc(donationId).get();
-      if (!donationSnap.exists) {
-        await _pushSafeScreen(const NotificationsScreen());
-        return false;
-      }
-
-      final donationData = donationSnap.data() ?? {};
-      final listingId = (donationData['listingId'] ?? '').toString();
-      if (listingId.isEmpty) {
-        await _pushSafeScreen(const NotificationsScreen());
-        return false;
-      }
-
-      final listingSnap =
-          await _firestore.collection('ngo_listings').doc(listingId).get();
-      if (!listingSnap.exists) {
-        await _pushSafeScreen(const NotificationsScreen());
-        return false;
-      }
-
-      final listing =
-          NgoListingModel.fromMap(listingSnap.data() ?? {}, listingSnap.id);
-      return await _pushSafeScreen(DonationPage(listing: listing));
-    } catch (_) {
-      // Fallback to teammate’s simpler screen if the rich path fails
-      return await _openDonationDetailsSimple(donationId);
-    }
-  }
-
-  /// Teammate’s simpler direct path (kept as fallback / alternative)
-  Future<bool> _openDonationDetailsSimple(String donationId) async {
-    final navigator = appNavigatorKey.currentState;
-    if (navigator == null) {
-      _showNavigationFailure(
-          'navigatorKey.currentState was null before donation details push');
-      return false;
-    }
-
-    navigator.push(
-      MaterialPageRoute(
-        builder: (_) => DonationOfferDetailsScreen(donationId: donationId),
-      ),
-    );
-    return true;
   }
 
   Future<bool> _pushSafeScreen(Widget screen) async {

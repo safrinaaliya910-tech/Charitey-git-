@@ -1,4 +1,5 @@
 //screens/donation_offer_details_screen.dart
+//screens/donation_offer_details_screen.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -33,7 +34,9 @@ class DonationOfferDetailsScreen extends StatelessWidget {
               child: CircularProgressIndicator(color: themeColor),
             );
           }
-          if (snapshot.hasError || !snapshot.hasData || !snapshot.data!.exists) {
+          if (snapshot.hasError ||
+              !snapshot.hasData ||
+              !snapshot.data!.exists) {
             return const Center(
               child: Text('Donation offer details are no longer available.'),
             );
@@ -60,52 +63,111 @@ class DonationOfferDetailsScreen extends StatelessWidget {
                   donation['quantity'] ??
                   donation['donatedAmount'] ??
                   'Not specified';
+              final volunteerId =
+                  (donation['assignedVolunteerId'] ?? '').toString().trim();
+              final volunteerName =
+                  (donation['volunteerName'] ?? '').toString().trim();
+              final volunteerPhone =
+                  (donation['volunteerPhone'] ?? '').toString().trim();
+              final hasAssignedVolunteer = {
+                    'delivery_accepted',
+                    'pending_ngo_confirmation',
+                    'completed_awaiting_payment',
+                    'fully_completed',
+                  }.contains(donation['status']) ||
+                  volunteerId.isNotEmpty ||
+                  volunteerName.isNotEmpty ||
+                  volunteerPhone.isNotEmpty;
 
-              return ListView(
-                padding: const EdgeInsets.all(20),
-                children: [
-                  _DetailCard(
-                    title: 'Donation',
-                    rows: [
-                      _DetailRow(
-                        icon: Icons.inventory_2_outlined,
-                        label: 'Item',
-                        value: itemName.toString(),
+              return FutureBuilder<DocumentSnapshot>(
+                future: volunteerId.isEmpty
+                    ? null
+                    : FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(volunteerId)
+                        .get(),
+                builder: (context, volunteerSnapshot) {
+                  final volunteer =
+                      volunteerSnapshot.data?.data() as Map<String, dynamic>? ??
+                          {};
+                  final resolvedVolunteerName = volunteerName.isNotEmpty
+                      ? volunteerName
+                      : (volunteer['name'] ??
+                              volunteer['username'] ??
+                              'Volunteer')
+                          .toString();
+                  final resolvedVolunteerPhone = volunteerPhone.isNotEmpty
+                      ? volunteerPhone
+                      : (volunteer['phone'] ?? 'Not provided').toString();
+
+                  return ListView(
+                    padding: const EdgeInsets.all(20),
+                    children: [
+                      _DetailCard(
+                        title: 'Donation',
+                        rows: [
+                          _DetailRow(
+                            icon: Icons.inventory_2_outlined,
+                            label: 'Item',
+                            value: itemName.toString(),
+                          ),
+                          _DetailRow(
+                            icon: Icons.numbers,
+                            label: 'Quantity',
+                            value: quantity.toString(),
+                          ),
+                          _DetailRow(
+                            icon: Icons.info_outline,
+                            label: 'Status',
+                            value: (donation['status'] ?? 'pending').toString(),
+                          ),
+                        ],
                       ),
-                      _DetailRow(
-                        icon: Icons.numbers,
-                        label: 'Quantity',
-                        value: quantity.toString(),
+                      const SizedBox(height: 16),
+                      _DetailCard(
+                        title: 'Donor Information',
+                        rows: [
+                          _DetailRow(
+                            icon: Icons.person_outline,
+                            label: 'Name',
+                            value: (donation['donorName'] ?? 'Unknown Donor')
+                                .toString(),
+                          ),
+                          _DetailRow(
+                            icon: Icons.phone_outlined,
+                            label: 'Phone',
+                            value: (donation['donorPhone'] ?? 'Not provided')
+                                .toString(),
+                          ),
+                          _DetailRow(
+                            icon: Icons.location_on_outlined,
+                            label: 'Pickup Location',
+                            value: (donation['donorLocation'] ?? 'Not provided')
+                                .toString(),
+                          ),
+                        ],
                       ),
-                      _DetailRow(
-                        icon: Icons.info_outline,
-                        label: 'Status',
-                        value: (donation['status'] ?? 'pending').toString(),
-                      ),
+                      if (hasAssignedVolunteer) ...[
+                        const SizedBox(height: 16),
+                        _DetailCard(
+                          title: 'Volunteer Information',
+                          rows: [
+                            _DetailRow(
+                              icon: Icons.person_pin_circle_outlined,
+                              label: 'Name',
+                              value: resolvedVolunteerName,
+                            ),
+                            _DetailRow(
+                              icon: Icons.phone_outlined,
+                              label: 'Phone',
+                              value: resolvedVolunteerPhone,
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
-                  ),
-                  const SizedBox(height: 16),
-                  _DetailCard(
-                    title: 'Donor Information',
-                    rows: [
-                      _DetailRow(
-                        icon: Icons.person_outline,
-                        label: 'Name',
-                        value: (donation['donorName'] ?? 'Unknown Donor').toString(),
-                      ),
-                      _DetailRow(
-                        icon: Icons.phone_outlined,
-                        label: 'Phone',
-                        value: (donation['donorPhone'] ?? 'Not provided').toString(),
-                      ),
-                      _DetailRow(
-                        icon: Icons.location_on_outlined,
-                        label: 'Pickup Location',
-                        value: (donation['donorLocation'] ?? 'Not provided').toString(),
-                      ),
-                    ],
-                  ),
-                ],
+                  );
+                },
               );
             },
           );
@@ -132,7 +194,9 @@ class _DetailCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(title,
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             ...rows,
           ],
@@ -166,9 +230,13 @@ class _DetailRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                Text(label,
+                    style:
+                        TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                 const SizedBox(height: 3),
-                Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                Text(value,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w600)),
               ],
             ),
           ),

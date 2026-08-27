@@ -93,18 +93,24 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
         String status = data['status'] ?? '';
 
         if (status == 'fully_completed') {
-          _donationSubscription?.cancel();
-          Navigator.pop(context);
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => RatingDialog(
-              volunteerId: _volunteerId,
-              volunteerName: _volunteerName,
-              donationId: widget.donationId,
-            ),
-          );
-        } else if (status == 'payment_verification_pending') {
+  _donationSubscription?.cancel();
+  if (!mounted) return;
+  Navigator.pop(context);
+
+  final vId = _volunteerId.trim();
+  final dId = widget.donationId.trim();
+  if (vId.isEmpty || dId.isEmpty) return;
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => RatingDialog(
+      volunteerId: vId,
+      volunteerName: _volunteerName.isEmpty ? 'Volunteer' : _volunteerName,
+      donationId: dId,
+    ),
+  );
+}else if (status == 'payment_verification_pending') {
           setState(() {
             _isWaitingForVolunteer = true;
             _isAdminReview = false;
@@ -192,19 +198,54 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
     }
   }
 
+    /// Generates a scannable QR PNG with solid white background + quiet zone.
   Future<Uint8List> _generateQrPngBytes() async {
+    final String data = _buildUpiUri();
+
     final painter = QrPainter(
-      data: _buildUpiUri(),
+      data: data,
       version: QrVersions.auto,
       gapless: true,
-      errorCorrectionLevel: QrErrorCorrectLevel.M,
-      color: const Color(0xFF000000),
-      emptyColor: const Color(0xFFFFFFFF),
+      errorCorrectionLevel: QrErrorCorrectLevel.H,
+      // Modern qr_flutter API (replaces deprecated color / emptyColor)
+      dataModuleStyle: const QrDataModuleStyle(
+        color: Color(0xFF000000),
+        dataModuleShape: QrDataModuleShape.square,
+      ),
+      eyeStyle: const QrEyeStyle(
+        color: Color(0xFF000000),
+        eyeShape: QrEyeShape.square,
+      ),
     );
 
-    final ui.Image image = await painter.toImage(1024);
+    const int qrSize = 900;
+    const int quietZone = 100;
+    const int totalSize = qrSize + (quietZone * 2); // 1100 x 1100
+
+    // toImage requires double
+    final ui.Image qrImage = await painter.toImage(qrSize.toDouble());
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    // Solid white background (no transparency)
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, totalSize.toDouble(), totalSize.toDouble()),
+      Paint()..color = const Color(0xFFFFFFFF),
+    );
+
+    // Quiet zone — do NOT use const here (toDouble is not a constant)
+    canvas.drawImage(
+      qrImage,
+      Offset(quietZone.toDouble(), quietZone.toDouble()),
+      Paint(),
+    );
+
+    final ui.Image finalImage =
+        await recorder.endRecording().toImage(totalSize, totalSize);
+
     final ByteData? byteData =
-        await image.toByteData(format: ui.ImageByteFormat.png);
+        await finalImage.toByteData(format: ui.ImageByteFormat.png);
     if (byteData == null) {
       throw Exception('Failed to create QR image');
     }

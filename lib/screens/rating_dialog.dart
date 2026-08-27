@@ -30,7 +30,7 @@ class _RatingDialogState extends State<RatingDialog> {
     super.dispose();
   }
 
-  Future<void> _submitRating() async {
+    Future<void> _submitRating() async {
     if (_rating == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -44,56 +44,82 @@ class _RatingDialogState extends State<RatingDialog> {
     setState(() => _isSubmitting = true);
 
     try {
-      // 1. Transaction to safely calculate the new average rating
-      DocumentReference volunteerRef = FirebaseFirestore.instance.collection('users').doc(widget.volunteerId);
-      
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        DocumentSnapshot snapshot = await transaction.get(volunteerRef);
-        
-        if (snapshot.exists) {
-          Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
-          
-          double currentAvg = (data['averageRating'] as num?)?.toDouble() ?? 0.0;
-          int currentTotal = (data['totalReviews'] as num?)?.toInt() ?? 0;
-          
-          // Math to calculate new average
-          double newAvg = ((currentAvg * currentTotal) + _rating) / (currentTotal + 1);
-          int newTotal = currentTotal + 1;
-          
-          transaction.update(volunteerRef, {
-            'averageRating': double.parse(newAvg.toStringAsFixed(1)), // Keep it to 1 decimal (e.g., 4.8)
-            'totalReviews': newTotal,
-          });
+      String volunteerId = widget.volunteerId.trim();
+      String donationId = widget.donationId.trim();
+
+      if (donationId.isEmpty) {
+        throw Exception('Missing donation id. Cannot save rating.');
+      }
+
+      // If volunteerId is missing, resolve it from the donation document
+      if (volunteerId.isEmpty) {
+        final donSnap = await FirebaseFirestore.instance
+            .collection('donations')
+            .doc(donationId)
+            .get();
+        if (!donSnap.exists) {
+          throw Exception('Donation not found.');
         }
+        final data = donSnap.data() as Map<String, dynamic>;
+        volunteerId = (data['assignedVolunteerId'] ?? '').toString().trim();
+      }
+
+      if (volunteerId.isEmpty) {
+        throw Exception('Volunteer id is missing. Cannot update rating.');
+      }
+
+      // 1. Update volunteer's average rating
+      final volunteerRef =
+          FirebaseFirestore.instance.collection('users').doc(volunteerId);
+
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final snapshot = await transaction.get(volunteerRef);
+        if (!snapshot.exists) return;
+
+        final data = snapshot.data() as Map<String, dynamic>;
+        final double currentAvg =
+            (data['averageRating'] as num?)?.toDouble() ?? 0.0;
+        final int currentTotal =
+            (data['totalReviews'] as num?)?.toInt() ?? 0;
+
+        final double newAvg =
+            ((currentAvg * currentTotal) + _rating) / (currentTotal + 1);
+        final int newTotal = currentTotal + 1;
+
+        transaction.update(volunteerRef, {
+          'averageRating': double.parse(newAvg.toStringAsFixed(1)),
+          'totalReviews': newTotal,
+        });
       });
 
-      // 2. Mark the donation document as rated so this popup doesn't appear again
-      await FirebaseFirestore.instance.collection('donations').doc(widget.donationId).update({
+      // 2. Mark donation as rated
+      await FirebaseFirestore.instance.collection('donations').doc(donationId).update({
         'isRated': true,
         'volunteerRating': _rating,
         'volunteerFeedback': _feedbackController.text.trim(),
+        'ratedVolunteerId': volunteerId,
       });
 
       if (!mounted) return;
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Thank you! Your feedback helps keep the community safe.'),
           backgroundColor: Colors.green,
         ),
       );
-      
-      Navigator.pop(context); // Close the dialog
-      
+
+      Navigator.pop(context);
     } catch (e) {
-      setState(() => _isSubmitting = false);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to submit rating: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to submit rating: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 

@@ -10,6 +10,7 @@ import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'volunteer_payment_screen.dart';
 import 'volunteer_dashboard.dart';
+import 'rating_dialog.dart'; // 👈 required for payment_verified rating
 
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
@@ -440,11 +441,11 @@ class NotificationsScreen extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          title: Row(
+          title: const Row(
             children: [
-              const Icon(Icons.timer_off_rounded, color: Colors.orange),
-              const SizedBox(width: 10),
-              const Text(
+              Icon(Icons.timer_off_rounded, color: Colors.orange),
+              SizedBox(width: 10),
+              Text(
                 "Request Expired",
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
               ),
@@ -677,6 +678,91 @@ class NotificationsScreen extends StatelessWidget {
         );
       },
     );
+  }
+
+  /// Opens RatingDialog with real volunteerId + donationId from Firestore.
+  /// Fixes: "document path must be a non-empty string"
+  Future<void> _openRatingFromPaymentVerified(
+    BuildContext context,
+    NotificationModel notif,
+  ) async {
+    try {
+      final donationId = notif.relatedItemId.trim();
+      if (donationId.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Donation not found for this notification.'),
+            ),
+          );
+        }
+        return;
+      }
+
+      final donSnap = await FirebaseFirestore.instance
+          .collection('donations')
+          .doc(donationId)
+          .get();
+
+      if (!donSnap.exists) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Donation no longer exists.')),
+          );
+        }
+        return;
+      }
+
+      final data = donSnap.data() as Map<String, dynamic>;
+
+      // Already rated → don't show again
+      if (data['isRated'] == true) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('You already rated this delivery.')),
+          );
+        }
+        return;
+      }
+
+      // Prefer assignedVolunteerId from donation (never empty path)
+      String volunteerId =
+          (data['assignedVolunteerId'] ?? '').toString().trim();
+      if (volunteerId.isEmpty) {
+        volunteerId = notif.senderId.trim();
+      }
+
+      String volunteerName = notif.senderName;
+      if (volunteerId.isNotEmpty) {
+        final volSnap = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(volunteerId)
+            .get();
+        if (volSnap.exists) {
+          volunteerName =
+              (volSnap.data()?['name'] ?? volunteerName).toString().trim();
+        }
+      }
+      if (volunteerName.isEmpty) volunteerName = 'Volunteer';
+
+      if (!context.mounted) return;
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => RatingDialog(
+          volunteerId: volunteerId,
+          volunteerName: volunteerName,
+          donationId: donationId,
+        ),
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open rating: $e')),
+        );
+      }
+    }
   }
 
   void _showVerifyPaymentDialog(
@@ -954,8 +1040,9 @@ class NotificationsScreen extends StatelessWidget {
               bool isDeliveryArrived = notif.type == 'delivery_arrived';
               bool isPaymentPending = notif.type == 'payment_pending';
               bool isVerifyPayment = notif.type == 'verify_payment';
+              bool isPaymentVerified = notif.type == 'payment_verified';
 
-              // 👇 BOTH new_task_available AND urgent_task
+              // BOTH new_task_available AND urgent_task
               bool isTaskNotification = notif.type == 'new_task_available' ||
                   notif.type == 'urgent_task';
 
@@ -983,7 +1070,9 @@ class NotificationsScreen extends StatelessWidget {
                         ? Colors.red.shade50
                         : (isExpiration
                             ? Colors.orange.shade50
-                            : (isPaymentPending || isVerifyPayment
+                            : (isPaymentPending ||
+                                    isVerifyPayment ||
+                                    isPaymentVerified
                                 ? Colors.blue.shade50
                                 : (isTaskNotification
                                     ? Colors.deepPurple.shade50
@@ -999,22 +1088,28 @@ class NotificationsScreen extends StatelessWidget {
                                       ? Icons.payment_rounded
                                       : isVerifyPayment
                                           ? Icons.currency_rupee_rounded
-                                          : isTaskNotification
-                                              ? Icons.two_wheeler_rounded
-                                              : (isTag
-                                                  ? Icons.photo_library_rounded
-                                                  : (isMessage
-                                                      ? Icons.message_rounded
-                                                      : (isVolunteerAccepted
+                                          : isPaymentVerified
+                                              ? Icons.verified_rounded
+                                              : isTaskNotification
+                                                  ? Icons.two_wheeler_rounded
+                                                  : (isTag
+                                                      ? Icons
+                                                          .photo_library_rounded
+                                                      : (isMessage
                                                           ? Icons
-                                                              .directions_car_rounded
-                                                          : Icons
-                                                              .volunteer_activism))),
+                                                              .message_rounded
+                                                          : (isVolunteerAccepted
+                                                              ? Icons
+                                                                  .directions_car_rounded
+                                                              : Icons
+                                                                  .volunteer_activism))),
                       color: isCancellation
                           ? Colors.red
                           : (isExpiration
                               ? Colors.orange
-                              : (isPaymentPending || isVerifyPayment
+                              : (isPaymentPending ||
+                                      isVerifyPayment ||
+                                      isPaymentVerified
                                   ? Colors.blue
                                   : (isTaskNotification
                                       ? Colors.deepPurple
@@ -1077,9 +1172,10 @@ class NotificationsScreen extends StatelessWidget {
                       );
                     } else if (isVerifyPayment) {
                       _showVerifyPaymentDialog(context, notif, themeColor);
+                    } else if (isPaymentVerified) {
+                      // 👇 FIX: open rating with real volunteerId from donation
+                      _openRatingFromPaymentVerified(context, notif);
                     } else if (isTaskNotification) {
-                      // 👇 BOTH new_task_available & urgent_task → go to Tasks
-                      // NO Contact Details popup
                       Navigator.push(
                         context,
                         MaterialPageRoute(
