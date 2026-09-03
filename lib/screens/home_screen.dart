@@ -899,7 +899,7 @@ class AboutUsScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          "About Charitey",
+          "About Fourth Idly",
           style: TextStyle(
             color: themeColor,
             fontWeight: FontWeight.bold,
@@ -912,17 +912,67 @@ class AboutUsScreen extends StatelessWidget {
         physics: const BouncingScrollPhysics(),
         children: [
           Text(
-            "About Charitey",
+            "About Fourth Idly",
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
               color: Colors.black87,
             ),
           ),
+          const SizedBox(height: 8),
+          Text(
+            "Give what is needed. Reach who needs it. See the impact.",
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: themeColor,
+              height: 1.5,
+            ),
+          ),
           const SizedBox(height: 12),
           Text(
-            "Charitey brings donors, NGOs, and volunteers together in one powerful community to move help quickly, safely, and responsibly to people who need it most.",
+            "Fourth Idly makes giving simple, meaningful, and transparent. We connect people who want to help with verified NGOs and communities that have real, current needs. Instead of donating blindly, you can discover what is needed, pledge what you can provide, coordinate directly, and follow the journey of your contribution.",
             style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.6),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            "Our Giving Flow",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _numbered(
+            1,
+            "Discover Needs",
+            "Explore real-time requests from verified NGOs and communities and understand what they actually need.",
+          ),
+          _numbered(
+            2,
+            "Smart Match",
+            "Find the right opportunity for your donation based on the item, quantity, location, urgency, and need.",
+          ),
+          _numbered(
+            3,
+            "Pledge to Help",
+            "Choose a request and pledge your available food, essentials, or resources in just a few taps.",
+          ),
+          _numbered(
+            4,
+            "Connect Directly",
+            "Chat with the requesting organization to confirm details and coordinate the pickup or drop-off.",
+          ),
+          _numbered(
+            5,
+            "Deliver",
+            "Get your contribution to the right place through a clear and coordinated handover.",
+          ),
+          _numbered(
+            6,
+            "See the Impact",
+            "Track your contribution and receive updates on how your help reached the people who needed it.",
           ),
           const SizedBox(height: 24),
           Text(
@@ -935,7 +985,17 @@ class AboutUsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            "To build a trusted platform that enables individuals, organizations, and volunteers to work together in delivering essential resources efficiently, transparently, and responsibly.",
+            "To make every act of giving reach the right need at the right time.",
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Fourth Idly aims to create a trusted community where donors, NGOs, volunteers, and people in need can work together to reduce wastage, respond to real needs, and deliver help efficiently and responsibly.",
             style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.6),
           ),
           const SizedBox(height: 24),
@@ -949,7 +1009,17 @@ class AboutUsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            "To become the world's most trusted community platform for social impact, where every act of generosity creates lasting change and every community thrives through collective responsibility.",
+            "A world where nothing useful goes to waste and no genuine need goes unanswered.",
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "We envision a connected community where surplus resources find their way to people who need them, creating a more responsible, transparent, and compassionate way of giving.",
             style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.6),
           ),
           const SizedBox(height: 24),
@@ -962,42 +1032,39 @@ class AboutUsScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          _bullet("Compassion – Every action begins with empathy."),
           _bullet(
-            "Integrity – Transparency and honesty guide every interaction.",
+            "Compassion – Understand the need before deciding how to help.",
           ),
           _bullet(
-            "Trust – Building lasting confidence among donors, NGOs, and volunteers.",
-          ),
-          _bullet("Community – Stronger together, greater impact."),
-          _bullet(
-            "Responsibility – Every contribution is handled with care and accountability.",
+            "Transparency – Make every request, pledge, and contribution clear and accountable.",
           ),
           _bullet(
-            "Innovation – Using technology to make kindness more accessible.",
+            "Trust – Connect people with verified organizations and genuine needs.",
+          ),
+          _bullet(
+            "Responsibility – Encourage giving based on what is actually needed, not simply what is available.",
+          ),
+          _bullet(
+            "Community – Bring donors, NGOs, volunteers, and communities together to create meaningful impact.",
           ),
           const SizedBox(height: 28),
-          Center(
-            child: Text(
-              "Together, we don't just give. We create hope.",
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: themeColor,
-                height: 1.4,
-              ),
+          Text(
+            "Our Tagline",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
             ),
           ),
           const SizedBox(height: 8),
           Center(
             child: Text(
-              "One community. One purpose. Endless impact.",
+              "Give what is needed. Reach who needs it. See the impact.",
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.black54,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: themeColor,
                 height: 1.4,
               ),
             ),
@@ -1044,6 +1111,59 @@ class AboutUsScreen extends StatelessWidget {
             child: Text(
               text,
               style: const TextStyle(fontSize: 15, height: 1.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _numbered(int number, String title, String description) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 26,
+            height: 26,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: themeColor,
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              "$number",
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.black87.withOpacity(0.75),
+                    height: 1.5,
+                  ),
+                ),
+              ],
             ),
           ),
         ],

@@ -1,7 +1,9 @@
+//volunteer_payment_screen.dart
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +11,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/notification_model.dart';
+import '../utils/upi_reference_validator.dart';
 import 'rating_dialog.dart';
 import 'package:gal/gal.dart';
 
@@ -168,6 +171,10 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
     return re.hasMatch(upi);
   }
 
+  bool get _isReferenceValid {
+    return UpiReferenceValidator.isValid(_refController.text);
+  }
+
   Future<void> _launchUPI() async {
     if (!_isUpiValid) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -300,30 +307,27 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
 
   Future<void> _notifyVolunteerForVerification() async {
     final ref = _refController.text.trim();
-    if (ref.isEmpty) {
+    if (!_isReferenceValid) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter the Transaction / UPI Reference ID'),
+          content: Text('Please enter a valid UPI reference number'),
           backgroundColor: Colors.orange,
         ),
       );
       return;
     }
 
-    setState(() => _isWaitingForVolunteer = true);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final currentUser = authProvider.currentUserModel!;
 
     try {
-      await FirebaseFirestore.instance
-          .collection('donations')
-          .doc(widget.donationId)
-          .update({
-        'status': 'payment_verification_pending',
-        'paymentReference': ref,
-        'paymentSubmittedAt': FieldValue.serverTimestamp(),
-      });
+      await FirestoreService().registerUsedUpiReference(
+        donationId: widget.donationId,
+        donorId: currentUser.uid,
+        utr: ref,
+      );
 
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final currentUser = authProvider.currentUserModel!;
+      setState(() => _isWaitingForVolunteer = true);
 
       String notifId =
           FirebaseFirestore.instance.collection('notifications').doc().id;
@@ -341,8 +345,18 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
         isRead: false,
       );
       await FirestoreService().sendNotification(notif);
-    } catch (e) {
+    } on DuplicateUpiReferenceException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    } catch (e, stackTrace) {
       setState(() => _isWaitingForVolunteer = false);
+      debugPrint('Error contacting volunteer: $e');
+      debugPrint('Stack trace:\n$stackTrace');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Error contacting volunteer. Try again.')),
       );
@@ -626,9 +640,19 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
                       const SizedBox(height: 16),
                       TextField(
                         controller: _refController,
+                        keyboardType: TextInputType.number,
+                        textInputAction: TextInputAction.done,
+                        maxLength: 12,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(12),
+                        ],
                         decoration: InputDecoration(
                           labelText: "Transaction / UPI Reference ID *",
                           hintText: "Enter the 12-digit reference number",
+                          errorText: _refController.text.isNotEmpty && !_isReferenceValid
+                              ? 'Please enter a valid 12-digit UPI reference number'
+                              : null,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -638,16 +662,20 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
                             vertical: 14,
                           ),
                         ),
-                        textCapitalization: TextCapitalization.characters,
+                        textCapitalization: TextCapitalization.none,
+                        onChanged: (_) => setState(() {}),
                       ),
                       const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
                         height: 50,
                         child: ElevatedButton(
-                          onPressed: _notifyVolunteerForVerification,
+                          onPressed: _isReferenceValid
+                              ? _notifyVolunteerForVerification
+                              : null,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.green,
+                            disabledBackgroundColor: Colors.grey.shade300,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
                             ),

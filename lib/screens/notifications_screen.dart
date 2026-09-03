@@ -7,13 +7,100 @@ import '../services/firestore_service.dart';
 import '../models/notification_model.dart';
 import 'chat_screen.dart';
 import 'home_screen.dart';
-import 'profile_screen.dart';
 import 'volunteer_payment_screen.dart';
 import 'volunteer_dashboard.dart';
 import 'rating_dialog.dart';
+// Make sure this path is correct
+import 'profile_screen.dart';
 
-class NotificationsScreen extends StatelessWidget {
-  const NotificationsScreen({super.key});
+class NotificationsScreen extends StatefulWidget {
+  final String? autoOpenType;
+  final String? autoOpenRelatedItemId;
+
+  const NotificationsScreen({
+    super.key,
+    this.autoOpenType,
+    this.autoOpenRelatedItemId,
+  });
+
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  bool _autoOpened = false;
+  final Color themeColor = const Color(0xFFB56F76);
+
+  // ───────────────────────────────────────────────────────────────
+  // AUTO-OPEN from push notification
+  // ───────────────────────────────────────────────────────────────
+  void _tryAutoOpen(List<NotificationModel> notifications) {
+    if (widget.autoOpenType == null) return;
+
+    final type = widget.autoOpenType!.toLowerCase();
+    final relatedId = widget.autoOpenRelatedItemId ?? '';
+
+    NotificationModel? target;
+
+    if (relatedId.isNotEmpty) {
+      try {
+        target = notifications.firstWhere(
+          (n) =>
+              n.type.toLowerCase() == type && n.relatedItemId == relatedId,
+        );
+      } catch (_) {}
+    }
+
+    target ??= (() {
+      try {
+        return notifications.firstWhere(
+          (n) => n.type.toLowerCase() == type,
+        );
+      } catch (_) {
+        return null;
+      }
+    })();
+
+    if (target == null) return;
+
+    if (!target.isRead) {
+      FirestoreService().markNotificationAsRead(target.id);
+    }
+
+    final notif = target;
+    final isDonationOffer = notif.type == 'donation_offer';
+    final isVolunteerAccepted = notif.type == 'volunteer_accepted';
+    final isCancellation = notif.type == 'donation_cancelled';
+    final isExpiration = notif.type == 'expired_request';
+    final isVolunteerExpired = notif.type == 'volunteer_expired';
+    final isVerifyPayment = notif.type == 'verify_payment';
+    final isPaymentVerified = notif.type == 'payment_verified';
+
+    if (isVerifyPayment) {
+      _showVerifyPaymentDialog(context, notif, themeColor);
+    } else if (isPaymentVerified) {
+      _openRatingFromPaymentVerified(context, notif);
+    } else if (isCancellation) {
+      _showDonorCancellationDetails(context, notif, themeColor);
+    } else if (isExpiration) {
+      _showExpirationDetails(context, notif);
+    } else if (isVolunteerExpired) {
+      _showNoVolunteerFoundDetails(context, notif);
+    } else {
+      // donation_offer + volunteer_accepted → rich popup
+      _showRichDetailsPopup(
+        context,
+        notif,
+        themeColor,
+        isDonationOffer,
+        isVolunteerAccepted,
+      );
+    }
+  }
+
+  // ───────────────────────────────────────────────────────────────
+  // ORIGINAL METHODS (kept 100% intact)
+  // ───────────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> _fetchDetailsData(
     NotificationModel notif,
@@ -213,7 +300,8 @@ class NotificationsScreen extends StatelessWidget {
                     senderProfile['userName'] ??
                     "";
                 contactPhone = senderProfile['phone'] ?? 'Not Provided';
-                contactLocation = senderProfile['location'] ?? 'Not Provided';
+                contactLocation =
+                    senderProfile['location'] ?? 'Not Provided';
                 contactUserId = senderProfile['uid'] ?? notif.senderId;
                 targetChatId = notif.senderId;
               } else {
@@ -503,6 +591,77 @@ class NotificationsScreen extends StatelessWidget {
     );
   }
 
+  void _showNoVolunteerFoundDetails(
+    BuildContext context,
+    NotificationModel notif,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.person_off_rounded, color: Colors.orange),
+              SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  "No Volunteer Found",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Text(
+                  notif.message,
+                  style: TextStyle(
+                    color: Colors.orange.shade900,
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    "Understood",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _showDonorCancellationDetails(
     BuildContext context,
     NotificationModel notification,
@@ -760,8 +919,6 @@ class NotificationsScreen extends StatelessWidget {
     }
   }
 
-  /// FIX: If volunteer already chose Yes/Not Received, show status only.
-  /// Do NOT show Yes / Not Received buttons again.
   Future<void> _showVerifyPaymentDialog(
     BuildContext context,
     NotificationModel notif,
@@ -1062,12 +1219,14 @@ class NotificationsScreen extends StatelessWidget {
     }
   }
 
+  // ───────────────────────────────────────────────────────────────
+  // BUILD
+  // ───────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final user = authProvider.currentUserModel;
     final firestoreService = FirestoreService();
-    final Color themeColor = const Color(0xFFB56F76);
 
     if (user == null) {
       return Scaffold(
@@ -1108,6 +1267,16 @@ class NotificationsScreen extends StatelessWidget {
 
           final notifications = snapshot.data ?? [];
 
+          // Auto-open from push
+          if (!_autoOpened &&
+              widget.autoOpenType != null &&
+              notifications.isNotEmpty) {
+            _autoOpened = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _tryAutoOpen(notifications);
+            });
+          }
+
           if (notifications.isEmpty) {
             return Center(
               child: Column(
@@ -1143,6 +1312,7 @@ class NotificationsScreen extends StatelessWidget {
               bool isCancellation = notif.type == 'donation_cancelled';
               bool isExpiration = notif.type == 'expired_request';
               bool isVolunteerAccepted = notif.type == 'volunteer_accepted';
+              bool isVolunteerExpired = notif.type == 'volunteer_expired';
               bool isDeliveryArrived = notif.type == 'delivery_arrived';
               bool isPaymentPending = notif.type == 'payment_pending';
               bool isVerifyPayment = notif.type == 'verify_payment';
@@ -1172,7 +1342,7 @@ class NotificationsScreen extends StatelessWidget {
                   leading: CircleAvatar(
                     backgroundColor: isCancellation
                         ? Colors.red.shade50
-                        : (isExpiration
+                        : (isExpiration || isVolunteerExpired
                             ? Colors.orange.shade50
                             : (isPaymentPending ||
                                     isVerifyPayment ||
@@ -1186,28 +1356,30 @@ class NotificationsScreen extends StatelessWidget {
                           ? Icons.cancel_presentation_rounded
                           : isExpiration
                               ? Icons.timer_off_rounded
-                              : isDeliveryArrived
-                                  ? Icons.inventory_2_rounded
-                                  : isPaymentPending
-                                      ? Icons.payment_rounded
-                                      : isVerifyPayment
-                                          ? Icons.currency_rupee_rounded
-                                          : isPaymentVerified
-                                              ? Icons.verified_rounded
-                                              : isTaskNotification
-                                                  ? Icons.two_wheeler_rounded
-                                                  : (isTag
-                                                      ? Icons.photo_library_rounded
-                                                      : (isMessage
-                                                          ? Icons.message_rounded
-                                                          : (isVolunteerAccepted
-                                                              ? Icons
-                                                                  .directions_car_rounded
-                                                              : Icons
-                                                                  .volunteer_activism))),
+                              : isVolunteerExpired
+                                  ? Icons.person_off_rounded
+                                  : isDeliveryArrived
+                                      ? Icons.inventory_2_rounded
+                                      : isPaymentPending
+                                          ? Icons.payment_rounded
+                                          : isVerifyPayment
+                                              ? Icons.currency_rupee_rounded
+                                              : isPaymentVerified
+                                                  ? Icons.verified_rounded
+                                                  : isTaskNotification
+                                                      ? Icons.two_wheeler_rounded
+                                                      : (isTag
+                                                          ? Icons.photo_library_rounded
+                                                          : (isMessage
+                                                              ? Icons.message_rounded
+                                                              : (isVolunteerAccepted
+                                                                  ? Icons
+                                                                      .directions_car_rounded
+                                                                  : Icons
+                                                                      .volunteer_activism))),
                       color: isCancellation
                           ? Colors.red
-                          : (isExpiration
+                          : (isExpiration || isVolunteerExpired
                               ? Colors.orange
                               : (isPaymentPending ||
                                       isVerifyPayment ||
@@ -1225,7 +1397,7 @@ class NotificationsScreen extends StatelessWidget {
                           notif.isRead ? FontWeight.w600 : FontWeight.bold,
                       color: isCancellation
                           ? Colors.red.shade900
-                          : (isExpiration
+                          : (isExpiration || isVolunteerExpired
                               ? Colors.orange.shade900
                               : Colors.black87),
                       height: 1.3,
@@ -1307,6 +1479,8 @@ class NotificationsScreen extends StatelessWidget {
                       );
                     } else if (isExpiration) {
                       _showExpirationDetails(context, notif);
+                    } else if (isVolunteerExpired) {
+                      _showNoVolunteerFoundDetails(context, notif);
                     } else {
                       _showRichDetailsPopup(
                         context,

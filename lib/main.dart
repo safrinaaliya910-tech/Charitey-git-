@@ -1,10 +1,8 @@
-//lib/main.dart
-//main.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
-import 'screens/splash_screen.dart'; 
+import 'screens/splash_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/profile_setup_screen.dart';
 import 'providers/auth_provider.dart';
@@ -13,7 +11,6 @@ import 'services/navigation_keys.dart';
 import 'package:flutter/foundation.dart';
 import 'screens/pending_verification_screen.dart';
 
-// --- FIX 1: Removed the underscore from HomeScreenState ---
 final GlobalKey<HomeScreenState> homeScreenKey = GlobalKey<HomeScreenState>();
 
 void main() async {
@@ -55,6 +52,7 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       title: 'Fourth Idly',
       navigatorKey: appNavigatorKey,
+      scaffoldMessengerKey: notificationScaffoldMessengerKey, // ← THIS WAS MISSING
       theme: ThemeData(
         primaryColor: const Color(0xFFB56F76),
         colorScheme: ColorScheme.fromSeed(
@@ -84,24 +82,20 @@ class AuthWrapper extends StatelessWidget {
       );
     }
 
-    // 1. Not logged in
     if (user == null) {
       return const SplashScreen();
     }
 
-    // 2. Only force setup if the user has NO data at all.
     if (user.phone.isEmpty && user.location.isEmpty) {
       return ProfileSetupScreen(role: user.role);
     }
 
-    // 3. NEW — NGO/Volunteer waiting on admin verification
     final bool requiresVerification = user.role == 'ngo' || user.role == 'volunteer';
     final bool isVerified = user.status == 'approved' || user.status == 'active';
     if (requiresVerification && !isVerified) {
       return const PendingVerificationScreen();
     }
 
-    // 4. Go Home
     return HomeScreen(key: homeScreenKey);
   }
 }

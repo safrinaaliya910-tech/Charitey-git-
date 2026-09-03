@@ -5,6 +5,15 @@ import '../models/donation_model.dart';
 import '../models/volunteer_request_model.dart';
 import '../models/notification_model.dart';
 
+class DuplicateUpiReferenceException implements Exception {
+  final String message;
+
+  DuplicateUpiReferenceException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -225,51 +234,63 @@ class FirestoreService {
     }
   }
 
+  Future<void> registerUsedUpiReference({
+    required String donationId,
+    required String donorId,
+    required String utr,
+  }) async {
+    final donationRef = _firestore.collection('donations').doc(donationId);
+    final usedUtrRef = _firestore.collection('used_utrs').doc(utr);
+
+    try {
+      await _firestore.runTransaction((transaction) async {
+        final usedUtrSnap = await transaction.get(usedUtrRef);
+        if (usedUtrSnap.exists) {
+          throw DuplicateUpiReferenceException(
+            'This UPI reference number has already been used. Please check and enter the correct reference number for your payment.',
+          );
+        }
+
+        transaction.set(usedUtrRef, {
+          'utr': utr,
+          'donationId': donationId,
+          'donorId': donorId,
+          'usedAt': FieldValue.serverTimestamp(),
+        });
+
+        transaction.update(donationRef, {
+          'status': 'payment_verification_pending',
+          'paymentReference': utr,
+          'paymentSubmittedAt': FieldValue.serverTimestamp(),
+        });
+      });
+    } catch (e) {
+      if (e is DuplicateUpiReferenceException) {
+        rethrow;
+      }
+      rethrow;
+    }
+  }
+
   // 👇 NEW: Broadcast a brand-new pickup task to every registered volunteer 👇
   // Fired immediately when a donation needing a platform volunteer is created,
-  // so volunteers see it right away (Rapido-style instant task alert).
+    // Only set the flag – Cloud Function will handle the rest
   Future<void> broadcastNewTaskToVolunteers({
     required String donationId,
     required String itemName,
-    required String pickupLocation, // donor location
-    required String dropLocation,   // ngo location
+    required String pickupLocation,
+    required String dropLocation,
     required double deliveryFee,
   }) async {
     try {
-      var volunteersSnap = await _firestore
-          .collection('users')
-          .where('role', isEqualTo: 'volunteer')
-          .get();
-
-      if (volunteersSnap.docs.isEmpty) return;
-
-      WriteBatch batch = _firestore.batch();
-
-      for (var volDoc in volunteersSnap.docs) {
-        String volId = volDoc.id;
-        String notifId = _firestore.collection('notifications').doc().id;
-
-        batch.set(
-          _firestore.collection('notifications').doc(notifId),
-          {
-            'id': notifId,
-            'receiverId': volId,
-            'senderId': 'system',
-            'senderName': 'New Task',
-            'type': 'new_task_available',
-            'title': 'New Pickup Task Available! 🛵',
-            'message':
-                '$itemName • $pickupLocation → $dropLocation • Earn ₹${deliveryFee.toStringAsFixed(0)}',
-            'relatedItemId': donationId,
-            'createdAt': FieldValue.serverTimestamp(),
-            'isRead': false,
-          },
-        );
-      }
-
-      await batch.commit();
+      await _firestore.collection('donations').doc(donationId).update({
+        'newTaskNotified': true,
+        'newTaskItemName': itemName,
+        'newTaskLocation': pickupLocation,
+        'newTaskNotifiedAt': FieldValue.serverTimestamp(),
+      });
     } catch (e) {
-      print("Error broadcasting new task to volunteers: $e");
+      print("Error setting newTaskNotified flag: $e");
     }
   }
 

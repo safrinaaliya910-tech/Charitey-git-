@@ -11,10 +11,6 @@ import '../models/notification_model.dart';
 import 'chat_screen.dart';
 
 class VolunteerDashboard extends StatefulWidget {
-  // 👇 NEW: Optional donationId to scroll to and highlight the moment the
-  // dashboard opens — passed in from NotificationsScreen when the user taps
-  // a 'new_task_available' or 'urgent_task' notification, so they land
-  // directly on the relevant card instead of having to hunt for it.
   final String? highlightDonationId;
 
   const VolunteerDashboard({Key? key, this.highlightDonationId}) : super(key: key);
@@ -25,14 +21,14 @@ class VolunteerDashboard extends StatefulWidget {
 
 class _VolunteerDashboardState extends State<VolunteerDashboard> {
   final Color themeColor = const Color(0xFFB56F76);
+  // Dark dusky rose used for the highlighted (new/urgent task) card outline —
+  // replaces the previous soft yellow (0xFFFFC107).
+  final Color highlightColor = const Color(0xFF8B3A45);
   final ScrollController _scrollController = ScrollController();
   final Map<String, Future<RouteInfo?>> _routeLookupCache = {};
 
   bool showAvailable = true;
 
-  // 👇 NEW: GlobalKey attached to the highlighted card so we can locate its
-  // BuildContext and call Scrollable.ensureVisible on it. _hasScrolledToHighlight
-  // guards against re-scrolling on every Firestore stream rebuild.
   GlobalKey? _highlightKey;
   bool _hasScrolledToHighlight = false;
 
@@ -50,10 +46,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     super.dispose();
   }
 
-  // 👇 NEW: Parses the volunteer's stored 'vehicleType' string (from their
-  // profile, set once at registration) back into the VehicleType enum.
-  // Defaults to bike if missing/invalid — covers volunteers who registered
-  // before this feature existed.
   VehicleType _parseVehicleType(String? value) {
     if (value == null || value.trim().isEmpty) return VehicleType.bike;
     return VehicleType.values.firstWhere(
@@ -62,11 +54,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     );
   }
 
-  // 👇 NEW: Scrolls the highlighted card into view once it's actually been
-  // laid out. Called from the FutureBuilder below after each card build;
-  // retries harmlessly on every rebuild until the card's context resolves
-  // (e.g. first stream event might not have it yet), then locks via
-  // _hasScrolledToHighlight so it doesn't keep re-scrolling on later updates.
   void _scrollToHighlightIfNeeded() {
     if (widget.highlightDonationId == null || _hasScrolledToHighlight) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -95,7 +82,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     try {
       final user = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
 
-      // 1. Update the original donations collection
       await FirebaseFirestore.instance.collection('donations').doc(donationId).update({
         'status': 'delivery_accepted',
         'assignedVolunteerId': volunteerId,
@@ -103,7 +89,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
         'deliveryFee': deliveryFee,
       });
 
-      // 2. Update the volunteer_requests collection for the Admin Panel
       var requestQuery = await FirebaseFirestore.instance
           .collection('volunteer_requests')
           .where('donorId', isEqualTo: donorId)
@@ -170,11 +155,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     }
   }
 
-  // 👇 UPDATED: No more "Choose Your Vehicle" dialog here. Vehicle type comes
-  // from the volunteer's registered profile (already resolved by the caller
-  // in _buildDeliveryCard / _generateFilteredCards) and is passed straight
-  // in, along with the fee already computed for that vehicle. This goes
-  // directly to the existing "Confirm Pickup" dialog.
   Future<void> _confirmAndAcceptTask(
     BuildContext context,
     String donationId,
@@ -281,24 +261,15 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     required double ngoLng,
   }) {
     if (_routeLookupCache.containsKey(donationId)) {
-      print('ROUTE CACHE HIT donationId=$donationId');
       return _routeLookupCache[donationId]!;
     }
 
-    print('ROUTE CACHE MISS donationId=$donationId (fresh API call)');
     final future = LocationHelperService.getRouteInfo(
       originLat: donorLat,
       originLng: donorLng,
       destLat: ngoLat,
       destLng: ngoLng,
-    ).then((value) {
-      if (value == null) {
-        print('ROUTE LOOKUP FAILED donationId=$donationId (cached as null)');
-      } else {
-        print('ROUTE LOOKUP RESOLVED donationId=$donationId -> distanceKm=${value.distanceKm}, durationMinutes=${value.durationMinutes}');
-      }
-      return value;
-    });
+    );
 
     _routeLookupCache[donationId] = future;
     return future;
@@ -353,57 +324,23 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
         await FirebaseFirestore.instance
             .collection('volunteer_requests')
             .doc(requestQuery.docs.first.id)
-            .update({
-              'status': 'expired',
-            });
+            .update({'status': 'expired'});
       }
     } catch (e) {
       debugPrint("Error handling expired task: $e");
     }
   }
 
-  // 👇 Fires ONCE per donation, the moment it first appears as a
-  // pending pickup task (i.e. as soon as _generateFilteredCards sees it
-  // without the 'newTaskNotified' flag set). Notifies every registered
-  // volunteer with type 'new_task_available' so NotificationsScreen can
-  // route a tap straight into VolunteerDashboard, highlighting this card.
-  // The 'newTaskNotified' flag on the donation doc guarantees this only
-  // sends once, even though multiple volunteers' dashboards may be
-  // listening to the same query at once.
   Future<void> _triggerNewTaskNotification(String donationId, String itemName, String location) async {
     try {
       await FirebaseFirestore.instance.collection('donations').doc(donationId).update({
         'newTaskNotified': true,
+        'newTaskItemName': itemName,
+        'newTaskLocation': location,
+        'newTaskNotifiedAt': FieldValue.serverTimestamp(),
       });
-
-      var volunteersSnap = await FirebaseFirestore.instance
-          .collection('users')
-          .where('role', isEqualTo: 'volunteer')
-          .get();
-
-      WriteBatch batch = FirebaseFirestore.instance.batch();
-
-      for (var volDoc in volunteersSnap.docs) {
-        String volId = volDoc.id;
-        String notifId = FirebaseFirestore.instance.collection('notifications').doc().id;
-
-        batch.set(FirebaseFirestore.instance.collection('notifications').doc(notifId), {
-          'id': notifId,
-          'receiverId': volId,
-          'senderId': 'system',
-          'senderName': 'New Task',
-          'type': 'new_task_available',
-          'title': 'New Pickup Task Available 🚴',
-          'message': 'A new donation of $itemName in $location is ready for pickup. Tap to view and accept.',
-          'relatedItemId': donationId,
-          'createdAt': FieldValue.serverTimestamp(),
-          'isRead': false,
-        });
-      }
-
-      await batch.commit();
     } catch (e) {
-      debugPrint("Error triggering new task notification: $e");
+      debugPrint("Error setting newTaskNotified flag: $e");
     }
   }
 
@@ -411,46 +348,18 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     try {
       await FirebaseFirestore.instance.collection('donations').doc(donationId).update({
         'urgentNotified': true,
+        'urgentItemName': itemName,
+        'urgentLocation': location,
+        'urgentNotifiedAt': FieldValue.serverTimestamp(),
       });
-
-      var volunteersSnap = await FirebaseFirestore.instance
-          .collection('users')
-          .where('role', isEqualTo: 'volunteer')
-          .get();
-
-      WriteBatch batch = FirebaseFirestore.instance.batch();
-
-      for (var volDoc in volunteersSnap.docs) {
-        String volId = volDoc.id;
-        String notifId = FirebaseFirestore.instance.collection('notifications').doc().id;
-
-        batch.set(FirebaseFirestore.instance.collection('notifications').doc(notifId), {
-          'id': notifId,
-          'receiverId': volId,
-          'senderId': 'system',
-          'senderName': 'Urgent Alert',
-          'type': 'urgent_task',
-          'title': 'Urgent: Volunteer Needed! 🚨',
-          'message': 'A donation of $itemName in $location needs pickup within 24 hours! Accept the task now and make an impact.',
-          'relatedItemId': donationId,
-          'createdAt': FieldValue.serverTimestamp(),
-          'isRead': false,
-        });
-      }
-
-      await batch.commit();
     } catch (e) {
-      debugPrint("Error triggering urgent notification: $e");
+      debugPrint("Error setting urgentNotified flag: $e");
     }
   }
 
   Future<List<Widget>> _generateFilteredCards(List<QueryDocumentSnapshot> donations, String myUserId) async {
     List<Widget> cardList = [];
 
-    // 👇 Resolve the CURRENT VOLUNTEER's own registered vehicle once,
-    // from their profile (set during registration/profile-setup). This is
-    // used for every card's fee preview and for the fee actually charged
-    // when they accept a task — no more per-task vehicle picker.
     final myUserModel = Provider.of<AuthProvider>(context, listen: false).currentUserModel;
     final VehicleType myVehicleType = _parseVehicleType(myUserModel?.vehicleType);
 
@@ -471,9 +380,9 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       String? assignedVolunteerId = donationData['assignedVolunteerId'];
 
       bool isAcceptedByMe = (status == 'delivery_accepted' && assignedVolunteerId == myUserId) ||
-                            (status == 'pending_ngo_confirmation' && assignedVolunteerId == myUserId) ||
-                            (status == 'completed_awaiting_payment' && assignedVolunteerId == myUserId) ||
-                            (status == 'fully_completed' && assignedVolunteerId == myUserId);
+          (status == 'pending_ngo_confirmation' && assignedVolunteerId == myUserId) ||
+          (status == 'completed_awaiting_payment' && assignedVolunteerId == myUserId) ||
+          (status == 'fully_completed' && assignedVolunteerId == myUserId);
 
       if (showAvailable) {
         if (status != 'pending') continue;
@@ -487,9 +396,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       var listingData = listingSnap.data() as Map<String, dynamic>;
       bool? isVolunteerAvailable = listingData['isVolunteerAvailable'] as bool?;
 
-      if (isVolunteerAvailable == true) {
-        continue; // NGO has their own volunteer, skip
-      }
+      if (isVolunteerAvailable == true) continue;
 
       String type = listingData['type'] ?? 'food';
       String itemName = type == 'food' ? (listingData['foodType'] ?? "Food") : (listingData['productName'] ?? "Product");
@@ -503,9 +410,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
           _handleExpiredTask(donationId, donorId, listingData['ngold'] ?? listingData['ngoId'] ?? '', itemName);
           continue;
         } else {
-          // 👇 Notify every volunteer the moment this task first
-          // appears as pending — separate, one-time flag from the
-          // urgent (<=24h) notification below.
           bool newTaskNotified = donationData['newTaskNotified'] == true;
           if (!newTaskNotified) {
             _triggerNewTaskNotification(donationId, itemName, listingData['ngoLocation'] ?? 'your area');
@@ -519,16 +423,15 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       }
 
       String rawDonatedQty = donationData['donatedQuantity']?.toString() ??
-                             donationData['quantity']?.toString() ??
-                             donationData['donatedAmount']?.toString() ?? '';
+          donationData['quantity']?.toString() ??
+          donationData['donatedAmount']?.toString() ??
+          '';
 
       String unitVal = listingData['unit']?.toString() ?? '';
       String quantity = rawDonatedQty.isEmpty ? '1 Item' : '$rawDonatedQty $unitVal'.trim();
 
       String availability = listingData['availability'] ?? 'Time not specified';
       String ngoName = listingData['ngoName'] ?? 'Unknown NGO';
-
-      // FETCH NGO PICKUP/DROP ADDRESS PREFERRING PINNED ADDRESS
       String ngoLocation = listingData['pickupAddress'] ?? listingData['ngoLocation'] ?? 'Location unavailable';
       String ngoId = listingData['ngoId'] ?? listingData['ngold'] ?? '';
 
@@ -539,9 +442,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
         ngoPhone = ngoUserData['phone'] ?? 'Phone unavailable';
       }
 
-      // 👇 FARE & DISTANCE — prefer stored distance/fee from the donation
-      // (saved by donation_page.dart using road-distance + FareCalculator),
-      // otherwise recompute using straight-line distance as a fallback.
       double deliveryFee = (donationData['deliveryFee'] as num?)?.toDouble() ?? 0.0;
       double? storedDistanceKm = (donationData['distanceKm'] as num?)?.toDouble();
       double? donorLat = (donationData['donorLat'] as num?)?.toDouble();
@@ -551,6 +451,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
 
       double distanceKm = storedDistanceKm ?? 0.0;
       double durationMinutes = (distanceKm / 30.0) * 60.0;
+
       if (distanceKm <= 0 && donorLat != null && donorLng != null && ngoLat != null && ngoLng != null) {
         final routeInfo = await _getCachedRouteInfo(
           donationId: donationId,
@@ -561,8 +462,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
         );
 
         if (routeInfo != null) {
-          // Zero-distance / zero-duration route results are valid (e.g. same pickup and drop coordinates),
-          // so accept them instead of treating them as a missing-data failure and retrying endlessly.
           distanceKm = routeInfo.distanceKm;
           durationMinutes = routeInfo.durationMinutes;
         } else {
@@ -572,12 +471,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
         }
       }
 
-      // 👇 For tasks that are not yet accepted, always preview the
-      // fee using the CURRENT VOLUNTEER's registered vehicle. This prevents
-      // showing a generic per-km estimate (e.g. ₹10/km) saved earlier and
-      // ensures the badge vehicle and displayed fee match. When a task is
-      // accepted the donation's stored deliveryFee is authoritative and
-      // remains unchanged.
       if (!isAcceptedByMe) {
         deliveryFee = FareCalculator.calculate(
           vehicle: myVehicleType,
@@ -586,13 +479,10 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
         );
       }
 
-      // For "Available" (not-yet-accepted) tasks, show the badge using MY
-      // vehicle since that's what will be used if I accept it.
       String badgeVehicleType = (isAcceptedByMe && vehicleTypeValue != null && vehicleTypeValue.isNotEmpty)
           ? vehicleTypeValue
           : myVehicleType.name;
 
-      // 👇 NEW: Is this the card we were told to scroll to & highlight?
       bool isHighlighted = widget.highlightDonationId != null && widget.highlightDonationId == donationId;
 
       cardList.add(
@@ -611,7 +501,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
           donorPhone: donorPhone,
           donorId: donorId,
           myId: myUserId,
-          status: status, // Passed down for rendering logic
+          status: status,
           isAcceptedByMe: isAcceptedByMe,
           deliveryFee: deliveryFee,
           distanceKm: distanceKm,
@@ -619,13 +509,11 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
           myVehicleType: myVehicleType,
           isHighlighted: isHighlighted,
           cardKey: isHighlighted ? _highlightKey : null,
-        )
+        ),
       );
     }
 
-    // 👇 NEW: Try scrolling to the highlighted card now that the list is built.
     _scrollToHighlightIfNeeded();
-
     return cardList;
   }
 
@@ -694,54 +582,36 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
               ),
             ),
           ),
-
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('donations')
-                  .where('status', whereIn: ['pending', 'delivery_accepted', 'pending_ngo_confirmation', 'completed_awaiting_payment', 'fully_completed'])
+                  .orderBy('createdAt', descending: true)
                   .snapshots(),
-              builder: (context, donationSnapshot) {
-                if (donationSnapshot.connectionState == ConnectionState.waiting) {
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return Center(child: CircularProgressIndicator(color: themeColor));
                 }
-
-                if (!donationSnapshot.hasData || donationSnapshot.data!.docs.isEmpty) {
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return _buildEmptyState();
                 }
 
-                var donations = donationSnapshot.data!.docs.toList();
-                donations.sort((a, b) {
-                  var aData = a.data() as Map<String, dynamic>;
-                  var bData = b.data() as Map<String, dynamic>;
-                  DateTime aTime = (aData['createdAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
-                  DateTime bTime = (bData['createdAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
-                  return bTime.compareTo(aTime);
-                });
-
                 return FutureBuilder<List<Widget>>(
-                  future: _generateFilteredCards(donations, user.uid),
+                  future: _generateFilteredCards(snapshot.data!.docs, user.uid),
                   builder: (context, cardSnapshot) {
-                    if (cardSnapshot.connectionState == ConnectionState.waiting) {
+                    if (!cardSnapshot.hasData) {
                       return Center(child: CircularProgressIndicator(color: themeColor));
                     }
+                    final cards = cardSnapshot.data!;
+                    if (cards.isEmpty) return _buildEmptyState();
 
-                    if (!cardSnapshot.hasData || cardSnapshot.data!.isEmpty) {
-                      return _buildEmptyState();
-                    }
-
-                    return Scrollbar(
+                    return ListView.builder(
                       controller: _scrollController,
-                      thumbVisibility: true,
-                      thickness: 6.0,
-                      radius: const Radius.circular(10),
-                      child: ListView(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 100),
-                        children: cardSnapshot.data!,
-                      ),
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                      itemCount: cards.length,
+                      itemBuilder: (context, index) => cards[index],
                     );
-                  }
+                  },
                 );
               },
             ),
@@ -770,96 +640,54 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     required bool isAcceptedByMe,
     required double deliveryFee,
     required double distanceKm,
-    String? vehicleType,
+    required String vehicleType,
     required VehicleType myVehicleType,
-    bool isHighlighted = false, // 👈 NEW
-    Key? cardKey, // 👈 NEW
+    required bool isHighlighted,
+    GlobalKey? cardKey,
   }) {
-    bool isCompleted = status == 'delivery_completed' || status == 'fully_completed' || status == 'completed_awaiting_payment';
     bool isPendingNGO = status == 'pending_ngo_confirmation';
+    bool isCompleted = status == 'fully_completed';
 
-    Widget cardContent = Container(
-      key: cardKey, // 👈 NEW: lets Scrollable.ensureVisible find this exact card
-      margin: const EdgeInsets.only(bottom: 18),
+    // ── Dark dusky rose highlight ──────────────────────────────
+    final cardContent = Container(
+      key: cardKey,
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isHighlighted
-              ? [Colors.white, Colors.red.withValues(alpha: 0.06)]
-              : [Colors.white, themeColor.withValues(alpha: 0.04)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isHighlighted ? Colors.red.shade400 : themeColor.withValues(alpha: 0.2),
-          width: isHighlighted ? 2.2 : 1.5,
+          color: isHighlighted
+              ? highlightColor                 // dark dusky rose
+              : Colors.grey.shade200,
+          width: isHighlighted ? 2.2 : 1.0,
         ),
         boxShadow: [
           BoxShadow(
-            color: isHighlighted ? Colors.red.withValues(alpha: 0.18) : themeColor.withValues(alpha: 0.12),
-            blurRadius: 16,
-            spreadRadius: 2,
-            offset: const Offset(0, 6),
+            color: isHighlighted
+                ? highlightColor.withValues(alpha: 0.18)
+                : Colors.black.withValues(alpha: 0.04),
+            blurRadius: isHighlighted ? 10 : 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16), // slightly tighter padding helps on small screens
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 👇 NEW: "URGENT" ribbon banner shown only on the highlighted card
-            if (isHighlighted)
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.symmetric(vertical: 7),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade600,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.warning_amber_rounded, color: Colors.white, size: 16),
-                    SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        "URGENT — THIS IS THE TASK FROM YOUR ALERT",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11,
-                          letterSpacing: 0.3,
-                        ),
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-            // ── STATUS + PAY BADGE (fixed overflow) ──────────────────────────
+            // Status + Fee row
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Status badge – flexible so it can shrink if needed
                 Flexible(
                   flex: 2,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
                       color: isCompleted
                           ? Colors.green.shade50
                           : (isPendingNGO ? Colors.orange.shade50 : themeColor.withValues(alpha: 0.1)),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: isCompleted
-                            ? Colors.green.shade200
-                            : (isPendingNGO ? Colors.orange.shade200 : Colors.transparent),
-                      ),
+                      borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
                       isCompleted
@@ -879,10 +707,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                     ),
                   ),
                 ),
-
                 const SizedBox(width: 8),
-
-                // Pay + vehicle + distance – flexible + FittedBox prevents overflow
                 Flexible(
                   flex: 3,
                   child: Align(
@@ -914,7 +739,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                                 fontSize: 13,
                               ),
                             ),
-                            if (vehicleType != null && vehicleType.isNotEmpty) ...[
+                            if (vehicleType.isNotEmpty) ...[
                               const SizedBox(width: 4),
                               _buildVehicleBadge(vehicleType),
                             ],
@@ -940,7 +765,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
 
             const SizedBox(height: 14),
 
-            // ── ITEM NAME + QUANTITY ─────────────────────────────────────────
+            // Item name + quantity
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -970,7 +795,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
 
             const SizedBox(height: 6),
 
-            // ── REQUIRED BY ──────────────────────────────────────────────────
             Row(
               children: [
                 Icon(Icons.calendar_month_outlined, size: 15, color: Colors.grey.shade500),
@@ -995,7 +819,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
               child: Divider(height: 1),
             ),
 
-            // ── PICKUP + DELIVER BOXES ───────────────────────────────────────
+            // Pickup + Deliver boxes
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1069,7 +893,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
 
             const SizedBox(height: 16),
 
-            // ── ACTION BUTTONS / STATUS MESSAGES ─────────────────────────────
+            // Action buttons
             if (!isAcceptedByMe)
               SizedBox(
                 width: double.infinity,
@@ -1085,7 +909,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                     deliveryFee,
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: isHighlighted ? Colors.red.shade600 : themeColor,
+                    backgroundColor: themeColor,          // normal theme color (no red)
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     elevation: 0,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1218,8 +1042,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                             fontSize: 13,
                           ),
                           textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     )
@@ -1241,8 +1063,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                             fontSize: 13,
                           ),
                           textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     )
@@ -1263,7 +1083,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
 
                   const SizedBox(height: 10),
 
-                  // Donor / NGO chat buttons
                   Row(
                     children: [
                       Expanded(
@@ -1326,13 +1145,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       ),
     );
 
-    // 👇 NEW: Wrap the highlighted card in a pulsing red glow for a few
-    // seconds so it visually jumps out the moment the page loads. After the
-    // pulse settles it keeps its static red border (set above), so the user
-    // can still identify it if they look away and back.
-    if (isHighlighted) {
-      return _PulseHighlight(child: cardContent);
-    }
     return cardContent;
   }
 
@@ -1412,66 +1224,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
           ),
         ],
       ),
-    );
-  }
-}
-
-// 👇 NEW: Small self-contained widget that pulses a red glow around its
-// child a few times (via a repeating AnimationController) and then stops,
-// leaving the child's own static styling in place. Used to draw the eye to
-// the highlighted card immediately after VolunteerDashboard opens.
-class _PulseHighlight extends StatefulWidget {
-  final Widget child;
-  const _PulseHighlight({required this.child});
-
-  @override
-  State<_PulseHighlight> createState() => _PulseHighlightState();
-}
-
-class _PulseHighlightState extends State<_PulseHighlight> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _glow;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 650));
-    _glow = Tween<double>(begin: 0.12, end: 0.45).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-    _controller.repeat(reverse: true);
-    // Pulse for ~3 seconds (a handful of cycles), then settle down.
-    Future.delayed(const Duration(milliseconds: 2900), () {
-      if (mounted) _controller.stop();
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _glow,
-      builder: (context, child) {
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.red.withValues(alpha: _glow.value),
-                blurRadius: 22,
-                spreadRadius: 3,
-              ),
-            ],
-          ),
-          child: child,
-        );
-      },
-      child: widget.child,
     );
   }
 }

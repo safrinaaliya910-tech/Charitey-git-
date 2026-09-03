@@ -1869,20 +1869,23 @@ class _PendingReceiptsScreenState extends State<PendingReceiptsScreen> {
                                         }
                                       }
 
-                                      String notifIdDonor = FirebaseFirestore.instance.collection('notifications').doc().id;
-                                      NotificationModel donorNotif = NotificationModel(
-                                        id: notifIdDonor,
-                                        receiverId: donorId,
-                                        senderId: widget.ngoId,
-                                        senderName: currentUser?.name ?? 'NGO',
-                                        type: 'payment_pending',
-                                        title: 'Delivery Successful! 🕊️',
-                                        message: 'Your donation of $itemName has safely reached us! Please tap here to pay your volunteer their delivery fee.',
-                                        relatedItemId: docId,
-                                        createdAt: DateTime.now(),
-                                        isRead: false,
-                                      );
-                                      await FirestoreService().sendNotification(donorNotif);
+                                     // Inside the onPressed of "Confirm Received" button
+String notifIdDonor = FirebaseFirestore.instance.collection('notifications').doc().id;
+
+NotificationModel donorNotif = NotificationModel(
+  id: notifIdDonor,
+  receiverId: donorId,
+  senderId: widget.ngoId,
+  senderName: currentUser?.name ?? 'NGO',
+  type: 'payment_pending',                          // ← must be exactly this
+  title: 'Payment Required',                        // ← better title for push
+  message: 'Your donation of $itemName has safely reached us! Please tap here to pay your volunteer their delivery fee.',
+  relatedItemId: docId,                             // donation ID
+  createdAt: DateTime.now(),
+  isRead: false,
+);
+
+await FirestoreService().sendNotification(donorNotif);
                                     } catch (e) {
                                       debugPrint("Update error: $e");
                                     }

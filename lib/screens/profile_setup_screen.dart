@@ -16,6 +16,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart'; // 👈 for the UPI QR preview in the confirmation dialog
 import 'pending_verification_screen.dart'; // 👈 "awaiting admin verification" screen
+import 'package:cloud_functions/cloud_functions.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
   final String role;
@@ -2033,7 +2034,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     );
   }
 
-  void _saveProfile() async {
+   void _saveProfile() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     String finalUsername = usernameController.text.trim().toLowerCase();
     String? profileImageUrl;
@@ -2054,11 +2055,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       );
     }
 
-    // If this role requires admin verification (ngo / volunteer) and the
-    // account isn't already approved/active, mark it 'pending' — this is
-    // what makes the admin panel pick it up in the review queue AND routes
-    // the user to the "awaiting verification" screen below instead of the
-    // home screen.
     final String? currentStatus = authProvider.currentUserModel?.status;
     final bool alreadyVerified = currentStatus == 'approved' || currentStatus == 'active';
     final bool needsVerification = _requiresLicenseDocument && !alreadyVerified;
@@ -2068,9 +2064,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
           ? nameController.text.trim()
           : null,
       username: finalUsername.isNotEmpty ? finalUsername : null,
-      // 👇 By this point _isPhoneVerified is guaranteed true (the button
-      // that calls _saveProfile is disabled otherwise), so this number has
-      // actually been confirmed via OTP, not just typed in.
       phone: phoneController.text.trim().isNotEmpty
           ? phoneController.text.trim()
           : null,
@@ -2104,6 +2097,18 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
           (Route<dynamic> route) => false,
         );
       } else {
+        // 👇 NEW: donor / travel_agency skip the approval queue and land
+        // here directly — this is where they get their welcome email.
+        // Fire-and-forget: a failure here should never block the user
+        // from reaching the app.
+        try {
+          await FirebaseFunctions.instance
+              .httpsCallable('sendWelcomeEmail')
+              .call();
+        } catch (e) {
+          debugPrint('sendWelcomeEmail error (non-blocking): $e');
+        }
+
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => const AuthWrapper()),
           (Route<dynamic> route) => false,
