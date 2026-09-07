@@ -6,6 +6,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -237,44 +238,24 @@ class AuthService {
   // 2. Sends that real link inside the branded Brevo email
   // Flutter just fires the request and handles the response.
 
-  Future<String?> sendPasswordResetEmail(String email) async {
+    Future<String?> sendPasswordResetEmail(String email) async {
     try {
-      final response = await http.post(
-        Uri.parse('https://charitey-password-reset.charitey12.workers.dev'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email.trim()}),
-      );
-
-      final data = jsonDecode(response.body);
-
-      // Worker returns firebaseError if the email doesn't exist or is invalid
-      if (data['firebaseError'] != null) {
-        final String code = data['firebaseError'];
-        switch (code) {
-          case 'EMAIL_NOT_FOUND':
-            return 'No account found with this email address.';
-          case 'INVALID_EMAIL':
-            return 'The email address is not valid.';
-          case 'TOO_MANY_ATTEMPTS_TRY_LATER':
-            return 'Too many attempts. Please try again later.';
-          case 'RESET_PASSWORD_EXCEED_LIMIT':
-            return 'Too many reset attempts. Please wait an hour and try again.';
-          default:
-            return 'Firebase Error: $code';
-        }
+      final callable = FirebaseFunctions.instance.httpsCallable('sendPasswordReset');
+      await callable.call({'email': email.trim()});
+      return null; // success
+    } on FirebaseFunctionsException catch (e) {
+      switch (e.code) {
+        case 'not-found':
+          return 'No account found with this email address.';
+        case 'invalid-argument':
+          return e.message ?? 'The email address is not valid.';
+        default:
+          return 'Something went wrong. Please try again.';
       }
-
-      if (response.statusCode == 200 && data['success'] == true) {
-        return null; // success
-      }
-
-      // Temporary: show full response for debugging
-      return 'Status: ${response.statusCode} | ${response.body}';
     } catch (e) {
-      return 'ERROR: $e';
+      return 'Something went wrong. Please check your connection and try again.';
     }
   }
-
   // ================= SIGN OUT =================
 
   Future<void> signOut() async {

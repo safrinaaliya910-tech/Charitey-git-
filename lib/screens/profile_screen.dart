@@ -4645,25 +4645,28 @@ class _NgoRatingDialogState extends State<NgoRatingDialog> {
     }
   }
 
-  Widget _buildStarRow(int currentRating, Function(int) onRate) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(5, (index) {
-        return IconButton(
-          onPressed: () => onRate(index + 1),
-          icon: Icon(
+ Widget _buildStarRow(int currentRating, Function(int) onRate) {
+  return Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    mainAxisSize: MainAxisSize.min,
+    children: List.generate(5, (index) {
+      return GestureDetector(
+        onTap: () => onRate(index + 1),
+        behavior: HitTestBehavior.opaque,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6.0),
+          child: Icon(
             index < currentRating
                 ? Icons.star_rounded
                 : Icons.star_border_rounded,
             color: Colors.amber,
-            size: 36,
+            size: 34, // slightly smaller so it never overflows
           ),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
-        );
-      }),
-    );
-  }
+        ),
+      );
+    }),
+  );
+}
 
   // NEW: the only exit from the post-rating prompt — closes this dialog and
   // pushes straight into CreatePostScreen (the same screen the "+" / Post
