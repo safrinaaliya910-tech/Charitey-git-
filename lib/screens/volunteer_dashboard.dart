@@ -406,10 +406,11 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       DateTime now = DateTime.now();
 
       if (status == 'pending') {
-        if (now.isAfter(liveUntil)) {
-          _handleExpiredTask(donationId, donorId, listingData['ngold'] ?? listingData['ngoId'] ?? '', itemName);
-          continue;
-        } else {
+  if (now.isAfter(liveUntil)) {
+    // Server (checkExpiredListings) already handles expiry + notifications.
+    // Just hide the card.
+    continue;
+  } else {
           bool newTaskNotified = donationData['newTaskNotified'] == true;
           if (!newTaskNotified) {
             _triggerNewTaskNotification(donationId, itemName, listingData['ngoLocation'] ?? 'your area');

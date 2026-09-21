@@ -39,12 +39,15 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _buttonPulseController = AnimationController(vsync: this, duration: const Duration(seconds: 2))
-      ..repeat(reverse: true);
+    _buttonPulseController =
+        AnimationController(vsync: this, duration: const Duration(seconds: 2))
+          ..repeat(reverse: true);
     _buttonPulseAnimation = Tween<double>(begin: 1.0, end: 1.02).animate(
-        CurvedAnimation(parent: _buttonPulseController, curve: Curves.easeInOut));
-    _magicHoverController = AnimationController(vsync: this, duration: const Duration(seconds: 3))
-      ..repeat(reverse: true);
+        CurvedAnimation(
+            parent: _buttonPulseController, curve: Curves.easeInOut));
+    _magicHoverController =
+        AnimationController(vsync: this, duration: const Duration(seconds: 3))
+          ..repeat(reverse: true);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(milliseconds: 500), _autoScrollNgos);
@@ -52,21 +55,23 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
   }
 
   void _autoScrollNgos() {
-    if (!mounted || _isNgoScrollingManually || !_ngoScrollController.hasClients) return;
-    
+    if (!mounted || _isNgoScrollingManually || !_ngoScrollController.hasClients)
+      return;
+
     double maxScroll = _ngoScrollController.position.maxScrollExtent;
     double currentScroll = _ngoScrollController.offset;
-    
+
     if (currentScroll >= maxScroll) {
       _ngoScrollController.jumpTo(0);
       currentScroll = 0;
     }
-    
+
     double distanceRemaining = maxScroll - currentScroll;
     int durationMs = (distanceRemaining / 80 * 1000).toInt();
-    
+
     _ngoScrollController
-        .animateTo(maxScroll, duration: Duration(milliseconds: durationMs), curve: Curves.linear)
+        .animateTo(maxScroll,
+            duration: Duration(milliseconds: durationMs), curve: Curves.linear)
         .then((_) {
       if (mounted && !_isNgoScrollingManually) {
         Future.delayed(const Duration(milliseconds: 50), _autoScrollNgos);
@@ -79,9 +84,87 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
     if (query.isNotEmpty) {
       Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => DonorListingScreen(initialSearchQuery: query)));
+          MaterialPageRoute(
+              builder: (_) => DonorListingScreen(initialSearchQuery: query)));
       _searchController.clear();
     }
+  }
+
+  void _showNgoNameDialog(String name) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: soft.withOpacity(0.35),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.gpp_good_rounded, color: primary, size: 30),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  name,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.verified, color: Colors.blue, size: 16),
+                    const SizedBox(width: 4),
+                    Text(
+                      "100% Verified",
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primary,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      "Close",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -100,9 +183,9 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Color(0xFFFFF7F8), 
-            Color(0xFFF7E6EB), 
-            Color(0xFFF0D5DD), 
+            Color(0xFFFFF7F8),
+            Color(0xFFF7E6EB),
+            Color(0xFFF0D5DD),
           ],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
@@ -111,7 +194,8 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
       ),
       child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
-        padding: EdgeInsets.fromLTRB(0, 0, 0, MediaQuery.of(context).padding.bottom + 120),
+        padding: EdgeInsets.fromLTRB(
+            0, 0, 0, MediaQuery.of(context).padding.bottom + 120),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -139,11 +223,19 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
                 children: [
-                  _trustedNgoCard("Aishwaryam NGO"),
-                  _trustedNgoCard("Helping Hands"),
-                  _trustedNgoCard("Hope Foundation"),
-                  _trustedNgoCard("Food Bridge"),
-                  _trustedNgoCard("Donation Center"),
+                  _trustedNgoCard(
+                      "Aishwariam Social Welfare Organisation (ASWO)"),
+                  _trustedNgoCard("Imayam Social Welfare Association"),
+                  _trustedNgoCard("Maxwell Charitable Trust"),
+                  _trustedNgoCard("COORU Organisation"),
+                  _trustedNgoCard("G18 Public Charitable Trust"),
+                  _trustedNgoCard("REST NGO"),
+                  _trustedNgoCard("Chandra Yuva Foundation"),
+                  _trustedNgoCard("Sevasram Trust"),
+                  _trustedNgoCard("Yettram Trust"),
+                  _trustedNgoCard("Annai Old Age Home"),
+                  _trustedNgoCard("Pudhiya Paadhai"),
+                  _trustedNgoCard("Annai Trust"),
                 ],
               ),
             ),
@@ -155,7 +247,7 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
               // 👇 Premium Heading Update
               child: Text("Seamless Giving Journey",
                   style: TextStyle(
-                      fontSize: 18, 
+                      fontSize: 18,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 0.2,
                       color: Colors.black87)),
@@ -209,8 +301,8 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
                 children: [
                   _buildAnimatedStatCard(
                       "120+", "Meals\nShared", Icons.restaurant_rounded),
-                  _buildAnimatedStatCard("85+", "Essentials\nDelivered",
-                      Icons.favorite_rounded),
+                  _buildAnimatedStatCard(
+                      "85+", "Essentials\nDelivered", Icons.favorite_rounded),
                   _buildAnimatedStatCard(
                       "30+", "Verified\nNGOs", Icons.verified_user_rounded),
                 ],
@@ -229,21 +321,21 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
       alignment: Alignment.bottomCenter,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: 38), 
+          padding: const EdgeInsets.only(bottom: 38),
           child: ShaderMask(
             shaderCallback: (rect) {
               return const LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [Colors.black, Colors.black, Colors.transparent],
-                stops: [0.0, 0.88, 1.0], 
+                stops: [0.0, 0.88, 1.0],
               ).createShader(rect);
             },
             blendMode: BlendMode.dstIn,
             child: SizedBox(
               width: double.infinity,
               child: Image.asset(
-                'assets/hero_banner.jpg', 
+                'assets/hero_banner.jpg',
                 fit: BoxFit.fitWidth,
               ),
             ),
@@ -280,12 +372,15 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
                             backgroundColor: const Color(0xFFFCF3F5),
                             elevation: 0,
                             leading: IconButton(
-                              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
+                              icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                                  color: Colors.black87),
                               onPressed: () => Navigator.pop(context),
                             ),
                             title: const Text(
                               "Tasks",
-                              style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
+                              style: TextStyle(
+                                  color: Colors.black87,
+                                  fontWeight: FontWeight.bold),
                             ),
                           ),
                           body: const VolunteerDashboard(),
@@ -307,7 +402,7 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
                             color: primary.withOpacity(0.18),
                             blurRadius: 20,
                             spreadRadius: 2,
-                            offset: const Offset(0, -4), 
+                            offset: const Offset(0, -4),
                           ),
                           BoxShadow(
                             color: accent.withOpacity(0.4),
@@ -337,7 +432,8 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
                     onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (_) => const DonorListingScreen(initialSearchQuery: ''))),
+                            builder: (_) => const DonorListingScreen(
+                                initialSearchQuery: ''))),
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(vertical: 18),
@@ -365,7 +461,8 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.volunteer_activism, color: Colors.white, size: 22),
+                            const Icon(Icons.volunteer_activism,
+                                color: Colors.white, size: 22),
                             const SizedBox(width: 10),
                             Text(
                               buttonLabel, // "Browse Donations" or "Browse Requests"
@@ -436,7 +533,7 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
       width: 210,
       margin: const EdgeInsets.only(left: 15, right: 5, top: 4, bottom: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.95), 
+        color: Colors.white.withOpacity(0.95),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white, width: 2),
         boxShadow: [
@@ -451,7 +548,7 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () {},
+          onTap: () => _showNgoNameDialog(name),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
@@ -506,7 +603,7 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.95), 
+          color: Colors.white.withOpacity(0.95),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.white, width: 2),
           boxShadow: [
@@ -547,7 +644,7 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
                       children: [
                         Text(title,
                             style: const TextStyle(
-                                fontWeight: FontWeight.w900, 
+                                fontWeight: FontWeight.w900,
                                 fontSize: 15.5,
                                 letterSpacing: 0.2)),
                         const SizedBox(height: 6),
@@ -556,7 +653,8 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
                             style: TextStyle(
                                 color: Colors.grey.shade700,
                                 fontSize: 13,
-                                height: 1.45)), // Increased height for premium readability
+                                height:
+                                    1.45)), // Increased height for premium readability
                       ],
                     ),
                   )

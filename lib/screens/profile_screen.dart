@@ -1845,18 +1845,52 @@ class _PendingReceiptsScreenState extends State<PendingReceiptsScreen> {
                                     final authProvider = Provider.of<AuthProvider>(context, listen: false);
                                     final currentUser = authProvider.currentUserModel;
 
+                                    // ─────────────────────────────────────────────
+                                    // STEP 1: Update donation status.
+                                    // This is the core action — if it fails, stop
+                                    // completely and show the real error.
+                                    // ─────────────────────────────────────────────
                                     try {
                                       await FirebaseFirestore.instance.collection('donations').doc(docId).update({
                                         'status': 'completed_awaiting_payment'
                                       });
+                                    } catch (e) {
+                                      debugPrint("❌ Failed to update donation status: $e");
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Failed to update donation: $e'),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                      }
+                                      return; // don't continue if this core step failed
+                                    }
 
-                                      if (volunteerId.isNotEmpty) {
+                                    // ─────────────────────────────────────────────
+                                    // STEP 2: Volunteer stat increment.
+                                    // Non-critical — a failure here must NOT block
+                                    // the donor notification below.
+                                    // ─────────────────────────────────────────────
+                                    if (volunteerId.isNotEmpty) {
+                                      try {
                                         await FirebaseFirestore.instance.collection('users').doc(volunteerId).set({
                                           'deliveriesCompleted': FieldValue.increment(1)
                                         }, SetOptions(merge: true));
+                                      } catch (e) {
+                                        debugPrint("⚠️ Failed to increment volunteer stat (non-critical): $e");
                                       }
+                                    }
 
-                                      if (donorId.isNotEmpty && listingId.isNotEmpty) {
+                                    // ─────────────────────────────────────────────
+                                    // STEP 3: volunteer_requests status update.
+                                    // Also non-critical, isolated the same way.
+                                    // If this throws (e.g. a missing composite
+                                    // index for the donorId + listingId query),
+                                    // it will NOT block the notification anymore.
+                                    // ─────────────────────────────────────────────
+                                    if (donorId.isNotEmpty && listingId.isNotEmpty) {
+                                      try {
                                         var requestQuery = await FirebaseFirestore.instance
                                             .collection('volunteer_requests')
                                             .where('donorId', isEqualTo: donorId)
@@ -1867,27 +1901,52 @@ class _PendingReceiptsScreenState extends State<PendingReceiptsScreen> {
                                           await FirebaseFirestore.instance.collection('volunteer_requests')
                                               .doc(requestQuery.docs.first.id).update({'status': 'completed'});
                                         }
+                                      } catch (e) {
+                                        debugPrint("⚠️ Failed to update volunteer_requests (non-critical): $e");
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Note: volunteer_requests update failed: $e'),
+                                              backgroundColor: Colors.orange,
+                                            ),
+                                          );
+                                        }
                                       }
+                                    }
 
-                                     // Inside the onPressed of "Confirm Received" button
-String notifIdDonor = FirebaseFirestore.instance.collection('notifications').doc().id;
+                                    // ─────────────────────────────────────────────
+                                    // STEP 4: THE CRITICAL PART — notify the donor.
+                                    // Isolated in its own try/catch with a visible
+                                    // error so we finally SEE if this fails.
+                                    // ─────────────────────────────────────────────
+                                    try {
+                                      String notifIdDonor = FirebaseFirestore.instance.collection('notifications').doc().id;
 
-NotificationModel donorNotif = NotificationModel(
-  id: notifIdDonor,
-  receiverId: donorId,
-  senderId: widget.ngoId,
-  senderName: currentUser?.name ?? 'NGO',
-  type: 'payment_pending',                          // ← must be exactly this
-  title: 'Payment Required',                        // ← better title for push
-  message: 'Your donation of $itemName has safely reached us! Please tap here to pay your volunteer their delivery fee.',
-  relatedItemId: docId,                             // donation ID
-  createdAt: DateTime.now(),
-  isRead: false,
-);
+                                      NotificationModel donorNotif = NotificationModel(
+                                        id: notifIdDonor,
+                                        receiverId: donorId,
+                                        senderId: widget.ngoId,
+                                        senderName: currentUser?.name ?? 'NGO',
+                                        type: 'payment_pending',
+                                        title: 'Payment Required',
+                                        message: 'Your donation of $itemName has safely reached us! Please tap here to pay your volunteer their delivery fee.',
+                                        relatedItemId: docId,
+                                        createdAt: DateTime.now(),
+                                        isRead: false,
+                                      );
 
-await FirestoreService().sendNotification(donorNotif);
+                                      await FirestoreService().sendNotification(donorNotif);
+                                      debugPrint("✅ payment_pending notification created for donor: $donorId");
                                     } catch (e) {
-                                      debugPrint("Update error: $e");
+                                      debugPrint("❌ FAILED to create payment_pending notification: $e");
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Receipt confirmed, but failed to notify donor: $e'),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                      }
                                     }
 
                                     // 👇 THE FIX: `context` here is the State's own context,

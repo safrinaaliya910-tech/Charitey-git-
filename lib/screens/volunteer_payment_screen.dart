@@ -649,9 +649,10 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
                         ],
                         decoration: InputDecoration(
                           labelText: "Transaction / UPI Reference ID *",
-                          hintText: "Enter the 12-digit reference number",
+                          hintText: "Enter the reference number",
+                          counterText: '',
                           errorText: _refController.text.isNotEmpty && !_isReferenceValid
-                              ? 'Please enter a valid 12-digit UPI reference number'
+                              ? 'Please enter a valid UPI reference number'
                               : null,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),

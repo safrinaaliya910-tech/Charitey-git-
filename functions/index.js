@@ -1,6 +1,7 @@
 const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 const { Resend } = require("resend");
 
@@ -337,11 +338,19 @@ exports.sendPasswordReset = onCall({ secrets: [RESEND_API_KEY] }, async (request
     throw new HttpsError("invalid-argument", "Email is required.");
   }
 
-  let resetLink;
+    let resetLink;
   try {
     resetLink = await admin.auth().generatePasswordResetLink(email, {
       url: "https://fourthidly.com",
     });
+
+    // Swap Firebase's default domain for our own.
+    // /__/auth/action is a reserved Hosting path served automatically
+    // on any domain connected to this Firebase project.
+    resetLink = resetLink.replace(
+      /^https:\/\/charitey-37ce8\.firebaseapp\.com/,
+      "https://auth.fourthidly.com"
+    );
   } catch (err) {
     console.error("generatePasswordResetLink error:", err.code, err.message);
     if (err.code === "auth/user-not-found") {
@@ -495,3 +504,171 @@ function buildWelcomeHtml(name) {
     <p style="font-size:13px;color:#888;">— The Fourth Idly Team</p>
   </div>`;
 }
+exports.checkExpiredListings = onSchedule("every 5 minutes", async (event) => {
+  const now = admin.firestore.Timestamp.now();
+  const db = admin.firestore();
+
+  // ────────────────────────────────────────────────
+  // PART 1: Expire NGO listings that are past liveUntil
+  // ────────────────────────────────────────────────
+  const expiredListingsSnap = await db
+    .collection("ngo_listings")
+    .where("status", "==", "open")
+    .where("liveUntil", "<=", now)
+    .get();
+
+  const expiredListingIds = [];
+
+  if (!expiredListingsSnap.empty) {
+    console.log(`Found ${expiredListingsSnap.size} expired listing(s).`);
+    const batch = db.batch();
+
+    for (const doc of expiredListingsSnap.docs) {
+      const listing = doc.data();
+      const listingId = doc.id;
+      const ngoId = listing.ngoId;
+
+      if (!ngoId) continue;
+
+      expiredListingIds.push(listingId);
+
+      // Mark listing as expired
+      batch.update(doc.ref, { status: "expired" });
+
+      // Create notification for NGO
+      const notifRef = db.collection("notifications").doc();
+      const itemName =
+        listing.type === "food"
+          ? listing.foodType || "your food request"
+          : listing.productName || "your product request";
+
+      batch.set(notifRef, {
+        id: notifRef.id,
+        receiverId: ngoId,
+        senderId: "system",
+        senderName: "Fourth Idly",
+        type: "expired_request",
+        title: "Request Expired",
+        message: `Your request for ${itemName} has expired and is no longer visible to donors.`,
+        relatedItemId: listingId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        isRead: false,
+      });
+    }
+
+    await batch.commit();
+    console.log(`Notified ${expiredListingsSnap.size} NGO(s) of expired listings.`);
+  } else {
+    console.log("No expired listings found this cycle.");
+  }
+
+  // ────────────────────────────────────────────────
+  // PART 2: Handle "No Volunteer Found" for pending donations
+  // whose listing has already expired
+  // ────────────────────────────────────────────────
+
+  // Also include listings that were already marked "expired" earlier
+  // (in case donations were still pending)
+  const alreadyExpiredSnap = await db
+    .collection("ngo_listings")
+    .where("status", "==", "expired")
+    .where("liveUntil", "<=", now)
+    .limit(100)
+    .get();
+
+  const allExpiredIds = [
+    ...new Set([
+      ...expiredListingIds,
+      ...alreadyExpiredSnap.docs.map((d) => d.id),
+    ]),
+  ];
+
+  if (allExpiredIds.length === 0) {
+    console.log("No expired listings → skipping volunteer_expired check.");
+    return null;
+  }
+
+  // Find all pending donations linked to these expired listings
+  // (Firestore "in" supports max 30 values → we chunk)
+  const pendingDonations = [];
+  for (let i = 0; i < allExpiredIds.length; i += 30) {
+    const chunk = allExpiredIds.slice(i, i + 30);
+    const snap = await db
+      .collection("donations")
+      .where("status", "==", "pending")
+      .where("listingId", "in", chunk)
+      .get();
+    pendingDonations.push(...snap.docs);
+  }
+
+  if (pendingDonations.length === 0) {
+    console.log("No pending donations linked to expired listings.");
+    return null;
+  }
+
+  console.log(
+    `Found ${pendingDonations.length} pending donation(s) → sending volunteer_expired`
+  );
+
+  const notifBatch = db.batch();
+  let notifCount = 0;
+
+  for (const donDoc of pendingDonations) {
+    const don = donDoc.data();
+    const donationId = donDoc.id;
+    const donorId = don.donorId || "";
+    // Try both possible field names for NGO id
+    const ngoId = don.ngoId || don.ngold || "";
+    const itemName =
+      don.productName || don.foodType || don.itemName || "the item";
+
+    // 1. Mark donation so client never tries again
+    notifBatch.update(donDoc.ref, {
+      status: "volunteer_not_found",
+      volunteerExpiredAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // 2. Notify NGO
+    if (ngoId) {
+      const ngoNotifRef = db.collection("notifications").doc();
+      notifBatch.set(ngoNotifRef, {
+        id: ngoNotifRef.id,
+        receiverId: ngoId,
+        senderId: "system",
+        senderName: "System Alert",
+        type: "volunteer_expired",
+        title: "No Volunteer Found",
+        message: `Unfortunately, no volunteer accepted the pickup for ${itemName} in time. Please re-request or arrange private transport.`,
+        relatedItemId: donationId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        isRead: false,
+      });
+      notifCount++;
+    }
+
+    // 3. Notify Donor
+    if (donorId) {
+      const donorNotifRef = db.collection("notifications").doc();
+      notifBatch.set(donorNotifRef, {
+        id: donorNotifRef.id,
+        receiverId: donorId,
+        senderId: "system",
+        senderName: "System Alert",
+        type: "volunteer_expired",
+        title: "Pickup Expired",
+        message: `No volunteer was available to pick up ${itemName} before the required time. Please consider redonating or dropping it off.`,
+        relatedItemId: donationId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        isRead: false,
+      });
+      notifCount++;
+    }
+  }
+
+  await notifBatch.commit();
+  console.log(
+    `Created ${notifCount} volunteer_expired notifications and marked donations.`
+  );
+
+  return null;
+});
