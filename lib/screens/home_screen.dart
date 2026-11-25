@@ -1,7 +1,9 @@
 //home_screen.dart
 import 'dart:async';
+import 'dart:ui'; // 👈 NEW: needed for the frosted-glass blur (ImageFilter)
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -23,6 +25,7 @@ import 'travel_agency_dashboard.dart';
 import 'volunteer_dashboard.dart';
 import 'rating_dialog.dart';
 import 'volunteer_payment_screen.dart';
+import 'faq_screen.dart';
 
 // ==========================================
 // 1. HOME SCREEN
@@ -75,17 +78,12 @@ class HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void _initUserDependentLogic() {
     if (_hasInitializedForUser) return;
-    final user = Provider.of<AuthProvider>(
-      context,
-      listen: false,
-    ).currentUserModel;
+    final user =
+        Provider.of<AuthProvider>(context, listen: false).currentUserModel;
     if (user == null) return;
 
     _hasInitializedForUser = true;
 
-    if (user.role == 'ngo') {
-      FirestoreService().cleanUpExpiredRequests(user.uid);
-    }
     if (user.role == 'donor') {
       _listenForPendingPayments(user.uid);
     }
@@ -151,13 +149,10 @@ class HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         builder: (_) => VolunteerPaymentScreen(donationId: donationId),
       ),
     ).then((_) {
-      // After the screen is closed we re-check immediately.
-      // If the status is still one of the lock statuses, the lock will
-      // appear again. This prevents any “escape” by force-closing the app.
       if (mounted) {
         setState(() => _isPaymentLockShown = false);
-        final user = Provider.of<AuthProvider>(context, listen: false)
-            .currentUserModel;
+        final user =
+            Provider.of<AuthProvider>(context, listen: false).currentUserModel;
         if (user != null && user.role == 'donor') {
           _checkPendingPaymentOnce(user.uid);
         }
@@ -177,6 +172,48 @@ class HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _pendingPaymentSub?.cancel();
     super.dispose();
+  }
+
+  // Colours sampled from the top edge of the hero banner (left -> right),
+  // used so the header and the banner join without a visible seam.
+  static const List<Color> _bannerTopColors = [
+    Color(0xFFFED3CA),
+    Color(0xFFFEDCD3),
+    Color(0xFFFEE0D8),
+    Color(0xFFFDDCD3),
+    Color(0xFFFED7D0),
+    Color(0xFFFDD2CB),
+    Color(0xFFFDCDC3),
+  ];
+  // How far (in px) the hero banner is pulled up under the header to close
+  // the empty strip between the pill and the banner. Set to 0 to disable.
+  static const double _heroLift = 14;
+  static const List<double> _bannerTopStops = [
+    0.0, 0.14, 0.29, 0.48, 0.71, 0.86, 1.0,
+  ];
+
+  // Round white button used for the bell and menu inside the header pill
+  Widget _pillButton(Widget child) {
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.88),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: const Color(0xFFF6DDE2).withValues(alpha: 0.8),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF7D444C).withValues(alpha: 0.10),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Center(child: child),
+    );
   }
 
   @override
@@ -316,231 +353,380 @@ class HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _currentIndex = 0;
     }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA),
+    // The gradient lives OUTSIDE the Scaffold so the area behind the header
+    // pill shows the same soft page gradient (no separate header rectangle).
+    return Container(
+      decoration: _currentIndex == 0
+          ? const BoxDecoration(color: Color(0xFFFAFAFA))
+          : const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFFFDF7F8), Color(0xFFEEDAE0)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                stops: [0.1, 1.0],
+              ),
+            ),
+      child: Scaffold(
+      backgroundColor: Colors.transparent,
       extendBody: true,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        toolbarHeight: 66,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: false,
         titleSpacing: 0,
-        title: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const SizedBox(width: 12),
-            Container(
-              height: 32,
-              width: 32,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-              ),
-              clipBehavior: Clip.hardEdge,
-              child: Image.asset(
-                'assets/app_logo.png',
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return const Icon(Icons.broken_image,
-                      size: 18, color: Colors.grey);
-                },
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Text(
-              "Fourth Idly",
-              style: TextStyle(
-                color: Color(0xFF6F313E),
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0.5,
-                fontFamily: 'serif',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          StreamBuilder<List<NotificationModel>>(
-            stream: FirestoreService().getUserNotifications(user.uid),
-            builder: (context, snapshot) {
-              bool hasUnread = false;
-              if (snapshot.hasData) {
-                hasUnread = snapshot.data!.any(
-                  (notification) => !notification.isRead,
-                );
-              }
-              return IconButton(
-                icon: Stack(
-                  children: [
-                    const Icon(
-                      Icons.notifications_none_rounded,
-                      color: Colors.black87,
-                      size: 26,
-                    ),
-                    if (hasUnread)
-                      Positioned(
-                        right: 2,
-                        top: 2,
-                        child: Container(
-                          height: 10,
-                          width: 10,
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.white,
-                                spreadRadius: 1,
-                                blurRadius: 1,
-                              ),
-                            ],
-                          ),
-                        ),
+        // Soft pink backdrop (same tone as the hero banner) so the floating
+        // pill below looks like it sits on the page, not on a white strip.
+        flexibleSpace: _currentIndex == 0
+            ? Stack(
+                fit: StackFit.expand,
+                children: [
+                  // bottom edge = exact colours of the banner's top edge
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: _bannerTopColors,
+                        stops: _bannerTopStops,
                       ),
-                  ],
-                ),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const NotificationsScreen(),
                     ),
-                  );
-                },
-              );
-            },
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(
-              Icons.more_vert_rounded,
-              color: Colors.black87,
-              size: 26,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            offset: const Offset(0, 50),
-            color: const Color(0xFFFFF0F1),
-            onSelected: (String result) async {
-              if (result == 'contact') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ContactUsScreen()),
-                );
-              } else if (result == 'about') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AboutUsScreen()),
-                );
-              } else if (result == 'feedback') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const FeedbackScreen()),
-                );
-              } else if (result == 'recent_donations') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const RecentDonationsScreen(),
                   ),
-                );
-              } else if (result == 'logout') {
-                await authProvider.signOut();
-                if (!context.mounted) return;
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const RoleSelectionScreen(),
+                  // lighter cream at the very top, fading into the banner tone
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          const Color(0xFFFFF6F4).withValues(alpha: 0.95),
+                          const Color(0xFFFFF6F4).withValues(alpha: 0.0),
+                        ],
+                      ),
+                    ),
                   ),
-                );
-              }
-            },
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              PopupMenuItem<String>(
-                value: 'contact',
-                child: Row(
-                  children: const [
-                    Icon(
-                      Icons.contact_mail_rounded,
-                      color: Color(0xFF7D444C),
-                      size: 20,
-                    ),
-                    SizedBox(width: 12),
-                    Text(
-                      'Contact Support',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: 'about',
-                child: Row(
-                  children: const [
-                    Icon(
-                      Icons.info_outline_rounded,
-                      color: Color(0xFF7D444C),
-                      size: 20,
-                    ),
-                    SizedBox(width: 12),
-                    Text(
-                      'About Fouth Idly',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: 'feedback',
-                child: Row(
-                  children: const [
-                    Icon(
-                      Icons.feedback_rounded,
-                      color: Color(0xFF7D444C),
-                      size: 20,
-                    ),
-                    SizedBox(width: 12),
-                    Text(
-                      'Share Feedback',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const PopupMenuDivider(),
-              PopupMenuItem<String>(
-                value: 'logout',
-                child: Row(
-                  children: const [
-                    Icon(
-                      Icons.logout_rounded,
-                      color: Colors.redAccent,
-                      size: 20,
-                    ),
-                    SizedBox(width: 12),
-                    Text(
-                      'Sign Out',
-                      style: TextStyle(
-                        color: Colors.redAccent,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
+                ],
+              )
+            : null, // no extra header rectangle on other tabs
+        // Floating rounded "pill" header: logo + name on the left,
+        // notification and menu buttons on the right.
+        title: Container(
+          height: 58,
+          margin: const EdgeInsets.symmetric(horizontal: 10),
+          padding: const EdgeInsets.only(left: 14, right: 8),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [
+                Colors.white.withValues(alpha: 0.96),
+                const Color(0xFFFFEDF0).withValues(alpha: 0.90),
+                const Color(0xFFFFE3E8).withValues(alpha: 0.82),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(32),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.85),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFC25A70).withValues(alpha: 0.09),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-          const SizedBox(width: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Logo: the PNG has an opaque white background, so this filter turns
+              // the white into transparent and keeps only the maroon elephant.
+              // That way it blends into the pill instead of showing a white box.
+              SizedBox(
+                height: 44,
+                width: 44,
+                child: Transform.scale(
+                  scale: 1.5,
+                  child: ColorFiltered(
+                    colorFilter: const ColorFilter.matrix(<double>[
+                      0, 0, 0, 0, 139, //  R  -> brand maroon
+                      0, 0, 0, 0, 19, //   G
+                      0, 0, 0, 0, 54, //   B
+                      -2.3, 0, 0, 2.3, -2.3, // A -> white = transparent
+                    ]),
+                    child: Image.asset(
+                      'assets/app_logo.png',
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.high,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(
+                          Icons.broken_image,
+                          size: 18,
+                          color: Colors.grey,
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Expanded(
+                child: Text(
+                  "Fourth Idly",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Color(0xFF8B1E3F),
+                    fontSize: 21,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              StreamBuilder<List<NotificationModel>>(
+                stream: FirestoreService().getUserNotifications(user.uid),
+                builder: (context, snapshot) {
+                  bool hasUnread = false;
+                  if (snapshot.hasData) {
+                    hasUnread = snapshot.data!.any(
+                      (notification) => !notification.isRead,
+                    );
+                  }
+                  return GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const NotificationsScreen(),
+                        ),
+                      );
+                    },
+                    child: _pillButton(
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          const Icon(
+                            Icons.notifications_none_rounded,
+                            color: Color(0xFF8B1E3F),
+                            size: 25,
+                          ),
+                          if (hasUnread)
+                            Positioned(
+                              right: 1,
+                              top: 1,
+                              child: Container(
+                                height: 10,
+                                width: 10,
+                                decoration: BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+              PopupMenuButton<String>(
+                padding: EdgeInsets.zero,
+                tooltip: 'Menu',
+                child: _pillButton(
+                  const Icon(
+                    Icons.more_vert_rounded,
+                    color: Color(0xFF8B1E3F),
+                    size: 25,
+                  ),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                offset: const Offset(0, 50),
+                color: const Color(0xFFFFF0F1),
+                onSelected: (String result) async {
+                  if (result == 'about') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AboutUsScreen()),
+                    );
+                  } else if (result == 'feedback') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const FeedbackScreen()),
+                    );
+                  } else if (result == 'recent_donations') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const RecentDonationsScreen(),
+                      ),
+                    );
+                  } else if (result == 'faq') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => FaqScreen(initialRole: user.role),
+                      ),
+                    );
+                  } else if (result == 'logout') {
+                    await authProvider.signOut();
+                    if (!context.mounted) return;
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RoleSelectionScreen(),
+                      ),
+                    );
+                  }
+                },
+                itemBuilder: (BuildContext context) =>
+                    <PopupMenuEntry<String>>[
+                  PopupMenuItem<String>(
+                    value: 'about',
+                    child: Row(
+                      children: const [
+                        Icon(
+                          Icons.info_outline_rounded,
+                          color: Color(0xFF7D444C),
+                          size: 20,
+                        ),
+                        SizedBox(width: 12),
+                        Text(
+                          'About Fouth Idly',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'feedback',
+                    child: Row(
+                      children: const [
+                        Icon(
+                          Icons.feedback_rounded,
+                          color: Color(0xFF7D444C),
+                          size: 20,
+                        ),
+                        SizedBox(width: 12),
+                        Text(
+                          'Share Feedback',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'faq',
+                    child: Row(
+                      children: const [
+                        Icon(
+                          Icons.help_outline_rounded,
+                          color: Color(0xFF7D444C),
+                          size: 20,
+                        ),
+                        SizedBox(width: 12),
+                        Text(
+                          'Help & FAQs',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  PopupMenuItem<String>(
+                    value: 'logout',
+                    child: Row(
+                      children: const [
+                        Icon(
+                          Icons.logout_rounded,
+                          color: Colors.redAccent,
+                          size: 20,
+                        ),
+                        SizedBox(width: 12),
+                        Text(
+                          'Sign Out',
+                          style: TextStyle(
+                            color: Colors.redAccent,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+      body: Stack(
+        children: [
+          if (_currentIndex == 0)
+            Positioned(
+              top: -_heroLift,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: screens[_currentIndex],
+            )
+          else
+            screens[_currentIndex],
+          // Home tab only: softly fades the banner's top edge into the header
+          // so there is no hard line between the two. Touches pass through.
+          if (_currentIndex == 0)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 16,
+              child: IgnorePointer(
+                child: ShaderMask(
+                  blendMode: BlendMode.dstIn,
+                  shaderCallback: (rect) => const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.black, Colors.transparent],
+                  ).createShader(rect),
+                  child: const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: _bannerTopColors,
+                        stops: _bannerTopStops,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
-      body: screens[_currentIndex],
+
+      // ======================================================================
+      // ✨ BLENDED "FROSTED GLASS" BOTTOM NAVIGATION BAR
+      // - The Scaffold already has extendBody: true, so every page scrolls
+      //   BEHIND this bar.
+      // - BackdropFilter blurs whatever page is behind it, and the very light
+      //   translucent tint lets the page colours show through, so the bar
+      //   always matches the page instead of looking like a separate white card.
+      // - No navigation logic was changed (same indices, same setState calls).
+      // ======================================================================
       bottomNavigationBar: SafeArea(
         child: Container(
           margin: const EdgeInsets.only(left: 16, right: 16, bottom: 12),
@@ -548,70 +734,121 @@ class HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           child: Stack(
             clipBehavior: Clip.none,
             children: [
+              // ---- Glass bar ----
               Positioned(
                 left: 0,
                 right: 0,
                 bottom: 0,
                 child: Container(
                   height: 65,
+                  // soft, wide, low-opacity shadow (no hard edge)
                   decoration: BoxDecoration(
-                    color: Colors.white,
                     borderRadius: BorderRadius.circular(32),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF7D444C).withValues(alpha: 0.08),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
+                        color: const Color(0xFF7D444C).withValues(alpha: 0.10),
+                        blurRadius: 24,
+                        spreadRadius: -2,
+                        offset: const Offset(0, 8),
                       ),
                     ],
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: List.generate(navItems.length, (index) {
-                      if (index == 2) {
-                        return const Expanded(child: SizedBox.shrink());
-                      }
-                      final item = navItems[index];
-                      final icon = (item.icon as Icon).icon!;
-                      final label = item.label ?? '';
-                      final isActive = _currentIndex == index;
-                      final themeColor = const Color(0xFF7D444C);
-                      return Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _currentIndex = index;
-                            });
-                            if (index != 1) targetPostId = null;
-                          },
-                          behavior: HitTestBehavior.opaque,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                icon,
-                                color: isActive ? themeColor : Colors.black38,
-                                size: 24,
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                label,
-                                style: TextStyle(
-                                  color: isActive ? themeColor : Colors.black38,
-                                  fontSize: 10,
-                                  fontWeight: isActive
-                                      ? FontWeight.w600
-                                      : FontWeight.w500,
-                                ),
-                              ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(32),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          // translucent glass tint (page colours show through)
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Colors.white.withValues(alpha: 0.55),
+                              const Color(0xFFFFE9ED).withValues(alpha: 0.30),
                             ],
                           ),
+                          borderRadius: BorderRadius.circular(32),
+                          // thin bright rim = glass edge highlight
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.65),
+                            width: 1.2,
+                          ),
                         ),
-                      );
-                    }),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: List.generate(navItems.length, (index) {
+                            if (index == 2) {
+                              return const Expanded(child: SizedBox.shrink());
+                            }
+                            final item = navItems[index];
+                            final icon = (item.icon as Icon).icon!;
+                            final label = item.label ?? '';
+                            final isActive = _currentIndex == index;
+                            const themeColor = Color(0xFF7D444C);
+                            final inactiveColor =
+                                themeColor.withValues(alpha: 0.45);
+                            return Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _currentIndex = index;
+                                  });
+                                  if (index != 1) targetPostId = null;
+                                },
+                                behavior: HitTestBehavior.opaque,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    // soft highlight capsule behind active icon
+                                    AnimatedContainer(
+                                      duration:
+                                          const Duration(milliseconds: 250),
+                                      curve: Curves.easeOutCubic,
+                                      width: isActive ? 46 : 34,
+                                      height: 30,
+                                      decoration: BoxDecoration(
+                                        color: isActive
+                                            ? themeColor.withValues(
+                                                alpha: 0.13)
+                                            : Colors.transparent,
+                                        borderRadius:
+                                            BorderRadius.circular(16),
+                                      ),
+                                      child: Icon(
+                                        icon,
+                                        color: isActive
+                                            ? themeColor
+                                            : inactiveColor,
+                                        size: 24,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      label,
+                                      style: TextStyle(
+                                        color: isActive
+                                            ? themeColor
+                                            : inactiveColor,
+                                        fontSize: 10,
+                                        fontWeight: isActive
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
+
+              // ---- Centre action button (Donate / Request / Deliveries / Tasks) ----
               Positioned(
                 top: 0,
                 left: 0,
@@ -628,13 +865,22 @@ class HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       width: 62,
                       height: 62,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF7D444C),
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF9A5560), Color(0xFF6E363E)],
+                        ),
                         shape: BoxShape.circle,
+                        // glass-like white ring so it floats on the bar
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.70),
+                          width: 2.5,
+                        ),
                         boxShadow: [
                           BoxShadow(
                             color: const Color(0xFF7D444C)
-                                .withValues(alpha: 0.35),
-                            blurRadius: 12,
+                                .withValues(alpha: 0.40),
+                            blurRadius: 16,
                             offset: const Offset(0, 6),
                           ),
                         ],
@@ -665,6 +911,7 @@ class HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ],
           ),
         ),
+      ),
       ),
     );
   }

@@ -1997,9 +1997,17 @@ class _PendingReceiptsScreenState extends State<PendingReceiptsScreen> {
     );
   }
 }
-// =========================================================================
-// VOLUNTEER IMPACT STORY WIDGET
-// =========================================================================
+/// Converts a completed-task/donation count into a "Lives Touched" number
+/// that feels meaningful right from the first one, instead of a tiny
+/// multiplier that looks unconvincing early on (e.g. 1 task = "~3 people").
+/// Floor of 12 once at least one task is completed; grows by 8 per task
+/// after that, so it keeps climbing honestly as the count goes up.
+int _livesTouchedFor(int completedCount) {
+  if (completedCount <= 0) return 0;
+  final scaled = completedCount * 8;
+  return scaled > 12 ? scaled : 12;
+}
+
 class VolunteerImpactStoryWidget extends StatefulWidget {
   final String userId;
   final Color themeColor;
@@ -2166,7 +2174,7 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
       'totalCompleted': totalCompleted,
       'totalPending': totalPending,
       'streak': streak,
-      'livesTouched': totalCompleted * 3,
+            'livesTouched': _livesTouchedFor(totalCompleted),
       'dayLabels': dayLabels,
       'acceptedCounts': acceptedCounts,
       'completedCounts': completedCounts,
@@ -2183,8 +2191,7 @@ class _VolunteerImpactStoryWidgetState extends State<VolunteerImpactStoryWidget>
     } else if (totalCompleted >= 16) {
       return {
         'rank': 'Champion', 'emoji': '🥇', 'min': 16, 'max': 30,
-        'next': 'Legend', 'nextEmoji': '💎', 'quote': 'You\'ve touched over ${totalCompleted * 3} lives. You\'re making real change.',
-      };
+        'next': 'Legend', 'nextEmoji': '💎', 'quote': 'You\'ve touched over ${_livesTouchedFor(totalCompleted)} lives. You\'re making real change.',      };
     } else if (totalCompleted >= 6) {
       return {
         'rank': 'Supporter', 'emoji': '🥈', 'min': 6, 'max': 15,
@@ -2728,7 +2735,7 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
       'totalFulfilled': totalFulfilled,
       'totalPending': totalPending,
       'streak': streak,
-      'livesTouched': totalFulfilled * 3,
+      'livesTouched': _livesTouchedFor(totalFulfilled),
       'dayLabels': dayLabels,
       'donatedCounts': donatedCounts,
       'fulfilledCounts': fulfilledCounts,
@@ -2745,8 +2752,7 @@ class _DonorImpactStoryWidgetState extends State<DonorImpactStoryWidget>
     } else if (totalDonations >= 16) {
       return {
         'rank': 'Champion', 'emoji': '🥇', 'min': 16, 'max': 30,
-        'next': 'Legend', 'nextEmoji': '💎', 'quote': 'You\'ve touched over ${totalDonations * 3} lives. You\'re making real change.',
-      };
+        'next': 'Legend', 'nextEmoji': '💎', 'quote': 'You\'ve touched over ${_livesTouchedFor(totalDonations)} lives. You\'re making real change.',      };
     } else if (totalDonations >= 6) {
       return {
         'rank': 'Supporter', 'emoji': '🥈', 'min': 6, 'max': 15,

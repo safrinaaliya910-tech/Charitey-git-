@@ -213,7 +213,7 @@ class NotificationService {
     }
 
     // These types must open the EXACT same popup / dialog as in-app
-    const dialogTypes = {
+      const dialogTypes = {
       'donation_offer',
       'volunteer_accepted',
       'volunteer_expired',
@@ -222,6 +222,7 @@ class NotificationService {
       'verify_payment',
       'payment_verified',
       'payment_rejected',
+      'announcement',
     };
 
     if (dialogTypes.contains(type)) {

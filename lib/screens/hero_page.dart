@@ -15,6 +15,12 @@ final Color soft = const Color(0xFFF4C2C2);
 class Gap {
   static const double sectionGap = 32; // between one section and the next
   static const double headingToContent = 14; // heading -> its content
+
+  // 👇 NEW: Hero "Browse Donations" button placement (change these numbers to fine-tune) 👇
+  // 0  = button's top edge sits EXACTLY on the image's bottom line (no gap).
+  // >0 = button overlaps the image by that many pixels (e.g. 12).
+  static const double heroButtonOverlap = 0;
+  static const double heroToPartners = 14; // gap: button -> "Verified Impact Partners"
 }
 
 class HeroPage extends StatefulWidget {
@@ -32,6 +38,10 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
   // Kept for future use
   int _currentPage = 0;
   bool _isNgoScrollingManually = false;
+  // 👇 NEW: timer used to resume auto-scroll after the user stops touching the list 👇
+  Timer? _resumeAutoScrollTimer;
+  // 👇 NEW: true while the full-name pop-up is open (auto-scroll must stay paused) 👇
+  bool _isNgoDialogOpen = false;
   late AnimationController _buttonPulseController;
   late Animation<double> _buttonPulseAnimation;
   late AnimationController _magicHoverController;
@@ -79,6 +89,35 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
     });
   }
 
+  // 👇 NEW: Called when the user starts dragging the NGO list.
+  // Stops auto-scroll so the user gets full manual control. 👇
+  void _onUserStartedScrolling() {
+    _resumeAutoScrollTimer?.cancel();
+    _isNgoScrollingManually = true;
+  }
+
+  // 👇 NEW: Fully pauses auto-scroll (used on tap / mouse hover / pop-up open).
+  // It also stops the animation that is currently running, so the card the user
+  // is pointing at stays still. 👇
+  void _pauseAutoScroll() {
+    _resumeAutoScrollTimer?.cancel();
+    _isNgoScrollingManually = true;
+    if (_ngoScrollController.hasClients) {
+      _ngoScrollController.jumpTo(_ngoScrollController.offset);
+    }
+  }
+
+  // 👇 NEW: Called when the user's drag / fling finishes.
+  // Auto-scroll resumes (from the current position) after 2 seconds. 👇
+  void _onUserStoppedScrolling() {
+    _resumeAutoScrollTimer?.cancel();
+    _resumeAutoScrollTimer = Timer(const Duration(seconds: 2), () {
+      if (!mounted || _isNgoDialogOpen) return;
+      _isNgoScrollingManually = false;
+      _autoScrollNgos();
+    });
+  }
+
   void _performSearch() {
     String query = _searchController.text.trim();
     if (query.isNotEmpty) {
@@ -90,85 +129,130 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
     }
   }
 
+  // 👇 UPDATED: Tap on a partner card -> "boom" pop-up (elastic scale + fade)
+  // that shows the FULL NGO name (never cut off). 👇
   void _showNgoNameDialog(String name) {
-    showDialog(
+    _isNgoDialogOpen = true;
+    _pauseAutoScroll(); // keep the list still while the pop-up is open
+
+    showGeneralDialog(
       context: context,
       barrierDismissible: true,
-      builder: (context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: soft.withOpacity(0.35),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(Icons.gpp_good_rounded, color: primary, size: 30),
+      barrierLabel: 'NGO name',
+      barrierColor: Colors.black.withOpacity(0.55),
+      transitionDuration: const Duration(milliseconds: 550),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return SafeArea(
+          child: Center(
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 340),
+                margin: const EdgeInsets.symmetric(horizontal: 28),
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: primary.withOpacity(0.25),
+                      blurRadius: 30,
+                      offset: const Offset(0, 12),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  name,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.verified, color: Colors.blue, size: 16),
-                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: soft.withOpacity(0.35),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.gpp_good_rounded,
+                          color: primary, size: 34),
+                    ),
+                    const SizedBox(height: 18),
+                    // Full name - no maxLines / ellipsis so it is never cut off
                     Text(
-                      "100% Verified",
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade600,
-                        fontWeight: FontWeight.w600,
+                      name,
+                      textAlign: TextAlign.center,
+                      softWrap: true,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.black87,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.verified,
+                            color: Colors.blue, size: 16),
+                        const SizedBox(width: 4),
+                        Text(
+                          "100% Verified",
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(dialogContext),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primary,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Text(
+                          "Close",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primary,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: const Text(
-                      "Close",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         );
       },
-    );
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return ScaleTransition(
+          scale: Tween<double>(begin: 0.3, end: 1.0).animate(
+            CurvedAnimation(parent: animation, curve: Curves.elasticOut),
+          ),
+          child: FadeTransition(
+            opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+            child: child,
+          ),
+        );
+      },
+    ).then((_) {
+      // Pop-up closed -> allow auto-scroll to continue again
+      _isNgoDialogOpen = false;
+      if (mounted) _onUserStoppedScrolling();
+    });
   }
 
   @override
   void dispose() {
+    _resumeAutoScrollTimer?.cancel();
     _pageController.dispose();
     _ngoScrollController.dispose();
     _searchController.dispose();
@@ -202,7 +286,8 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
             // ================= HERO IMAGE & CTA =================
             _buildHeroHeaderSection(),
 
-            const SizedBox(height: Gap.sectionGap),
+            // 👇 UPDATED: tighter gap between the button and "Verified Impact Partners" 👇
+            const SizedBox(height: Gap.heroToPartners),
 
             // ================= TRUSTED NGOs =================
             const Padding(
@@ -217,26 +302,67 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
             ),
             const SizedBox(height: Gap.headingToContent),
             SizedBox(
-              height: 90,
-              child: ListView(
-                controller: _ngoScrollController,
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                children: [
-                  _trustedNgoCard(
-                      "Aishwariam Social Welfare Organisation (ASWO)"),
-                  _trustedNgoCard("Imayam Social Welfare Association"),
-                  _trustedNgoCard("Maxwell Charitable Trust"),
-                  _trustedNgoCard("COORU Organisation"),
-                  _trustedNgoCard("G18 Public Charitable Trust"),
-                  _trustedNgoCard("REST NGO"),
-                  _trustedNgoCard("Chandra Yuva Foundation"),
-                  _trustedNgoCard("Sevasram Trust"),
-                  _trustedNgoCard("Yettram Trust"),
-                  _trustedNgoCard("Annai Old Age Home"),
-                  _trustedNgoCard("Pudhiya Paadhai"),
-                  _trustedNgoCard("Annai Trust"),
-                ],
+              // 👇 UPDATED: height fits a 2-line name (longer names -> tap to see full name) 👇
+              height: 92,
+              // 👇 NEW: Detects the user's finger scroll so manual scrolling works
+              // together with the auto-scroll 👇
+              child: MouseRegion(
+                // 👇 NEW (web / desktop): pause while the mouse is over the list so
+                // the card can be clicked easily 👇
+                onEnter: (_) => _pauseAutoScroll(),
+                onExit: (_) {
+                  if (!_isNgoDialogOpen) _onUserStoppedScrolling();
+                },
+                child: Listener(
+                // 👇 NEW: the moment the list is touched, auto-scroll stops completely.
+                // (Before, auto-scroll kept restarting under the finger and the tap was
+                // lost, so the pop-up never opened.) 👇
+                onPointerDown: (_) => _onUserStartedScrolling(),
+                onPointerUp: (_) {
+                  if (!_isNgoDialogOpen) _onUserStoppedScrolling();
+                },
+                onPointerCancel: (_) {
+                  if (!_isNgoDialogOpen) _onUserStoppedScrolling();
+                },
+                child: NotificationListener<ScrollNotification>(
+                onNotification: (notification) {
+                  // Only react to the horizontal NGO list
+                  if (notification.metrics.axis != Axis.horizontal) {
+                    return false;
+                  }
+                  if (notification is ScrollStartNotification &&
+                      notification.dragDetails != null) {
+                    // User put a finger on the list -> stop auto-scroll
+                    _onUserStartedScrolling();
+                  } else if (notification is ScrollEndNotification &&
+                      _isNgoScrollingManually) {
+                    // User's drag / fling ended -> resume auto-scroll after a pause
+                    _onUserStoppedScrolling();
+                  }
+                  return false;
+                },
+                child: ListView(
+                  controller: _ngoScrollController,
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  children: [
+                    _trustedNgoCard(
+                        "Aishwariam Social Welfare Organisation (ASWO)"),
+                    _trustedNgoCard("Imayam Social Welfare Association"),
+                    _trustedNgoCard("Maxwell Charitable Trust"),
+                    _trustedNgoCard("COORU Organisation"),
+                    _trustedNgoCard("G18 Public Charitable Trust"),
+                    _trustedNgoCard("REST NGO"),
+                    _trustedNgoCard("Chandra Yuva Foundation"),
+                    _trustedNgoCard("Sevasram Trust"),
+                    _trustedNgoCard("Yettram Trust"),
+                    _trustedNgoCard("Annai Old Age Home"),
+                    _trustedNgoCard("Pudhiya Paadhai"),
+                    _trustedNgoCard("Annai Trust"),
+                  ],
+                ),
+                ),
+                ),
               ),
             ),
             const SizedBox(height: Gap.sectionGap),
@@ -316,35 +442,49 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
 
   // ================= INTEGRATED IMAGE & BUTTON SECTION =================
   Widget _buildHeroHeaderSection() {
-    return Stack(
-      clipBehavior: Clip.none,
-      alignment: Alignment.bottomCenter,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: 38),
+          // 👇 UPDATED: no extra space under the image -> the button starts exactly at the image's bottom line 👇
+          padding: EdgeInsets.zero,
           child: ShaderMask(
             shaderCallback: (rect) {
               return const LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [Colors.black, Colors.black, Colors.transparent],
-                stops: [0.0, 0.88, 1.0],
+                // 👇 UPDATED: fade finishes at 97% (was 100%) so the last pixel rows are
+                // fully transparent -> no thin line at the bottom of the image 👇
+                stops: [0.0, 0.86, 0.97],
               ).createShader(rect);
             },
             blendMode: BlendMode.dstIn,
             child: SizedBox(
               width: double.infinity,
-              child: Image.asset(
-                'assets/hero_banner.jpg',
-                fit: BoxFit.fitWidth,
+              // 👇 NEW: ClipRect + heightFactor trims the last sub-pixel row of the image
+              // (that row caused the thin line). Nothing visible is lost. 👇
+              child: ClipRect(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  heightFactor: 0.99,
+                  child: Image.asset(
+                    'assets/hero_banner.jpg',
+                    fit: BoxFit.fitWidth,
+                    filterQuality: FilterQuality.medium,
+                  ),
+                ),
               ),
             ),
           ),
         ),
-        Positioned(
-          bottom: 0,
-          left: 20,
-          right: 20,
+        // 👇 UPDATED: button sits directly BELOW the image (no gap). It is a normal
+        // Column child now, so it is always fully tappable. 👇
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Transform.translate(
+          offset: const Offset(0, -Gap.heroButtonOverlap),
           child: Consumer<AuthProvider>(
             builder: (context, authProvider, child) {
               final userRole = authProvider.currentUserModel?.role;
@@ -481,6 +621,7 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
               }
             },
           ),
+          ),
         ),
       ],
     );
@@ -530,7 +671,7 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
 
   Widget _trustedNgoCard(String name) {
     return Container(
-      width: 210,
+      width: 250, // 👇 UPDATED: wider card (was 210) so long names need fewer lines 👇
       margin: const EdgeInsets.only(left: 15, right: 5, top: 4, bottom: 8),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.95),
@@ -548,7 +689,10 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () => _showNgoNameDialog(name),
+          onTap: () {
+            debugPrint('NGO card tapped: $name');
+            _showNgoNameDialog(name);
+          },
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
@@ -567,12 +711,20 @@ class _HeroPageState extends State<HeroPage> with TickerProviderStateMixin {
                       Row(
                         children: [
                           Flexible(
-                            child: Text(name,
-                                style: const TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.black87,
-                                    fontWeight: FontWeight.bold),
-                                overflow: TextOverflow.ellipsis),
+                            // 👇 UPDATED: max 2 lines in the card. If the name is longer,
+                            // tap the card to see the FULL name in the pop-up
+                            // (web: hover also shows the full name in a tooltip). 👇
+                            child: Tooltip(
+                              message: name,
+                              child: Text(name,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.black87,
+                                      fontWeight: FontWeight.bold,
+                                      height: 1.25)),
+                            ),
                           ),
                           const SizedBox(width: 4),
                           const Icon(Icons.verified,

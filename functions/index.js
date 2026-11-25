@@ -207,7 +207,7 @@ exports.sendNotificationPush = onDocumentCreated(
       return null;
     }
 
-    if (type === "new_task_available" || type === "urgent_task") {
+    if (type === "new_task_available" || type === "urgent_task" || type === "announcement") {
       return null;
     }
 
@@ -326,7 +326,160 @@ exports.sendDonationNotification = onDocumentCreated(
     return null;
   }
 );
+// ══════════════════════════════════════════════════════
+// NEW: ANNOUNCEMENT BROADCAST (admin panel → push + in-app)
+//
+// Mirrors createAndBroadcastTaskNotifications's pattern exactly:
+// a transactional dispatch-guard doc so a single announcement is never
+// broadcast twice (e.g. if the admin edits it again after publishing),
+// chunked Firestore batches (500-op limit), and chunked FCM multicast
+// (500-token limit). This is why "announcement" is skipped above in
+// sendNotificationPush — this function already writes the notification
+// docs AND sends the pushes itself, same as urgent_task/new_task_available.
+// ══════════════════════════════════════════════════════
 
+async function broadcastAnnouncement({ announcementId, title, message, target }) {
+  const dispatchId = `announcement_${announcementId}`;
+  const dispatchRef = admin.firestore().collection("notification_broadcasts").doc(dispatchId);
+
+  try {
+    await admin.firestore().runTransaction(async (tx) => {
+      const snap = await tx.get(dispatchRef);
+      if (snap.exists) throw new Error("ALREADY_SENT");
+      tx.create(dispatchRef, {
+        type: "announcement",
+        relatedItemId: announcementId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+  } catch (e) {
+    if (e.message === "ALREADY_SENT") {
+      console.log("Announcement already broadcasted →", dispatchId);
+      return;
+    }
+    throw e;
+  }
+
+  // target: 'all' | 'ngo' | 'donor' | 'volunteer'
+  let usersQuery = admin.firestore().collection("users");
+  if (target && target !== "all") {
+    usersQuery = usersQuery.where("role", "==", target);
+  }
+  const usersSnap = await usersQuery.get();
+
+  if (usersSnap.empty) {
+    console.log("No users matched announcement target:", target);
+    return;
+  }
+
+  const allDocs = usersSnap.docs;
+  const tokens = [];
+
+  for (let i = 0; i < allDocs.length; i += 500) {
+    const chunk = allDocs.slice(i, i + 500);
+    const batch = admin.firestore().batch();
+
+    for (const doc of chunk) {
+      const data = doc.data();
+      const notifId = admin.firestore().collection("notifications").doc().id;
+
+      batch.set(admin.firestore().collection("notifications").doc(notifId), {
+        id: notifId,
+        receiverId: doc.id,
+        senderId: "admin",
+        senderName: "Fourth Idly Team",
+        type: "announcement",
+        title,
+        message,
+        relatedItemId: announcementId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        isRead: false,
+      });
+
+      if (data.fcmToken && typeof data.fcmToken === "string" && data.fcmToken.length > 10) {
+        tokens.push(data.fcmToken);
+      }
+    }
+
+    await batch.commit();
+  }
+
+  console.log(`Created ${allDocs.length} in-app announcement notification(s) for target "${target}"`);
+
+  const content = {
+    title: `📢 ${title}`,
+    body: () => message,
+  };
+
+  for (let i = 0; i < tokens.length; i += 500) {
+    const batchTokens = tokens.slice(i, i + 500);
+    const base = buildPushMessage(batchTokens[0], {
+      id: announcementId,
+      type: "announcement",
+      relatedItemId: announcementId,
+      message,
+    }, content);
+    delete base.token;
+
+    const res = await admin.messaging().sendEachForMulticast({
+      tokens: batchTokens,
+      ...base,
+    });
+    console.log(`Announcement push → success: ${res.successCount}, fail: ${res.failureCount}`);
+  }
+}
+
+// Fires when the admin panel creates an announcement already set to "active"
+// (i.e. "Publish" was chosen directly, not "Save as Draft").
+exports.onAnnouncementPublished = onDocumentCreated(
+  "announcements/{announcementId}",
+  async (event) => {
+    const data = event.data?.data();
+    const announcementId = event.params.announcementId;
+    if (!data) return null;
+
+    if ((data.status || "").toLowerCase() !== "active") {
+      console.log("Announcement created as draft, not broadcasting:", announcementId);
+      return null;
+    }
+
+    await broadcastAnnouncement({
+      announcementId,
+      title: data.title || "Announcement",
+      message: data.content || data.message || "",
+      target: (data.target || "all").toLowerCase(),
+    });
+
+    return null;
+  }
+);
+
+// Fires when a previously-drafted announcement is edited and its status
+// flips to "active" (i.e. the admin publishes a draft later).
+exports.onAnnouncementStatusChanged = onDocumentUpdated(
+  "announcements/{announcementId}",
+  async (event) => {
+    const before = event.data?.before?.data();
+    const after = event.data?.after?.data();
+    const announcementId = event.params.announcementId;
+    if (!before || !after) return null;
+
+    const statusBefore = (before.status || "").toLowerCase();
+    const statusAfter = (after.status || "").toLowerCase();
+
+    const justPublished = statusBefore !== "active" && statusAfter === "active";
+    if (!justPublished) return null;
+
+    await broadcastAnnouncement({
+      announcementId,
+      title: after.title || "Announcement",
+      message: after.content || after.message || "",
+      target: (after.target || "all").toLowerCase(),
+    });
+
+    return null;
+  }
+);
 // ══════════════════════════════════════════════════════
 // NEW: EMAIL FUNCTIONS (Resend)
 // ══════════════════════════════════════════════════════
@@ -504,20 +657,24 @@ function buildWelcomeHtml(name) {
     <p style="font-size:13px;color:#888;">— The Fourth Idly Team</p>
   </div>`;
 }
+
+// ══════════════════════════════════════════════════════
+// SCHEDULED: EXPIRY CHECKER (runs on its own, every 5 min)
+// ══════════════════════════════════════════════════════
+
 exports.checkExpiredListings = onSchedule("every 5 minutes", async (event) => {
   const now = admin.firestore.Timestamp.now();
   const db = admin.firestore();
 
   // ────────────────────────────────────────────────
   // PART 1: Expire NGO listings that are past liveUntil
+  // (unchanged — still only touches status == 'open')
   // ────────────────────────────────────────────────
   const expiredListingsSnap = await db
     .collection("ngo_listings")
     .where("status", "==", "open")
     .where("liveUntil", "<=", now)
     .get();
-
-  const expiredListingIds = [];
 
   if (!expiredListingsSnap.empty) {
     console.log(`Found ${expiredListingsSnap.size} expired listing(s).`);
@@ -529,8 +686,6 @@ exports.checkExpiredListings = onSchedule("every 5 minutes", async (event) => {
       const ngoId = listing.ngoId;
 
       if (!ngoId) continue;
-
-      expiredListingIds.push(listingId);
 
       // Mark listing as expired
       batch.update(doc.ref, { status: "expired" });
@@ -563,72 +718,69 @@ exports.checkExpiredListings = onSchedule("every 5 minutes", async (event) => {
   }
 
   // ────────────────────────────────────────────────
-  // PART 2: Handle "No Volunteer Found" for pending donations
-  // whose listing has already expired
+  // PART 2 (FIXED): Handle "No Volunteer Found"
+  //
+  // OLD LOGIC (buggy): only checked donations belonging to
+  // listings with status 'open' or 'expired'. A listing that
+  // gets FULLY donated flips straight to 'closed' — a status
+  // this never checked — so a pending donation whose listing
+  // was fully matched but whose deadline then passed was
+  // invisible forever.
+  //
+  // NEW LOGIC: query pending donations directly, and check
+  // each one's OWN listing's liveUntil, regardless of that
+  // listing's status (open / closed / expired). This is the
+  // correct condition: "is this donation's deadline passed
+  // and still nobody accepted it" — not "what state is the
+  // listing in".
   // ────────────────────────────────────────────────
 
-  // Also include listings that were already marked "expired" earlier
-  // (in case donations were still pending)
-  const alreadyExpiredSnap = await db
-    .collection("ngo_listings")
-    .where("status", "==", "expired")
-    .where("liveUntil", "<=", now)
-    .limit(100)
+  const pendingDonationsSnap = await db
+    .collection("donations")
+    .where("status", "==", "pending")
     .get();
 
-  const allExpiredIds = [
-    ...new Set([
-      ...expiredListingIds,
-      ...alreadyExpiredSnap.docs.map((d) => d.id),
-    ]),
-  ];
-
-  if (allExpiredIds.length === 0) {
-    console.log("No expired listings → skipping volunteer_expired check.");
+  if (pendingDonationsSnap.empty) {
+    console.log("No pending donations at all this cycle.");
     return null;
   }
 
-  // Find all pending donations linked to these expired listings
-  // (Firestore "in" supports max 30 values → we chunk)
-  const pendingDonations = [];
-  for (let i = 0; i < allExpiredIds.length; i += 30) {
-    const chunk = allExpiredIds.slice(i, i + 30);
-    const snap = await db
-      .collection("donations")
-      .where("status", "==", "pending")
-      .where("listingId", "in", chunk)
-      .get();
-    pendingDonations.push(...snap.docs);
-  }
-
-  if (pendingDonations.length === 0) {
-    console.log("No pending donations linked to expired listings.");
-    return null;
-  }
-
-  console.log(
-    `Found ${pendingDonations.length} pending donation(s) → sending volunteer_expired`
-  );
+  console.log(`Checking ${pendingDonationsSnap.size} pending donation(s) for expired deadlines.`);
 
   const notifBatch = db.batch();
   let notifCount = 0;
+  let expiredDonationCount = 0;
 
-  for (const donDoc of pendingDonations) {
+  for (const donDoc of pendingDonationsSnap.docs) {
     const don = donDoc.data();
     const donationId = donDoc.id;
-    const donorId = don.donorId || "";
-    // Try both possible field names for NGO id
-    const ngoId = don.ngoId || don.ngold || "";
-    const itemName =
-      don.productName || don.foodType || don.itemName || "the item";
+    const listingId = don.listingId;
+    if (!listingId) continue;
 
-    // 1. Mark donation so client never tries again
+    // Look up this donation's own listing directly — no status filter.
+    const listingSnap = await db.collection("ngo_listings").doc(listingId).get();
+    if (!listingSnap.exists) continue;
+
+    const listing = listingSnap.data();
+    const liveUntil = listing.liveUntil;
+    if (!liveUntil || !(liveUntil.toMillis() <= now.toMillis())) {
+      // Deadline hasn't passed yet — skip, still genuinely pending.
+      continue;
+    }
+
+    expiredDonationCount++;
+
+    const donorId = don.donorId || "";
+    const ngoId = don.ngoId || don.ngold || listing.ngoId || "";
+    const itemName =
+      don.productName || don.foodType || don.itemName || listing.foodType || listing.productName || "the item";
+
+    // Mark donation so it never matches this query again
     notifBatch.update(donDoc.ref, {
       status: "volunteer_not_found",
       volunteerExpiredAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // 2. Notify NGO
     if (ngoId) {
       const ngoNotifRef = db.collection("notifications").doc();
       notifBatch.set(ngoNotifRef, {
@@ -646,7 +798,6 @@ exports.checkExpiredListings = onSchedule("every 5 minutes", async (event) => {
       notifCount++;
     }
 
-    // 3. Notify Donor
     if (donorId) {
       const donorNotifRef = db.collection("notifications").doc();
       notifBatch.set(donorNotifRef, {
@@ -665,9 +816,14 @@ exports.checkExpiredListings = onSchedule("every 5 minutes", async (event) => {
     }
   }
 
+  if (expiredDonationCount === 0) {
+    console.log("No pending donations have passed their listing's deadline yet.");
+    return null;
+  }
+
   await notifBatch.commit();
   console.log(
-    `Created ${notifCount} volunteer_expired notifications and marked donations.`
+    `Found ${expiredDonationCount} expired pending donation(s) → created ${notifCount} volunteer_expired notifications.`
   );
 
   return null;

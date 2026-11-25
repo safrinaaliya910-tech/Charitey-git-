@@ -1,4 +1,3 @@
-//screens/donation_page.dart
 // donation_page.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -36,6 +35,8 @@ class _DonationPageState extends State<DonationPage> {
   
   bool _isLoading = false;
   bool _isConfirmed = false;
+  // 👇 FIX: synchronous guard to block double-submit (prevents duplicate donate() calls) 👇
+  bool _isSubmitting = false;
   final Color themeColor = const Color(0xFF7D444C);
   int totalNeeded = 0;
   int alreadyFulfilled = 0;
@@ -147,7 +148,60 @@ class _DonationPageState extends State<DonationPage> {
     return null; 
   }
 
+  // 👇 NEW: Converts any error into a clean, readable message.
+  // On Flutter Web, errors thrown inside Firestore transactions / JS promises are
+  // wrapped as "Dart exception thrown from converted Future...". We unwrap the
+  // real error from it, so the user never sees that technical text. 👇
+  String _friendlyError(Object e) {
+    String raw = e.toString();
+
+    // 1) Unwrap the boxed web error -> real error is stored in the 'error' property
+    if (raw.contains('Dart exception thrown from converted Future')) {
+      try {
+        final inner = (e as dynamic).error;
+        if (inner != null) raw = inner.toString();
+      } catch (_) {}
+    }
+
+    // 2) Firebase errors: use their message / code
+    if (e is FirebaseException) {
+      if (e.code == 'permission-denied') {
+        return 'You do not have permission to complete this donation.';
+      }
+      if (e.code == 'unavailable' || e.code == 'network-request-failed') {
+        return 'Network problem. Please check your internet and try again.';
+      }
+      if (e.message != null && e.message!.isNotEmpty) raw = e.message!;
+    }
+
+    // 3) Still the generic web text? -> show a simple message
+    if (raw.contains('Dart exception thrown from converted Future')) {
+      return 'Something went wrong. Please try again.';
+    }
+
+    // 4) Clean the prefixes
+    raw = raw.replaceAll('Exception: ', '').replaceAll('Error: ', '').trim();
+    return raw.isEmpty ? 'Something went wrong. Please try again.' : raw;
+  }
+
+  // 👇 FIX: Wrapper that blocks duplicate taps. The button calls this. 👇
+  // Before: _isLoading was set only AFTER the route-distance await, so a second
+  // tap during that await started a 2nd donate() -> 1st succeeded (dialog),
+  // 2nd failed ("Only X item(s) are still needed").
   Future<void> donate() async {
+    if (_isSubmitting) return; // ignore any tap while one is running
+    _isSubmitting = true;
+    if (mounted) setState(() => _isLoading = true); // disables button immediately
+    try {
+      await _submitDonation();
+    } finally {
+      _isSubmitting = false;
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // Original donate() logic (unchanged), just renamed.
+  Future<void> _submitDonation() async {
     if (!_isConfirmed) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please confirm that you have donated this item')),
@@ -375,10 +429,11 @@ class _DonationPageState extends State<DonationPage> {
           );
         },
       );
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('Donation error: $e\n$st'); // real error stays visible in console
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Donation failed: ${e.toString().replaceAll('Exception: ', '')}')),
+        SnackBar(content: Text('Donation failed: ${_friendlyError(e)}')),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);

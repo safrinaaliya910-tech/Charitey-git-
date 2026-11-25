@@ -73,11 +73,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final isCancellation = notif.type == 'donation_cancelled';
     final isExpiration = notif.type == 'expired_request';
     final isVolunteerExpired = notif.type == 'volunteer_expired';
-    final isVerifyPayment = notif.type == 'verify_payment';
+       final isVerifyPayment = notif.type == 'verify_payment';
     final isPaymentVerified = notif.type == 'payment_verified';
+    final isAnnouncement = notif.type == 'announcement';
 
     if (isVerifyPayment) {
       _showVerifyPaymentDialog(context, notif, themeColor);
+    } else if (isAnnouncement) {
+      _showAnnouncementDetails(context, notif);
     } else if (isPaymentVerified) {
       _openRatingFromPaymentVerified(context, notif);
     } else if (isCancellation) {
@@ -661,7 +664,49 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       },
     );
   }
-
+  void _showAnnouncementDetails(BuildContext context, NotificationModel notif) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Icon(Icons.campaign_rounded, color: Colors.indigo),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  notif.title.isNotEmpty ? notif.title : "Announcement",
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            notif.message,
+            style: TextStyle(color: Colors.grey.shade700, height: 1.5, fontSize: 15),
+          ),
+          actions: [
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.indigo,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text(
+                  "Got it",
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
   void _showDonorCancellationDetails(
     BuildContext context,
     NotificationModel notification,
@@ -1315,8 +1360,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               bool isVolunteerExpired = notif.type == 'volunteer_expired';
               bool isDeliveryArrived = notif.type == 'delivery_arrived';
               bool isPaymentPending = notif.type == 'payment_pending';
-              bool isVerifyPayment = notif.type == 'verify_payment';
+                           bool isVerifyPayment = notif.type == 'verify_payment';
               bool isPaymentVerified = notif.type == 'payment_verified';
+              bool isAnnouncement = notif.type == 'announcement';
 
               bool isTaskNotification = notif.type == 'new_task_available' ||
                   notif.type == 'urgent_task';
@@ -1444,8 +1490,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           ),
                         ),
                       );
-                    } else if (isVerifyPayment) {
+                                     } else if (isVerifyPayment) {
                       _showVerifyPaymentDialog(context, notif, themeColor);
+                    } else if (isAnnouncement) {
+                      _showAnnouncementDetails(context, notif);
                     } else if (isPaymentVerified) {
                       _openRatingFromPaymentVerified(context, notif);
                     } else if (isTaskNotification) {

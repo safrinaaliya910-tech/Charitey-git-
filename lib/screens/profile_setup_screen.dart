@@ -1,6 +1,8 @@
 //profile_setup_screen.dart
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert'; // 👈 NEW: decode place-suggestion JSON
+import 'package:http/http.dart' as http; // 👈 NEW: place search (works on web + mobile)
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -83,6 +85,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   bool _isPhoneVerified = false;
   int _resendSecondsLeft = 0;
   Timer? _resendTimer;
+  // 👇 NEW: location autocomplete state
+  Timer? _placeDebounce;
+  int _placeQuerySeq = 0;
+  bool _isLoadingPlaces = false;
+  bool _placesSearchFailed = false;
+  List<String> _placeSuggestions = [];
+  String? _lastPickedPlace;
   String? _otpError;
   // 👇 NEW: shown under the "SEND OTP" button itself (before the OTP field
   // even appears), so a send-time failure is visible on-screen even when
@@ -101,6 +110,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     upiController.dispose();
     otpController.dispose();
     _resendTimer?.cancel();
+    _placeDebounce?.cancel();
     super.dispose();
   }
 
@@ -795,23 +805,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                 onPressed: _previousPage,
               )
             : null,
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const AuthWrapper()),
-                (Route<dynamic> route) => false,
-              );
-            },
-            child: Text(
-              "Skip",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade500,
-              ),
-            ),
-          ),
-        ],
       ),
       body: Stack(
         children: [
@@ -893,7 +886,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (_currentPage == _totalPages - 1)
+                        if (_currentPage == _totalPages - 1 &&
+                            (_otpSent || _isPhoneVerified))
                           Padding(
                             padding: const EdgeInsets.only(
                               bottom: 16.0,
@@ -912,9 +906,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     onChanged: (val) {
-                                      setState(() {
-                                        agreedToTerms = val ?? false;
-                                      });
+                                      // Ticking the box opens the Terms so the
+                                      // user reads them; "I Agree" there ticks it.
+                                      if (val == true && !agreedToTerms) {
+                                        _showTermsPopup();
+                                      } else {
+                                        setState(() {
+                                          agreedToTerms = false;
+                                        });
+                                      }
                                     },
                                   ),
                                 ),
@@ -953,7 +953,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                           height: 50,
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: themeColor,
+                              // slightly darker shade while the button reads "SKIP PHOTO"
+                              backgroundColor: _getButtonText() == "SKIP PHOTO"
+                                  ? const Color(0xFF9E535B)
+                                  : themeColor,
                               foregroundColor: Colors.white,
                               disabledBackgroundColor: Colors.grey.shade300,
                               disabledForegroundColor: Colors.grey.shade500,
@@ -1620,16 +1623,274 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     return vehicleType.name[0].toUpperCase() + vehicleType.name.substring(1);
   }
 
+  // ============================================================
+  // 👇 NEW: Location autocomplete (type "co" -> Coimbatore, Cochin, ...).
+  // Uses the free Photon (OpenStreetMap) search API, India only, biased to
+  // Tamil Nadu. No API key / no new package needed. The text field is still
+  // a normal field, so manual typing keeps working as before.
+  // ============================================================
+  void _onAddressChanged(String value) {
+    _onFieldChanged(value); // existing behaviour (revalidate / rebuild)
+    _placeDebounce?.cancel();
+    final query = value.trim();
+    if (query.length < 2 || query == _lastPickedPlace) {
+      setState(() {
+        _placeSuggestions = [];
+        _isLoadingPlaces = false;
+        _placesSearchFailed = false;
+      });
+      return;
+    }
+    setState(() => _isLoadingPlaces = true);
+    _placeDebounce = Timer(const Duration(milliseconds: 150), () {
+      _fetchPlaceSuggestions(query);
+    });
+  }
+
+  // Android/iOS must identify the app; browsers set their own headers.
+  Map<String, String> get _placeHeaders => kIsWeb
+      ? const {}
+      : const {
+          'User-Agent': 'FourthIdlyApp/1.0 (fourthidly.com)',
+          'Accept': 'application/json',
+        };
+
+  Future<List<String>> _fetchPlacesFallback(String query) async {
+    final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
+      'q': query,
+      'format': 'jsonv2',
+      'addressdetails': '1',
+      'countrycodes': 'in',
+      'limit': '20',
+      'accept-language': 'en',
+    });
+    final response = await http.get(uri, headers: _placeHeaders).timeout(const Duration(seconds: 8));
+    if (response.statusCode != 200) throw Exception('status ${response.statusCode}');
+    final list = jsonDecode(utf8.decode(response.bodyBytes)) as List;
+    const okTypes = {'city', 'town', 'village', 'suburb', 'neighbourhood', 'hamlet', 'quarter', 'locality'};
+    final List<MapEntry<String, int>> ranked = [];
+    for (final item in list) {
+      final m = (item as Map).cast<String, dynamic>();
+      if (m['category'] != 'place' || !okTypes.contains(m['type'])) continue;
+      final addr = (m['address'] as Map?)?.cast<String, dynamic>() ?? {};
+      final name = (m['name'] ?? '').toString();
+      if (name.isEmpty) continue;
+      final state = (addr['state'] ?? '').toString();
+      final parts = <String>[name];
+      if (m['type'] != 'city' && m['type'] != 'town') {
+        final area = (addr['city'] ?? addr['state_district'] ?? addr['county'] ?? '').toString();
+        if (area.isNotEmpty && !parts.contains(area)) parts.add(area);
+      }
+      if (state.isNotEmpty && !parts.contains(state)) parts.add(state);
+      final label = parts.join(', ');
+      if (ranked.any((e) => e.key == label)) continue;
+      int score = (m['type'] == 'city' ? 0 : m['type'] == 'town' ? 1 : 3) * 10;
+      if (state != 'Tamil Nadu') score += 100;
+      if (!name.toLowerCase().startsWith(query.toLowerCase())) score += 50;
+      ranked.add(MapEntry(label, score));
+    }
+    ranked.sort((a, b) => a.value.compareTo(b.value));
+    return ranked.map((e) => e.key).take(6).toList();
+  }
+
+  Future<void> _fetchPlaceSuggestions(String query) async {
+    final int seq = ++_placeQuerySeq;
+    try {
+      final uri = Uri.https('photon.komoot.io', '/api/', {
+        'q': query,
+        'limit': '40',
+        'lang': 'en',
+        'lat': '11.1271', // bias results towards Tamil Nadu
+        'lon': '78.6569',
+        'bbox': '68.1,6.7,97.4,35.7', // India only
+        'osm_tag': 'place', // only real places (cities, towns, villages, areas) - no shops/offices
+      });
+      final response = await http.get(uri, headers: _placeHeaders).timeout(const Duration(seconds: 8));
+      if (response.statusCode != 200) throw Exception('status ${response.statusCode}');
+      final body = utf8.decode(response.bodyBytes);
+      final data = jsonDecode(body) as Map<String, dynamic>;
+      final features = (data['features'] as List?) ?? [];
+
+      // Lower rank = shown first
+      const Map<String, int> placeRank = {
+        'city': 0,
+        'town': 1,
+        'suburb': 2,
+        'village': 3,
+        'neighbourhood': 4,
+        'quarter': 4,
+        'hamlet': 5,
+        'locality': 6,
+      };
+      final String q = query.toLowerCase();
+      final List<MapEntry<String, int>> ranked = [];
+      for (final f in features) {
+        final p = (f['properties'] as Map?)?.cast<String, dynamic>() ?? {};
+        if (p['countrycode'] != null && p['countrycode'] != 'IN') continue;
+        if (p['osm_key'] != 'place') continue;
+        final int? baseRank = placeRank[(p['osm_value'] ?? '').toString()];
+        if (baseRank == null) continue; // skip houses, plots, farms etc.
+        final String name = (p['name'] ?? '').toString();
+        if (name.isEmpty) continue;
+        final String state = (p['state'] ?? '').toString();
+        final parts = <String>[name];
+        if (baseRank >= 2) {
+          // areas / villages: add the city or district so the user can tell them apart
+          for (final key in ['city', 'county', 'district']) {
+            final v = (p[key] ?? '').toString();
+            if (v.isNotEmpty && !parts.contains(v)) {
+              parts.add(v);
+              break;
+            }
+          }
+        }
+        if (state.isNotEmpty && !parts.contains(state)) parts.add(state);
+        final label = parts.join(', ');
+        if (ranked.any((e) => e.key == label)) continue;
+        int score = baseRank * 10;
+        if (state != 'Tamil Nadu') score += 100; // Tamil Nadu first
+        if (!name.toLowerCase().startsWith(q)) score += 50; // names starting with the typed text first
+        ranked.add(MapEntry(label, score));
+      }
+      ranked.sort((a, b) => a.value.compareTo(b.value));
+      final List<String> results = ranked.map((e) => e.key).toList();
+
+      if (!mounted || seq != _placeQuerySeq) return;
+      setState(() {
+        _placeSuggestions = results.take(6).toList();
+        _isLoadingPlaces = false;
+        _placesSearchFailed = false;
+      });
+    } catch (e) {
+      debugPrint('Place search error (non-blocking): $e');
+      // Backup source if the first one is unreachable / blocked on this device
+      try {
+        final fallback = await _fetchPlacesFallback(query);
+        if (!mounted || seq != _placeQuerySeq) return;
+        if (fallback.isNotEmpty) {
+          setState(() {
+            _placeSuggestions = fallback;
+            _isLoadingPlaces = false;
+            _placesSearchFailed = false;
+          });
+          return;
+        }
+      } catch (e2) {
+        debugPrint('Place search fallback error (non-blocking): $e2');
+      }
+      if (!mounted || seq != _placeQuerySeq) return;
+      setState(() {
+        _placeSuggestions = [];
+        _isLoadingPlaces = false;
+        _placesSearchFailed = true;
+      });
+    }
+  }
+
+  void _selectPlaceSuggestion(String place) {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _lastPickedPlace = place;
+      addressController.text = place;
+      addressController.selection = TextSelection.collapsed(offset: place.length);
+      _placeSuggestions = [];
+      _placesSearchFailed = false;
+    });
+  }
+
   Widget _buildAddressStep() {
     return _buildStepContainer(
       title: "Location",
       subtitle: "Which city in Tamil Nadu are you based in?",
       icon: Icons.location_on_rounded,
-      child: _buildTextField(
-        controller: addressController,
-        label: "City / Area",
-        hint: "e.g. Chennai, Coimbatore, Madurai",
-        icon: Icons.home_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildTextField(
+            controller: addressController,
+            label: "City / Area",
+            hint: "Start typing, e.g. Coimbatore, Chennai, Madurai",
+            icon: Icons.home_outlined,
+            onChanged: _onAddressChanged,
+          ),
+          if (_isLoadingPlaces)
+            Padding(
+              padding: const EdgeInsets.only(top: 10, left: 4),
+              child: Row(
+                children: [
+                  SizedBox(
+                    height: 14,
+                    width: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: themeColor),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Searching places…",
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                  ),
+                ],
+              ),
+            ),
+          if (_placeSuggestions.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(top: 10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade200),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 12,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Column(
+                  children: [
+                    for (int i = 0; i < _placeSuggestions.length; i++) ...[
+                      InkWell(
+                        onTap: () => _selectPlaceSuggestion(_placeSuggestions[i]),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          child: Row(
+                            children: [
+                              Icon(Icons.location_on_outlined, color: themeColor, size: 20),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  _placeSuggestions[i],
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (i != _placeSuggestions.length - 1)
+                        Divider(height: 1, color: Colors.grey.shade200),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          if (_placesSearchFailed && !_isLoadingPlaces)
+            Padding(
+              padding: const EdgeInsets.only(top: 8, left: 4),
+              child: Text(
+                "Couldn't load suggestions. You can type your city manually.",
+                style: TextStyle(fontSize: 11.5, color: Colors.grey.shade500),
+              ),
+            ),
+        ],
       ),
     );
   }

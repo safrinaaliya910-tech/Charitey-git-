@@ -29,6 +29,7 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
   bool _hasAttemptedPayment = false;
   bool _isWaitingForVolunteer = false;
   bool _isAdminReview = false;
+  bool _isSubmittingPayment = false;
 
   double _feeAmount = 0.0;
   String _volunteerId = "";
@@ -95,25 +96,30 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
         var data = snap.data() as Map<String, dynamic>;
         String status = data['status'] ?? '';
 
-        if (status == 'fully_completed') {
+                if (status == 'fully_completed') {
   _donationSubscription?.cancel();
   if (!mounted) return;
-  Navigator.pop(context);
 
+  final navigator = Navigator.of(context); // stable reference, survives the pop
   final vId = _volunteerId.trim();
   final dId = widget.donationId.trim();
+
+  navigator.pop();
+
   if (vId.isEmpty || dId.isEmpty) return;
 
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) => RatingDialog(
-      volunteerId: vId,
-      volunteerName: _volunteerName.isEmpty ? 'Volunteer' : _volunteerName,
-      donationId: dId,
-    ),
-  );
-}else if (status == 'payment_verification_pending') {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    showDialog(
+      context: navigator.context,
+      barrierDismissible: false,
+      builder: (context) => RatingDialog(
+        volunteerId: vId,
+        volunteerName: _volunteerName.isEmpty ? 'Volunteer' : _volunteerName,
+        donationId: dId,
+      ),
+    );
+  });
+} else if (status == 'payment_verification_pending') {
           setState(() {
             _isWaitingForVolunteer = true;
             _isAdminReview = false;
@@ -317,8 +323,12 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
       return;
     }
 
+    if (_isSubmittingPayment) return;
+
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final currentUser = authProvider.currentUserModel!;
+
+    setState(() => _isSubmittingPayment = true);
 
     try {
       await FirestoreService().registerUsedUpiReference(
@@ -326,8 +336,6 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
         donorId: currentUser.uid,
         utr: ref,
       );
-
-      setState(() => _isWaitingForVolunteer = true);
 
       String notifId =
           FirebaseFirestore.instance.collection('notifications').doc().id;
@@ -345,7 +353,18 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
         isRead: false,
       );
       await FirestoreService().sendNotification(notif);
+
+      if (!mounted) return;
+      setState(() {
+        _isWaitingForVolunteer = true;
+        _isSubmittingPayment = false;
+      });
     } on DuplicateUpiReferenceException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isWaitingForVolunteer = false;
+        _isSubmittingPayment = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(e.message),
@@ -354,7 +373,11 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
       );
       return;
     } catch (e, stackTrace) {
-      setState(() => _isWaitingForVolunteer = false);
+      if (!mounted) return;
+      setState(() {
+        _isWaitingForVolunteer = false;
+        _isSubmittingPayment = false;
+      });
       debugPrint('Error contacting volunteer: $e');
       debugPrint('Stack trace:\n$stackTrace');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -671,7 +694,7 @@ class _VolunteerPaymentScreenState extends State<VolunteerPaymentScreen> {
                         width: double.infinity,
                         height: 50,
                         child: ElevatedButton(
-                          onPressed: _isReferenceValid
+                          onPressed: (_isReferenceValid && !_isSubmittingPayment)
                               ? _notifyVolunteerForVerification
                               : null,
                           style: ElevatedButton.styleFrom(
